@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Ticket API
-  version: 0.1.983
+  version: 0.1.992
   description: |
     RESTful API for the Ticket project and issue management system.
     All endpoints are under `/api/`. Authentication uses Bearer tokens
@@ -94,6 +94,7 @@ components:
         role: "user"
         plan_id: 1
         plan_slug: "free"
+        default_project_id: 7
         display_name: "Alice Smith"
         enabled: true
         user_type: "user"
@@ -111,6 +112,10 @@ components:
           format: int64
         plan_slug:
           type: string
+        default_project_id:
+          type: integer
+          format: int64
+          nullable: true
         display_name:
           type: string
         enabled:
@@ -1914,6 +1919,81 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/users/me/default-project:
+    get:
+      tags: [Users]
+      summary: Get the authenticated user's saved default project
+      operationId: getMyDefaultProject
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Saved default project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Users]
+      summary: Save the authenticated user's default project
+      operationId: setMyDefaultProject
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_ref]
+              properties:
+                project_ref:
+                  type: string
+                  description: Project id, prefix, or alias such as `public` or `private`
+      responses:
+        '200':
+          description: Saved default project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Users]
+      summary: Clear the authenticated user's saved default project
+      operationId: clearMyDefaultProject
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Saved default project cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: cleared
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_ref}/access-requests:

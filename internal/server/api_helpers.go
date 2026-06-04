@@ -61,7 +61,10 @@ func resolveCreateLifecycleRequest(status, stage, state string) (string, error) 
 	return state, nil
 }
 
-func autoProgressTicketLifecycle(payload ticketRequest, current store.Ticket, actorUsername string) ticketRequest {
+func autoProgressTicketLifecycle(payload ticketRequest, current store.Ticket, actorUsername string, hasChildren bool) ticketRequest {
+	if hasChildren {
+		return payload
+	}
 	if hasExplicitLifecycleChange(payload, current) {
 		return payload
 	}
@@ -97,6 +100,18 @@ func autoProgressTicketLifecycle(payload ticketRequest, current store.Ticket, ac
 		}
 	}
 	return payload
+}
+
+func ticketHasChildrenForAPI(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	var childID string
+	err := db.QueryRowContext(ctx, `SELECT ticket_id FROM tickets WHERE parent_id = ? AND deleted = 0 LIMIT 1`, id).Scan(&childID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func hasExplicitLifecycleChange(payload ticketRequest, current store.Ticket) bool {
@@ -343,7 +358,29 @@ func resolveProjectForWriteRequest(ctx context.Context, db *sql.DB, r *http.Requ
 			return store.Project{}, "", err
 		}
 	}
-	project, err := store.GetProjectByAlias(ctx, db, "private", user.ID)
+	project, role, err := resolveUserDefaultProjectForWrite(ctx, db, user)
+	switch {
+	case err == nil:
+		return project, role, nil
+	case !errors.Is(err, store.ErrProjectNotFound):
+		return store.Project{}, "", err
+	}
+	project, err = store.GetProjectByAlias(ctx, db, "private", user.ID)
+	if err != nil {
+		return store.Project{}, "", err
+	}
+	role, err = projectRoleForUser(ctx, db, project.ID, user)
+	if err != nil {
+		return store.Project{}, "", err
+	}
+	if !canWriteProject(role) {
+		return store.Project{}, "", store.ErrUnauthorized
+	}
+	return project, role, nil
+}
+
+func resolveUserDefaultProjectForWrite(ctx context.Context, db *sql.DB, user store.User) (store.Project, string, error) {
+	project, err := store.GetUserDefaultProject(ctx, db, user.ID)
 	if err != nil {
 		return store.Project{}, "", err
 	}
@@ -351,8 +388,11 @@ func resolveProjectForWriteRequest(ctx context.Context, db *sql.DB, r *http.Requ
 	if err != nil {
 		return store.Project{}, "", err
 	}
+	if !canReadProject(role) {
+		return store.Project{}, "", store.ErrProjectNotFound
+	}
 	if !canWriteProject(role) {
-		return store.Project{}, "", store.ErrUnauthorized
+		return store.Project{}, "", store.ErrForbidden
 	}
 	return project, role, nil
 }

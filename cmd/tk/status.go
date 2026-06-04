@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 )
 
@@ -135,6 +137,8 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, _ bool) error {
 	connected := false
 	serverVersion := ""
 	clientVersion := valueOrDefault(strings.TrimSpace(embeddedVersion), "UNSET")
+	defaultProject := "UNSET"
+	defaultProjectColor := "\x1b[31m"
 	if strings.TrimSpace(serverURL) != "" {
 		svc := libticket.NewHTTP(statusCfg)
 		status, err := svc.Status(context.Background())
@@ -145,6 +149,19 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, _ bool) error {
 		}
 		if connected && status.User != nil && strings.TrimSpace(status.User.Username) != "" {
 			username = strings.TrimSpace(status.User.Username)
+		}
+		if connected {
+			project, projectErr := svc.GetMyDefaultProject(context.Background())
+			switch {
+			case projectErr == nil:
+				defaultProject = strings.TrimSpace(project.Prefix)
+				if strings.TrimSpace(project.Title) != "" {
+					defaultProject = project.Prefix + " — " + project.Title
+				}
+				defaultProjectColor = "\x1b[32m"
+			case errors.Is(projectErr, store.ErrProjectNotFound):
+				defaultProject = "UNSET"
+			}
 		}
 	}
 	urlColor := "\x1b[31m"
@@ -170,6 +187,7 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, _ bool) error {
 			"TICKET_PASSWORD": passwordDisplay,
 			"SERVER_VERSION":  valueOrDefault(serverVersion, "UNSET"),
 			"CLIENT_VERSION":  clientVersion,
+			"DEFAULT_PROJECT": defaultProject,
 		}
 		return printJSON(payload)
 	}
@@ -179,6 +197,7 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, _ bool) error {
 		{key: "TICKET_PASSWORD", value: passwordDisplay, color: passwordColor},
 		{key: "SERVER_VERSION", value: valueOrDefault(serverVersion, "UNSET"), color: serverVersionColor},
 		{key: "CLIENT_VERSION", value: clientVersion, color: clientVersionColor},
+		{key: "DEFAULT_PROJECT", value: defaultProject, color: defaultProjectColor},
 	}
 	printStatusBox(lines)
 	return statusErr

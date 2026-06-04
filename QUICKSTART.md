@@ -16,6 +16,8 @@ make docker
 
 ## publish to ghcr.io
 
+> Note: this will (should) then be picked up by the watchtower on exe.dev
+
 ```shell
 make publish
 ```
@@ -26,9 +28,9 @@ make publish
 make homebrew
 ```
 
-## deploy to ticket.exe.xyz 
+## deploy to .exe.xyz 
 
-Note: not necessary as watchtower is checking every 30s
+Note: only ecessary first time to get the assets there, then compose will 
 
 ```shell
 make deploy

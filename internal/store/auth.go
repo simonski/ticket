@@ -40,6 +40,7 @@ type User struct {
 	Role             string `json:"role"`
 	PlanID           int64  `json:"plan_id,omitempty"`
 	PlanSlug         string `json:"plan_slug,omitempty"`
+	DefaultProjectID *int64 `json:"default_project_id,omitempty"`
 	DisplayName      string `json:"display_name"`
 	Enabled          bool   `json:"enabled"`
 	CreatedAt        string `json:"created_at"`
@@ -51,21 +52,25 @@ type User struct {
 }
 
 // userSelectColumns is the standard column list for scanning a User.
-const userSelectColumns = `user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), role, display_name, enabled, created_at, COALESCE(user_type, 'user'), COALESCE(description, ''), COALESCE(status, ''), COALESCE(last_seen, ''), COALESCE(updated_at, '')`
+const userSelectColumns = `user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), role, default_project_id, display_name, enabled, created_at, COALESCE(user_type, 'user'), COALESCE(description, ''), COALESCE(status, ''), COALESCE(last_seen, ''), COALESCE(updated_at, '')`
 
 // scanUser scans a row into a User. The column order must match userSelectColumns.
 func scanUser(scan func(dest ...any) error) (User, error) {
 	var user User
 	var enabled int
+	var defaultProjectID sql.NullInt64
 	if err := scan(
 		&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt,
-		&user.Role, &user.DisplayName, &enabled, &user.CreatedAt,
+		&user.Role, &defaultProjectID, &user.DisplayName, &enabled, &user.CreatedAt,
 		&user.UserType, &user.Description, &user.Status,
 		&user.LastSeen, &user.UpdatedAt,
 	); err != nil {
 		return User{}, err
 	}
 	user.Enabled = enabled == 1
+	if defaultProjectID.Valid {
+		user.DefaultProjectID = &defaultProjectID.Int64
+	}
 	return user, nil
 }
 
@@ -197,11 +202,12 @@ func AuthenticateUser(ctx context.Context, db *sql.DB, username, plainPassword s
 	var user User
 	var hash string
 	var enabled int
+	var defaultProjectID sql.NullInt64
 	var failedAttempts int
 	var lockedUntil string
 	if err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt,
-		&user.Role, &user.DisplayName, &enabled, &user.CreatedAt,
+		&user.Role, &defaultProjectID, &user.DisplayName, &enabled, &user.CreatedAt,
 		&user.UserType, &user.Description, &user.Status,
 		&user.LastSeen, &user.UpdatedAt,
 		&hash, &failedAttempts, &lockedUntil,
@@ -212,6 +218,9 @@ func AuthenticateUser(ctx context.Context, db *sql.DB, username, plainPassword s
 		return User{}, err
 	}
 	user.Enabled = enabled == 1
+	if defaultProjectID.Valid {
+		user.DefaultProjectID = &defaultProjectID.Int64
+	}
 	if !user.Enabled {
 		return User{}, ErrForbidden
 	}
@@ -298,7 +307,7 @@ func GetUserByToken(ctx context.Context, db *sql.DB, token string) (User, error)
 	}
 
 	row := db.QueryRowContext(ctx, `
-		SELECT u.user_id, u.username, COALESCE(u.email, ''), COALESCE(u.email_confirmed_at, ''), u.role, u.display_name, u.enabled, u.created_at, COALESCE(u.user_type, 'user'), COALESCE(u.description, ''), COALESCE(u.status, ''), COALESCE(u.last_seen, ''), COALESCE(u.updated_at, '')
+		SELECT u.user_id, u.username, COALESCE(u.email, ''), COALESCE(u.email_confirmed_at, ''), u.role, u.default_project_id, u.display_name, u.enabled, u.created_at, COALESCE(u.user_type, 'user'), COALESCE(u.description, ''), COALESCE(u.status, ''), COALESCE(u.last_seen, ''), COALESCE(u.updated_at, '')
 		FROM sessions s
 		JOIN users u ON u.user_id = s.user_id
 		WHERE s.token = ?
@@ -368,6 +377,47 @@ func ListUsers(ctx context.Context, db *sql.DB, limit int) ([]User, error) {
 		users = append(users, user)
 	}
 	return users, rows.Err()
+}
+
+func GetUserDefaultProject(ctx context.Context, db *sql.DB, userID string) (Project, error) {
+	var projectID sql.NullInt64
+	if err := db.QueryRowContext(ctx, `SELECT default_project_id FROM users WHERE user_id = ?`, strings.TrimSpace(userID)).Scan(&projectID); err != nil {
+		return Project{}, err
+	}
+	if !projectID.Valid || projectID.Int64 <= 0 {
+		return Project{}, ErrProjectNotFound
+	}
+	return GetProjectByID(ctx, db, projectID.Int64)
+}
+
+func SetUserDefaultProject(ctx context.Context, db *sql.DB, userID string, projectID int64) error {
+	result, err := db.ExecContext(ctx, `UPDATE users SET default_project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`, projectID, strings.TrimSpace(userID))
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func ClearUserDefaultProject(ctx context.Context, db *sql.DB, userID string) error {
+	result, err := db.ExecContext(ctx, `UPDATE users SET default_project_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`, strings.TrimSpace(userID))
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func SetUserEnabled(ctx context.Context, db *sql.DB, username string, enabled bool) error {

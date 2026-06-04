@@ -102,6 +102,18 @@ func (s *HTTPService) ListUsers(ctx context.Context) ([]store.User, error) {
 	return s.client.ListUsers(ctx)
 }
 
+func (s *HTTPService) GetMyDefaultProject(ctx context.Context) (store.Project, error) {
+	return s.client.GetMyDefaultProject(ctx)
+}
+
+func (s *HTTPService) SetMyDefaultProject(ctx context.Context, projectRef string) (store.Project, error) {
+	return s.client.SetMyDefaultProject(ctx, projectRef)
+}
+
+func (s *HTTPService) ClearMyDefaultProject(ctx context.Context) error {
+	return s.client.ClearMyDefaultProject(ctx)
+}
+
 func (s *HTTPService) ListMyNotifications(ctx context.Context, status string, limit int) ([]store.UserNotification, error) {
 	return s.client.ListMyNotifications(ctx, status, limit)
 }

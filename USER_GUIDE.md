@@ -72,7 +72,8 @@ in this order:
 1. `-project_id`
 2. `TICKET_PROJECT`
 3. nearest git remote from the current working directory (walking up until `$HOME`)
-4. the caller's default/private project on the server
+4. the caller's saved default project on the server
+5. the caller's private project alias on the server
 
 Configure server access with environment variables:
 
@@ -91,7 +92,7 @@ from a stored session in `$TICKET_HOME/credentials.json`, from
 `public` / `private`. CLI flags such as `-project_id` override `TICKET_PROJECT`.
 If neither is supplied in remote mode, the CLI sends the nearest git remote URL
 and the server resolves the project by explicit ref first, then git-repository
-match, then the caller's private project alias. If the git-repository heuristic
+match, then the caller's saved default project, then the caller's private project alias. If the git-repository heuristic
 lands on a private project that accepts new members, Ticket returns an access
 denied error that points at `POST /api/projects/<prefix>/access-requests`.
 You can submit that request directly from the CLI with
@@ -342,7 +343,8 @@ token is available, then checks the remote status endpoint.
 
 Server connectivity and authentication status are shown in the same status view.
 
-If `-nocolor` is set, the same output is printed without ANSI colors.
+If `-nocolor` is set, the same output is printed without ANSI colors. You can
+also export `TK_NOCOLOR=1` to make that the default for the CLI session.
 
 Show aggregate counts:
 
@@ -397,7 +399,8 @@ tk project create -prefix CUS -title "Customer Portal" \
   -ac-map "develop=Code reviewed"
 ```
 
-The project is now the default project.
+The project is now selected for the current repo because `.ticket/config.json`
+binds the repo-local project context.
 
 List projects:
 
@@ -407,12 +410,26 @@ tk project ls
 ```
 
 `tk project list` prints the project id, prefix, title, and status.
+The effective current project is marked with `*` when it can be resolved from
+an explicit project selection, the repository git remote, or your saved
+server-side default project.
 
 Select the project per command with `-project_id` or by exporting `TICKET_PROJECT`:
 
 ```bash
 export TICKET_PROJECT=CUS
 ```
+
+Save a per-user default project on the server for project-less commands:
+
+```bash
+tk project set-default CUS
+tk project clear-default
+```
+
+`tk status` shows `DEFAULT_PROJECT`, and site2 marks the saved default project in
+the project menu and Projects view. Browser-local project selection still wins in
+site2 when you have already picked a project on that device.
 
 Rename a project's prefix (re-keys all tickets, updates all references):
 
@@ -501,7 +518,7 @@ tk epic "This is an Epic"
 ```
 
 ```bash
-tk create -t task -p 1 -a alice -d "This is a Task" -ac "Has a title and description" -estimate_effort 5 -estimate_complete 2026-04-30T17:00:00Z "This is a Task"
+tk create -t task -p 1 -project_id private -a alice -d "This is a Task" -ac "Has a title and description" -estimate_effort 5 -estimate_complete 2026-04-30T17:00:00Z "This is a Task"
 ```
 
 Creation defaults:
@@ -514,7 +531,7 @@ Creation defaults:
 - `-estimate_effort`: defaults to `0`
 - `-estimate_complete`: defaults to blank and should use RFC3339 when set
 - `-parent`: defaults to blank
-- `-project`: defaults to the current project
+- `-project` / `-project_id`: default to the current project
 
 Command aliases:
 
@@ -543,6 +560,11 @@ tk list -n 20
 tk ls -a              # include closed and archived tickets
 ```
 
+`tk ls` starts with the resolved current project, then prints tickets newest
+first. Parent epics bubble up with recent child activity so the active area of
+work stays visible. Nested ticket titles are indented by depth, and `bug` rows
+render the type label in red when color output is enabled.
+
 Filter by item kind:
 
 ```bash
@@ -567,7 +589,9 @@ tk list -u alice
 tk ls -u alice
 ```
 
-`ticket list` prints a table with ID (key with status icon), type, title, stage, state, ready, parent, assignee, and priority.
+`ticket list` prints the resolved current project followed by a table with ID
+(key with status icon), type, title, stage, state, draft, assignee, and
+priority.
 
 Search within the active project:
 
@@ -1090,8 +1114,8 @@ tk draft <key-or-id>
 tk merge <target-key-or-id> <source-key-or-id> [<source-key-or-id>...]
 tk complete <key-or-id>
 tk reopen <key-or-id>
-tk archive -id <key-or-id>
-tk unarchive -id <key-or-id>
+tk archive -id <key-or-id> [-v]
+tk unarchive -id <key-or-id> [-v]
 tk rm <key-or-id>
 tk delete <key-or-id>
 tk idle -id <key-or-id>

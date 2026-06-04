@@ -740,6 +740,9 @@ func DeleteProject(ctx context.Context, db *sql.DB, id int64) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM project_teams WHERE project_id = ?`, id); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET default_project_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE default_project_id = ?`, id); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM project_aliases WHERE project_id = ?`, id); err != nil {
 		return err
 	}

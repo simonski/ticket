@@ -51,6 +51,13 @@ func rowColor(status string) string {
 	return ""
 }
 
+func ticketTypeColor(ticketType string) string {
+	if strings.EqualFold(strings.TrimSpace(ticketType), "bug") {
+		return ansiRed
+	}
+	return ""
+}
+
 func printProject(project store.Project) {
 	if outputJSON {
 		if err := printJSON(project); err != nil {
@@ -182,6 +189,18 @@ func printProjectTable(projects []store.Project, currentProjectID string, workfl
 		rows = append(rows, fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s", marker, project.ID, project.Prefix, project.Title, project.Status, workflow, project.GitRepository, desc))
 	}
 	printBoxTable(" \tID\tPREFIX\tTITLE\tSTATUS\tWorkflow\tGIT\tDESCRIPTION", rows)
+}
+
+func printListProjectHeader(project store.Project) {
+	label := strings.TrimSpace(project.Prefix)
+	if label == "" {
+		label = strconv.FormatInt(project.ID, 10)
+	}
+	if strings.TrimSpace(project.Title) != "" {
+		fmt.Printf("PROJECT  %s — %s (%d)\n\n", label, project.Title, project.ID)
+		return
+	}
+	fmt.Printf("PROJECT  %s (%d)\n\n", label, project.ID)
 }
 
 func printProjectAccessRequestTable(requests []store.ProjectAccessRequest) {
@@ -705,6 +724,14 @@ func buildTreeDisplay(tickets []store.Ticket) (ordered []store.Ticket, treePrefi
 	return ordered, treePrefix
 }
 
+func ticketTitleDepth(treePrefix string) int {
+	depth := utf8.RuneCountInString(treePrefix) / 3
+	if depth < 0 {
+		return 0
+	}
+	return depth
+}
+
 func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agentUsernames map[string]bool, statusUnicode, includeArchived bool) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
@@ -714,11 +741,11 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	// Reorder tickets into tree (parent-before-children) order and get per-ticket prefixes.
 	tickets, treePfx := buildTreeDisplay(tickets)
 
-	useColor := isTerminal()
+	useColor := isTerminal() && !noColorOutput
 
 	// Get terminal width; default to 120 for non-terminal output.
 	termW := 120
-	if useColor {
+	if isTerminal() {
 		if tw, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && tw > 0 { // #nosec G115
 			termW = tw
 		}
@@ -824,6 +851,9 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	// wrapRunes splits s into lines of at most w runes, breaking at word
 	// boundaries so words are never cut in half.
 	wrapRunes := func(s string, w int) []string {
+		if w <= 0 {
+			return []string{""}
+		}
 		words := strings.Fields(s)
 		if len(words) == 0 {
 			return []string{""}
@@ -847,13 +877,32 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		return out
 	}
 
+	titleIndentedLines := make([][]string, len(tickets))
+	for i, t := range tickets {
+		depth := ticketTitleDepth(treePfx[t.ID])
+		indent := strings.Repeat(" ", depth)
+		wrapWidth := titleW - runeCount(indent)
+		if wrapWidth < 1 {
+			wrapWidth = 1
+		}
+		chunks := wrapRunes(displayTitles[i], wrapWidth)
+		if len(chunks) == 0 {
+			chunks = []string{""}
+		}
+		lines := make([]string, len(chunks))
+		for j, chunk := range chunks {
+			lines[j] = indent + chunk
+		}
+		titleIndentedLines[i] = lines
+	}
+
 	// Pass 2: render with titles padded to exactly titleW runes so the tab
 	// writer fixes the TITLE column at titleW (plus its 2-space padding).
 	var buf bytes.Buffer
 	bw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(bw, makeHeader())
 	for i, t := range tickets {
-		fmt.Fprintln(bw, makeDataRow(t, padToWidth(displayTitles[i], titleW)))
+		fmt.Fprintln(bw, makeDataRow(t, padToWidth(titleIndentedLines[i][0], titleW)))
 	}
 	if err := bw.Flush(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not flush ticket table: %v\n", err)
@@ -865,10 +914,11 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	// immediately after each ticket row that has a title longer than titleW,
 	// and blank separator lines before each new root-level group.
 	type displayLine struct {
-		text    string
-		status  string // non-empty on ticket rows, enables column coloring
-		draft   bool   // ticket draft flag, for coloring the DRAFT column
-		isBlank bool   // blank separator row between root groups
+		text       string
+		status     string // non-empty on ticket rows, enables column coloring
+		draft      bool   // ticket draft flag, for coloring the DRAFT column
+		ticketType string
+		isBlank    bool // blank separator row between root groups
 	}
 
 	display := make([]displayLine, 0, len(rawLines))
@@ -902,15 +952,14 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		if i+1 >= len(rawLines) {
 			break
 		}
-		display = append(display, displayLine{text: rawLines[i+1], status: t.Status, draft: t.Draft})
-		chunks := wrapRunes(displayTitles[i], titleW)
-		for _, chunk := range chunks[1:] {
+		display = append(display, displayLine{text: rawLines[i+1], status: t.Status, draft: t.Draft, ticketType: t.Type})
+		for _, chunk := range titleIndentedLines[i][1:] {
 			// Build continuation indent: tree bar continuation + spaces to title column.
 			contPfx := treeContPrefix(treePfx[t.ID])
 			contPfxW := len([]rune(contPfx))
 			indent := contPfx + strings.Repeat(" ", preWidth-contPfxW)
 			cont := indent + chunk
-			display = append(display, displayLine{text: cont, status: t.Status, draft: t.Draft})
+			display = append(display, displayLine{text: cont, status: t.Status, draft: t.Draft, ticketType: t.Type})
 		}
 	}
 
@@ -964,10 +1013,11 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	stageCol := findCol("STAGE")
 	stateCol := findCol("STATE")
 	draftCol := findCol("DRAFT")
+	typeCol := findCol("TYPE")
 
 	// colorizeColumns applies ANSI color to specific column ranges in a line,
 	// leaving the rest of the text uncolored (white).
-	colorizeColumns := func(line string, status string, draft bool) string {
+	colorizeColumns := func(line string, status string, draft bool, ticketType string) string {
 		runes := []rune(line)
 		lineLen := len(runes)
 		stateColor := rowColor(status)
@@ -990,9 +1040,15 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		if draftCol.start >= 0 {
 			spans = append(spans, span{draftCol.start, draftCol.end, draftColor})
 		}
+		if typeCol.start >= 0 {
+			if color := ticketTypeColor(ticketType); color != "" {
+				spans = append(spans, span{typeCol.start, typeCol.end, color})
+			}
+		}
 		if len(spans) == 0 {
 			return line
 		}
+		sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
 
 		var b strings.Builder
 		pos := 0
@@ -1036,7 +1092,7 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		pad := strings.Repeat(" ", maxW-runeCount(lineText))
 		text := lineText
 		if l.status != "" {
-			text = colorizeColumns(lineText, l.status, l.draft)
+			text = colorizeColumns(lineText, l.status, l.draft, l.ticketType)
 		}
 		fmt.Printf("│ %s%s │\n", text, pad)
 	}
@@ -1079,7 +1135,7 @@ func printBoxTable(header string, rows []string) {
 	for i, l := range formatted {
 		pad := strings.Repeat(" ", maxW-utf8.RuneCountInString(l))
 		text := l
-		if i == 0 && isTerminal() {
+		if i == 0 && isTerminal() && !noColorOutput {
 			text = ansiBold + l + ansiReset
 		}
 		fmt.Printf("│ %s%s │\n", text, pad)

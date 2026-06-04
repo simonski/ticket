@@ -221,11 +221,12 @@ func runSetTicketArchived(args []string, archived bool) error {
 	if archived {
 		command = "archive"
 	}
-	usage := fmt.Sprintf("ticket %s [-id] <id> [-m comment]", command)
+	usage := fmt.Sprintf("ticket %s [-id] <id> [-m comment] [-v]", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	message := fs.String("m", "", "comment to attach")
+	verbose := fs.Bool("v", false, "show full ticket detail")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -257,7 +258,15 @@ func runSetTicketArchived(args []string, archived bool) error {
 	if outputJSON {
 		return printJSON(updated)
 	}
-	printTicket(updated)
+	if *verbose {
+		printTicket(updated)
+		return nil
+	}
+	if archived {
+		fmt.Printf("%s archived\n", updated.ID)
+	} else {
+		fmt.Printf("%s unarchived\n", updated.ID)
+	}
 	return nil
 }
 

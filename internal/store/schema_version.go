@@ -14,7 +14,7 @@ import (
 
 const (
 	LegacySchemaVersion  = 1
-	CurrentSchemaVersion = 5
+	CurrentSchemaVersion = 6
 	schemaMetaTable      = "schema_meta"
 	schemaVersionKey     = "schema_version"
 )
@@ -28,13 +28,22 @@ type SchemaVersionError struct {
 
 func (e *SchemaVersionError) Error() string {
 	path := strings.TrimSpace(e.Path)
+	displayPath := path
 	if path == "" {
-		path = "database"
+		displayPath = "database"
 	}
 	if e.UpgradeNeeded {
-		return fmt.Sprintf("%s schema version %d is older than this binary's schema version %d; run `tk upgrade-database` to port it to a new database", path, e.Found, e.Current)
+		command := "tk upgrade-database -o new_database/ticket.db"
+		if path != "" {
+			command = fmt.Sprintf("tk -f %s upgrade-database -o new_database/ticket.db", shellQuotePath(path))
+		}
+		return fmt.Sprintf("%s is schema version %d; this tk binary expects schema version %d; run `%s` to port it to a new database", displayPath, e.Found, e.Current, command)
 	}
-	return fmt.Sprintf("%s schema version %d is newer than this binary's schema version %d; upgrade the tk binary before using this database", path, e.Found, e.Current)
+	return fmt.Sprintf("%s is schema version %d; this tk binary expects schema version %d; upgrade the tk binary before using this database", displayPath, e.Found, e.Current)
+}
+
+func shellQuotePath(path string) string {
+	return "'" + strings.ReplaceAll(strings.TrimSpace(path), "'", `'\"'\"'`) + "'"
 }
 
 func openSQLite(path string) (*sql.DB, error) {

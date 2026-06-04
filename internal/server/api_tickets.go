@@ -1430,7 +1430,12 @@ func (r *router) registerTicketHandlers() {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
 				}
-				ticketPayload = autoProgressTicketLifecycle(ticketPayload, currentTicket, user.Username)
+				hasChildren, err := ticketHasChildrenForAPI(r.Context(), db, id)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				ticketPayload = autoProgressTicketLifecycle(ticketPayload, currentTicket, user.Username, hasChildren)
 				stage, state, err := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
 				if err != nil {
 					writeStoreError(w, err)

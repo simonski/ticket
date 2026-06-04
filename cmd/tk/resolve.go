@@ -72,6 +72,11 @@ func resolveProjectContext(ctx context.Context, cfg config.Config, svc libticket
 			return store.Project{}, "", err
 		}
 	}
+	if project, err := svc.GetMyDefaultProject(ctx); err == nil {
+		return project, project.Prefix, nil
+	} else if !errors.Is(err, store.ErrProjectNotFound) {
+		return store.Project{}, "", err
+	}
 	if project, err := svc.GetProject(ctx, "private"); err == nil {
 		return project, project.Prefix, nil
 	}
@@ -123,15 +128,31 @@ func nearestGitRemoteFromCLI() string {
 }
 
 func resolveService(cfg config.Config) (libticket.Service, error) {
-	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
 	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
 	password := strings.TrimSpace(os.Getenv("TICKET_PASSWORD"))
 	token := strings.TrimSpace(os.Getenv("TICKET_TOKEN"))
 	projectID := firstNonEmpty(currentProjectOverride(), strings.TrimSpace(os.Getenv("TICKET_PROJECT")))
+	effectiveCfg := cfg
 
-	if location == "" {
-		location = configuredServiceLocation(cfg)
+	resolved, hasExplicitLocation, err := resolveServiceLocation(cfg)
+	if err != nil {
+		return nil, err
 	}
+	if hasExplicitLocation {
+		switch resolved.Mode {
+		case config.ModeLocal:
+			effectiveCfg.Location = resolved.DBPath
+			if projectID != "" {
+				effectiveCfg.ProjectID = projectID
+			}
+			return libticket.NewLocal(effectiveCfg), nil
+		case config.ModeRemote:
+			effectiveCfg.Location = resolved.ServerURL
+		}
+	} else {
+		effectiveCfg.Location = configuredServiceLocation(cfg)
+	}
+	location := strings.TrimSpace(effectiveCfg.Location)
 	if location == "" {
 		return nil, missingRemoteAuthError("")
 	}
@@ -145,7 +166,6 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 	if strings.TrimSpace(resolved.ServerURL) == "" {
 		return nil, missingRemoteAuthError("")
 	}
-	effectiveCfg := cfg
 	effectiveCfg.Location = resolved.ServerURL
 	if !sameRemoteLocation(cfg.Location, resolved.ServerURL) {
 		effectiveCfg.Username = ""
@@ -174,6 +194,22 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		effectiveCfg.ProjectID = projectID
 	}
 	return libticket.NewHTTP(effectiveCfg), nil
+}
+
+func resolveServiceLocation(cfg config.Config) (config.Resolved, bool, error) {
+	if config.HasLocationOverride() {
+		resolved, err := config.ResolveURL()
+		return resolved, true, err
+	}
+	if envURL := strings.TrimSpace(os.Getenv("TICKET_URL")); envURL != "" {
+		resolved, err := config.ResolveLocation(envURL)
+		return resolved, true, err
+	}
+	if location := strings.TrimSpace(cfg.Location); location != "" {
+		resolved, err := config.ResolveLocation(location)
+		return resolved, true, err
+	}
+	return config.Resolved{}, false, nil
 }
 
 func configuredServiceLocation(cfg config.Config) string {

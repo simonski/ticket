@@ -1681,6 +1681,93 @@ func TestChatEnabledConfigAPI(t *testing.T) {
 	}
 }
 
+func TestUserDefaultProjectAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	user, err := store.CreateUser(context.Background(), db, "alice", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+	privateProject, err := store.GetProjectByAlias(context.Background(), db, "private", user.ID)
+	if err != nil {
+		t.Fatalf("GetProjectByAlias(private) error = %v", err)
+	}
+
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d body=%s", loginResp.Code, http.StatusOK, loginResp.Body.String())
+	}
+	var auth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &auth)
+
+	getBefore := doJSONRequest(t, handler, http.MethodGet, "/api/users/me/default-project", nil, auth.Token)
+	if getBefore.Code != http.StatusNotFound {
+		t.Fatalf("default-project before set status = %d, want %d body=%s", getBefore.Code, http.StatusNotFound, getBefore.Body.String())
+	}
+
+	setResp := doJSONRequest(t, handler, http.MethodPut, "/api/users/me/default-project", map[string]string{
+		"project_ref": "private",
+	}, auth.Token)
+	if setResp.Code != http.StatusOK {
+		t.Fatalf("set default-project status = %d, want %d body=%s", setResp.Code, http.StatusOK, setResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, setResp, &project)
+	if project.ID != privateProject.ID {
+		t.Fatalf("set default-project ID = %d, want %d", project.ID, privateProject.ID)
+	}
+
+	statusResp := doJSONRequest(t, handler, http.MethodGet, "/api/status", nil, auth.Token)
+	if statusResp.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusResp.Code, http.StatusOK)
+	}
+	var status struct {
+		User *store.User `json:"user"`
+	}
+	decodeResponse(t, statusResp, &status)
+	if status.User == nil || status.User.DefaultProjectID == nil || *status.User.DefaultProjectID != privateProject.ID {
+		t.Fatalf("status user default_project_id = %#v, want %d", status.User, privateProject.ID)
+	}
+
+	getAfter := doJSONRequest(t, handler, http.MethodGet, "/api/users/me/default-project", nil, auth.Token)
+	if getAfter.Code != http.StatusOK {
+		t.Fatalf("default-project get status = %d, want %d body=%s", getAfter.Code, http.StatusOK, getAfter.Body.String())
+	}
+	decodeResponse(t, getAfter, &project)
+	if project.ID != privateProject.ID {
+		t.Fatalf("default-project get ID = %d, want %d", project.ID, privateProject.ID)
+	}
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"type":  "task",
+		"title": "Uses default project",
+	}, auth.Token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("ticket create status = %d, want %d body=%s", createResp.Code, http.StatusCreated, createResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, createResp, &ticket)
+	if ticket.ProjectID != privateProject.ID {
+		t.Fatalf("ticket project_id = %d, want %d", ticket.ProjectID, privateProject.ID)
+	}
+
+	clearResp := doJSONRequest(t, handler, http.MethodDelete, "/api/users/me/default-project", nil, auth.Token)
+	if clearResp.Code != http.StatusOK {
+		t.Fatalf("clear default-project status = %d, want %d body=%s", clearResp.Code, http.StatusOK, clearResp.Body.String())
+	}
+	getCleared := doJSONRequest(t, handler, http.MethodGet, "/api/users/me/default-project", nil, auth.Token)
+	if getCleared.Code != http.StatusNotFound {
+		t.Fatalf("default-project after clear status = %d, want %d body=%s", getCleared.Code, http.StatusNotFound, getCleared.Body.String())
+	}
+}
+
 func TestResetPasswordProjectDraftAndAgentConfigAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
@@ -4121,7 +4208,7 @@ func TestAutoProgressTicketLifecycleDesignToDevelop(t *testing.T) {
 		Title:       "New",
 		Description: "Desc",
 	}
-	next := autoProgressTicketLifecycle(payload, current, "alice")
+	next := autoProgressTicketLifecycle(payload, current, "alice", false)
 	if next.Stage != store.StageDevelop || next.State != store.StateActive {
 		t.Fatalf("expected develop/active, got %s/%s", next.Stage, next.State)
 	}
@@ -4146,7 +4233,7 @@ func TestAutoProgressTicketLifecycleDevelopToTestOnEstimateComplete(t *testing.T
 		EstimateComplete: "2026-03-10T10:00:00Z",
 		Assignee:         "bob",
 	}
-	next := autoProgressTicketLifecycle(payload, current, "bob")
+	next := autoProgressTicketLifecycle(payload, current, "bob", false)
 	if next.Stage != store.StageTest || next.State != store.StateActive {
 		t.Fatalf("expected test/active, got %s/%s", next.Stage, next.State)
 	}
@@ -4166,9 +4253,30 @@ func TestAutoProgressTicketLifecycleRespectsExplicitLifecycle(t *testing.T) {
 		Stage:       store.StageDone,
 		State:       store.StateSuccess,
 	}
-	next := autoProgressTicketLifecycle(payload, current, "alice")
+	next := autoProgressTicketLifecycle(payload, current, "alice", false)
 	if next.Stage != store.StageDone || next.State != store.StateSuccess {
 		t.Fatalf("expected explicit done/success to be preserved, got %s/%s", next.Stage, next.State)
+	}
+}
+
+func TestAutoProgressTicketLifecycleSkipsParents(t *testing.T) {
+	t.Parallel()
+	current := store.Ticket{
+		Stage:       store.StageDesign,
+		State:       store.StateIdle,
+		Title:       "Parent",
+		Description: "Desc",
+	}
+	payload := ticketRequest{
+		Title:       "Parent updated",
+		Description: "Desc",
+	}
+	next := autoProgressTicketLifecycle(payload, current, "alice", true)
+	if next.Stage != "" || next.State != "" {
+		t.Fatalf("expected parent edit to avoid lifecycle changes, got %s/%s", next.Stage, next.State)
+	}
+	if next.Assignee != "" {
+		t.Fatalf("expected assignee to remain untouched, got %q", next.Assignee)
 	}
 }
 
@@ -5539,6 +5647,66 @@ func TestUpdateTicketRejectsInvalidLifecycleCombinationAPI(t *testing.T) {
 	decodeResponse(t, updateResp, &payload)
 	if payload["error"] != "invalid status \"done/idle\"" {
 		t.Fatalf("update ticket error = %q", payload["error"])
+	}
+}
+
+func TestUpdateParentTicketTitleWithoutLifecycleChangeAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	createParentResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "epic",
+		"title":      "parent before",
+	}, token)
+	if createParentResp.Code != http.StatusCreated {
+		t.Fatalf("create parent status = %d, want %d body=%s", createParentResp.Code, http.StatusCreated, createParentResp.Body.String())
+	}
+	var parent store.Ticket
+	decodeResponse(t, createParentResp, &parent)
+
+	createChildResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"parent_id":  parent.ID,
+		"type":       "task",
+		"title":      "child ticket",
+	}, token)
+	if createChildResp.Code != http.StatusCreated {
+		t.Fatalf("create child status = %d, want %d body=%s", createChildResp.Code, http.StatusCreated, createChildResp.Body.String())
+	}
+
+	getParentResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+parent.ID, nil, token)
+	if getParentResp.Code != http.StatusOK {
+		t.Fatalf("get parent status = %d, want %d body=%s", getParentResp.Code, http.StatusOK, getParentResp.Body.String())
+	}
+	decodeResponse(t, getParentResp, &parent)
+
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+parent.ID, map[string]any{
+		"title":               "parent after",
+		"description":         parent.Description,
+		"acceptance_criteria": parent.AcceptanceCriteria,
+		"git_repository":      parent.GitRepository,
+		"git_branch":          parent.GitBranch,
+		"parent_id":           parent.ParentID,
+		"assignee":            parent.Assignee,
+		"type":                parent.Type,
+		"priority":            parent.Priority,
+		"order":               parent.Order,
+		"estimate_effort":     parent.EstimateEffort,
+		"estimate_complete":   parent.EstimateComplete,
+	}, token)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update parent status = %d, want %d body=%s", updateResp.Code, http.StatusOK, updateResp.Body.String())
+	}
+	var updated store.Ticket
+	decodeResponse(t, updateResp, &updated)
+	if updated.Title != "parent after" {
+		t.Fatalf("updated.Title = %q, want %q", updated.Title, "parent after")
+	}
+	if updated.Stage != parent.Stage || updated.State != parent.State || updated.Status != parent.Status {
+		t.Fatalf("updated lifecycle = %s/%s (%s), want %s/%s (%s)", updated.Stage, updated.State, updated.Status, parent.Stage, parent.State, parent.Status)
 	}
 }
 

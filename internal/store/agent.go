@@ -178,9 +178,10 @@ func AuthenticateAgent(ctx context.Context, db *sql.DB, agentID, plainPassword s
 	var a Agent
 	var hash string
 	var enabled int
+	var defaultProjectID sql.NullInt64
 	if err := row.Scan(
 		&a.ID, &a.Username, &a.Email, &a.EmailConfirmedAt,
-		&a.Role, &a.DisplayName, &enabled, &a.CreatedAt,
+		&a.Role, &defaultProjectID, &a.DisplayName, &enabled, &a.CreatedAt,
 		&a.UserType, &a.Description, &a.Status,
 		&a.LastSeen, &a.UpdatedAt,
 		&hash,
@@ -191,6 +192,9 @@ func AuthenticateAgent(ctx context.Context, db *sql.DB, agentID, plainPassword s
 		return Agent{}, err
 	}
 	a.Enabled = enabled == 1
+	if defaultProjectID.Valid {
+		a.DefaultProjectID = &defaultProjectID.Int64
+	}
 	if !a.Enabled {
 		return Agent{}, ErrForbidden
 	}

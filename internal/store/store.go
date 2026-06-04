@@ -199,6 +199,7 @@ CREATE TABLE IF NOT EXISTS users (
 	password_hash TEXT NOT NULL,
 	role TEXT NOT NULL,
 	plan_id INTEGER,
+	default_project_id INTEGER,
 	display_name TEXT NOT NULL,
 	enabled INTEGER NOT NULL DEFAULT 1,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1307,6 +1308,11 @@ CREATE TABLE user_notifications (
 	}
 	if !columnExists(ctx, db, "users", "plan_id") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN plan_id INTEGER`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "users", "default_project_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN default_project_id INTEGER`); err != nil {
 			return err
 		}
 	}

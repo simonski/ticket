@@ -32,6 +32,15 @@ func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
 }
 
+func envFlagEnabled(name string) bool {
+	switch strings.ToLower(envValue(name)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 //go:embed VERSION
 var embeddedVersion string
 
@@ -62,6 +71,7 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	noColorOutput = noColorOutput || envFlagEnabled("TK_NOCOLOR")
 	trimmedArgs, projectOverride, err := extractProjectOverride(trimmedArgs)
 	if err != nil {
 		return err

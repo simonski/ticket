@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"reflect"
@@ -76,6 +77,22 @@ func setTestWorkingDir(t *testing.T, dir string) {
 		t.Fatalf("Chdir(%s) error = %v", dir, err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
+}
+
+func setTestGitOrigin(t *testing.T, remote string) {
+	t.Helper()
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if out, err := exec.Command("git", "-C", repoDir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init error = %v\n%s", err, out)
+	}
+	_ = exec.Command("git", "-C", repoDir, "remote", "remove", "origin").Run()
+	if out, err := exec.Command("git", "-C", repoDir, "remote", "add", "origin", remote).CombinedOutput(); err != nil {
+		t.Fatalf("git remote add origin error = %v\n%s", err, out)
+	}
+	gitOriginByRoot.Delete(repoDir)
 }
 
 func testDBPath(t *testing.T) string {
@@ -584,6 +601,25 @@ func TestRenderBannerContainsTaskArtAndColors(t *testing.T) {
 	}
 }
 
+func TestRunHelpHonorsTKNoColorEnv(t *testing.T) {
+	original := selectBannerWord
+	selectBannerWord = func() string { return "TKT" }
+	defer func() { selectBannerWord = original }()
+
+	t.Setenv("TK_NOCOLOR", "1")
+	output := captureStdout(t, func() {
+		if err := run([]string{"help"}); err != nil {
+			t.Fatalf("help error = %v", err)
+		}
+	})
+	if strings.Contains(output, "\x1b[") {
+		t.Fatalf("help output should omit ANSI when TK_NOCOLOR=1:\n%s", output)
+	}
+	if !strings.Contains(output, "TTTTTTT") {
+		t.Fatalf("help output missing banner art:\n%s", output)
+	}
+}
+
 func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
 	help := renderCommandHelp("initdb")
 
@@ -730,7 +766,8 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 func TestRenderProjectHelpIncludesSetDraft(t *testing.T) {
 	help := renderCommandHelp("project")
 	for _, want := range []string{
-		"tk project <create|list|get|use|set-draft|request-access|my-access-requests|access-requests|approve-access-request|reject-access-request|workflow|add-user|remove-user|add-team|remove-team>",
+		"tk project <create|list|get|use|set-default|clear-default|set-draft|request-access|my-access-requests|access-requests|approve-access-request|reject-access-request|workflow|add-user|remove-user|add-team|remove-team>",
+		"`tk project set-default <ref>` saves a per-user default project; `tk project clear-default` removes it.",
 		"`set-draft` controls whether new tickets default to draft mode for the project.",
 		"`request-access` submits an access request for a gated project that accepts new members.",
 		"`my-access-requests` lets the current user review their own pending and decided membership requests.",
@@ -1942,7 +1979,13 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 				t.Fatalf("status auth header = %q", r.Header.Get("Authorization"))
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"server_version":"9.8.7","user":{"username":"alice","role":"user"}}`))
+			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"server_version":"9.8.7","user":{"username":"alice","role":"user","default_project_id":7}}`))
+		case "/api/users/me/default-project":
+			if r.Header.Get("Authorization") != "Bearer env-token" {
+				t.Fatalf("default-project auth header = %q", r.Header.Get("Authorization"))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"project_id":7,"prefix":"DEF","title":"Default Project"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -1967,6 +2010,8 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		"9.8.7",
 		"CLIENT_VERSION",
 		strings.TrimSpace(embeddedVersion),
+		"DEFAULT_PROJECT",
+		"DEF",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
@@ -2169,8 +2214,11 @@ func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 	if !strings.Contains(listOut, "Summary task one") {
 		t.Fatalf("list output missing ticket row:\n%s", listOut)
 	}
-	if !strings.HasPrefix(listOut, "ID") {
-		t.Fatalf("list output should start with the ticket table:\n%s", listOut)
+	if !strings.HasPrefix(listOut, "PROJECT  SUM — Summary Test (") {
+		t.Fatalf("list output should start with project context:\n%s", listOut)
+	}
+	if !strings.Contains(listOut, "ID") || !strings.Contains(listOut, "TYPE") || !strings.Contains(listOut, "TITLE") {
+		t.Fatalf("list output should include the ticket table header after project context:\n%s", listOut)
 	}
 }
 
@@ -2202,6 +2250,41 @@ func TestRunListTruncatesMultilineTicketTitles(t *testing.T) {
 		if !strings.Contains(getOut, want) {
 			t.Fatalf("get output missing %q:\n%s", want, getOut)
 		}
+	}
+}
+
+func TestRunListIndentsTitlesByTreeDepth(t *testing.T) {
+	setupLocalCLI(t)
+
+	rootID := createLocalTask(t, []string{"add", "Root title"})
+	childID := createLocalTask(t, []string{"add", "-parent", rootID, "Child title"})
+	grandchildID := createLocalTask(t, []string{"add", "-parent", childID, "Grandchild title"})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"ls", "-nocolor"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+
+	var rootLine, childLine, grandchildLine string
+	for _, line := range strings.Split(output, "\n") {
+		switch {
+		case strings.Contains(line, rootID) && strings.Contains(line, "Root title"):
+			rootLine = line
+		case strings.Contains(line, childID) && strings.Contains(line, "Child title"):
+			childLine = line
+		case strings.Contains(line, grandchildID) && strings.Contains(line, "Grandchild title"):
+			grandchildLine = line
+		}
+	}
+	if rootLine == "" || childLine == "" || grandchildLine == "" {
+		t.Fatalf("list output missing hierarchy rows:\n%s", output)
+	}
+	rootTitleCol := strings.Index(rootLine, "Root title")
+	childTitleCol := strings.Index(childLine, "Child title")
+	grandchildTitleCol := strings.Index(grandchildLine, "Grandchild title")
+	if !(rootTitleCol < childTitleCol && childTitleCol < grandchildTitleCol) {
+		t.Fatalf("title columns should indent by depth:\nroot: %q\nchild: %q\ngrandchild: %q", rootLine, childLine, grandchildLine)
 	}
 }
 
@@ -2500,6 +2583,42 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 
 }
 
+func TestRunProjectListMarksRepoResolvedCurrentProject(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	createOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "REP", "-title", "Repo Project", "-git-repository", "https://github.com/example/repo.git"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+	if !strings.Contains(createOutput, "Repo Project") {
+		t.Fatalf("project create output = %q", createOutput)
+	}
+	project, err := svc.GetProject(context.Background(), "REP")
+	if err != nil {
+		t.Fatalf("GetProject(REP) error = %v", err)
+	}
+
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
+		t.Fatalf("SaveProjectConfigAt(blank) error = %v", err)
+	}
+	setTestGitOrigin(t, "https://github.com/example/repo.git")
+
+	listOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "list"}); err != nil {
+			t.Fatalf("project list error = %v", err)
+		}
+	})
+	if !strings.Contains(listOutput, fmt.Sprintf("*  %d   REP     Repo Project", project.ID)) {
+		t.Fatalf("project list output missing repo-resolved marker:\n%s", listOutput)
+	}
+}
+
 func TestRunProjectCommandsRejectGitBranchFlag(t *testing.T) {
 	setupLocalCLI(t)
 
@@ -2737,6 +2856,59 @@ func TestRunTicketCreateAndUpdateGuidanceMaps(t *testing.T) {
 		if !hasDetailField(getOutput, label, value) {
 			t.Fatalf("ticket get output missing %q=%q:\n%s", label, value, getOutput)
 		}
+	}
+}
+
+func TestRunTicketCreateSupportsProjectSelectionAliases(t *testing.T) {
+	setupLocalCLI(t)
+
+	svc := localCLIService(t)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	privateProject, _, err := resolveProjectContext(context.Background(), cfg, svc, "private")
+	if err != nil {
+		t.Fatalf("resolveProjectContext(private) error = %v", err)
+	}
+	publicProject, _, err := resolveProjectContext(context.Background(), cfg, svc, "public")
+	if err != nil {
+		t.Fatalf("resolveProjectContext(public) error = %v", err)
+	}
+
+	privateID := createLocalTask(t, []string{"add", "-project_id", "private", "-p", "3", "Private Alias Task"})
+	privateTicket, err := svc.GetTicket(context.Background(), privateID)
+	if err != nil {
+		t.Fatalf("GetTicket(private alias) error = %v", err)
+	}
+	if privateTicket.ProjectID != privateProject.ID {
+		t.Fatalf("private alias ticket.ProjectID = %d, want %d", privateTicket.ProjectID, privateProject.ID)
+	}
+	if privateTicket.Priority != 3 {
+		t.Fatalf("private alias ticket.Priority = %d, want 3", privateTicket.Priority)
+	}
+
+	publicID := createLocalTask(t, []string{"add", "-project", "public", "Public Alias Task"})
+	publicTicket, err := svc.GetTicket(context.Background(), publicID)
+	if err != nil {
+		t.Fatalf("GetTicket(public alias) error = %v", err)
+	}
+	if publicTicket.ProjectID != publicProject.ID {
+		t.Fatalf("public alias ticket.ProjectID = %d, want %d", publicTicket.ProjectID, publicProject.ID)
+	}
+
+	filePath := filepath.Join(t.TempDir(), "ticket.md")
+	fileContent := "title: File Alias Task\nproject_id: public\n\nCreated from file.\n"
+	if err := os.WriteFile(filePath, []byte(fileContent), 0o600); err != nil {
+		t.Fatalf("WriteFile(ticket.md) error = %v", err)
+	}
+	fileID := createLocalTask(t, []string{"add", "@" + filePath})
+	fileTicket, err := svc.GetTicket(context.Background(), fileID)
+	if err != nil {
+		t.Fatalf("GetTicket(file alias) error = %v", err)
+	}
+	if fileTicket.ProjectID != publicProject.ID {
+		t.Fatalf("file alias ticket.ProjectID = %d, want %d", fileTicket.ProjectID, publicProject.ID)
 	}
 }
 
@@ -3051,6 +3223,81 @@ func TestRunListShowsOpenChildUnderOpenEpic(t *testing.T) {
 	}
 	if !strings.Contains(output, ticketLabelByID(t, childID)) {
 		t.Fatalf("list output missing open child ticket:\n%s", output)
+	}
+}
+
+func TestRunListRepoResolvedProjectHeader(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "REP", "-title", "Repo List Project", "-git-repository", "https://github.com/example/repo-list.git"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+	project, err := svc.GetProject(context.Background(), "REP")
+	if err != nil {
+		t.Fatalf("GetProject(REP) error = %v", err)
+	}
+
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: strconv.FormatInt(project.ID, 10)}); err != nil {
+		t.Fatalf("SaveProjectConfigAt(project) error = %v", err)
+	}
+	createLocalTask(t, []string{"add", "Repo resolved task"})
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
+		t.Fatalf("SaveProjectConfigAt(blank) error = %v", err)
+	}
+	setTestGitOrigin(t, "https://github.com/example/repo-list.git")
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"ls", "-nocolor"}); err != nil {
+			t.Fatalf("ls error = %v", err)
+		}
+	})
+	if !strings.HasPrefix(output, fmt.Sprintf("PROJECT  REP — Repo List Project (%d)", project.ID)) {
+		t.Fatalf("ls output missing repo-resolved project header:\n%s", output)
+	}
+	if !strings.Contains(output, "Repo resolved task") {
+		t.Fatalf("ls output missing repo-resolved task:\n%s", output)
+	}
+}
+
+func TestRunListEmptyStateIncludesProjectContext(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "EMP", "-title", "Empty Project"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+	project, err := svc.GetProject(context.Background(), "EMP")
+	if err != nil {
+		t.Fatalf("GetProject(EMP) error = %v", err)
+	}
+
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: strconv.FormatInt(project.ID, 10)}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"ls", "-t", "bug"}); err != nil {
+			t.Fatalf("ls empty state error = %v", err)
+		}
+	})
+	if !strings.HasPrefix(output, fmt.Sprintf("PROJECT  EMP — Empty Project (%d)", project.ID)) {
+		t.Fatalf("ls empty output missing project header:\n%s", output)
+	}
+	if !strings.Contains(output, "No bugs available.") {
+		t.Fatalf("ls empty output missing entity empty state:\n%s", output)
 	}
 }
 
@@ -3990,6 +4237,35 @@ func TestRunUpdateAcceptsPositionalID(t *testing.T) {
 	}
 }
 
+func TestRunUpdatePositionalNumericIDUpdatesTitleWithPunctuation(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "Needs Numeric Update"})
+	taskSeq := strings.TrimPrefix(taskID, "TK-")
+	updatedTitle := `the title: "quoted", punctuated!`
+
+	if err := run([]string{"update", taskSeq, "-title", updatedTitle}); err != nil {
+		t.Fatalf("run(update positional numeric id) error = %v", err)
+	}
+
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", taskID, "-v"}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	if !hasDetailField(getOutput, "Title", updatedTitle) {
+		t.Fatalf("get output missing updated title:\n%s", getOutput)
+	}
+
+	showOutput := captureStdout(t, func() {
+		if err := run([]string{"show", taskID}); err != nil {
+			t.Fatalf("show error = %v", err)
+		}
+	})
+	if !strings.Contains(showOutput, updatedTitle) {
+		t.Fatalf("show output missing updated title:\n%s", showOutput)
+	}
+}
+
 func TestRunUpdateRequiresID(t *testing.T) {
 	setupLocalCLI(t)
 
@@ -4907,6 +5183,7 @@ func TestRunNegativeCommandCasesInLocalMode(t *testing.T) {
 		want string
 	}{
 		{[]string{"get", "-id", "abc"}, "ticket not found"},
+		{[]string{"update", "-id", "abc", "-title", "new title"}, "ticket not found"},
 		{[]string{"dependency", "add", "-id", "1", "abc"}, "ticket not found"},
 		{[]string{"request", "abc"}, "ticket not found"},
 		{[]string{"list", "-n", "-1"}, "usage: tk list|ls"},
@@ -5610,6 +5887,61 @@ func TestRunProjectUseAndWorkflowHelpPaths(t *testing.T) {
 	}
 }
 
+func TestRunProjectSetDefaultAffectsFallbackResolution(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix: "DEF",
+		Title:  "Default Project",
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	if err := run([]string{"project", "set-default", "DEF"}); err != nil {
+		t.Fatalf("project set-default error = %v", err)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := config.SaveProjectConfigAt(cwd, config.Config{}); err != nil {
+		t.Fatalf("SaveProjectConfigAt(clear) error = %v", err)
+	}
+
+	listOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "ls"}); err != nil {
+			t.Fatalf("project ls error = %v", err)
+		}
+	})
+	if !strings.Contains(listOutput, "*  4   DEF") {
+		t.Fatalf("project ls should mark saved default project:\n%s", listOutput)
+	}
+
+	statusOutput := captureStdout(t, func() {
+		if err := run([]string{"status"}); err != nil {
+			t.Fatalf("status error = %v", err)
+		}
+	})
+	if !strings.Contains(statusOutput, "DEFAULT_PROJECT") || !strings.Contains(statusOutput, "DEF") {
+		t.Fatalf("status output missing default project:\n%s", statusOutput)
+	}
+
+	ticketID := createLocalTask(t, []string{"create", "-title", "Uses saved default"})
+	ticket, err := svc.GetTicket(context.Background(), ticketID)
+	if err != nil {
+		t.Fatalf("GetTicket() error = %v", err)
+	}
+	if ticket.ProjectID != project.ID {
+		t.Fatalf("ticket.ProjectID = %d, want %d", ticket.ProjectID, project.ID)
+	}
+
+	if err := run([]string{"project", "clear-default"}); err != nil {
+		t.Fatalf("project clear-default error = %v", err)
+	}
+}
+
 func TestRunReadyAndNotReadyToggleDraft(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
@@ -5838,6 +6170,50 @@ func createLegacyDatabaseForCLI(t *testing.T) (string, string) {
 	return dbPath, ticket.ID
 }
 
+func createPreviousSchemaDatabaseForCLI(t *testing.T) string {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "previous.db")
+	rawDB, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	_, err = rawDB.Exec(`
+		PRAGMA foreign_keys = ON;
+		CREATE TABLE users (
+			user_id TEXT PRIMARY KEY,
+			username TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			role TEXT NOT NULL,
+			plan_id INTEGER,
+			display_name TEXT NOT NULL,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			user_type TEXT NOT NULL DEFAULT 'user',
+			uuid TEXT NOT NULL DEFAULT '',
+			description TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '',
+			last_seen TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE schema_meta (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
+		INSERT INTO schema_meta (key, value) VALUES ('schema_version', '5');
+	`)
+	if err != nil {
+		if closeErr := rawDB.Close(); closeErr != nil {
+			t.Fatalf("rawDB.Close() error after exec failure = %v", closeErr)
+		}
+		t.Fatalf("rawDB.Exec() error = %v", err)
+	}
+	if err := rawDB.Close(); err != nil {
+		t.Fatalf("rawDB.Close() error = %v", err)
+	}
+	return dbPath
+}
+
 // testAdminUserID returns the admin user's ID by opening the local DB and looking up the user.
 func testAdminUserID(t *testing.T) string {
 	t.Helper()
@@ -5954,6 +6330,34 @@ func TestResolveServiceRequiresTicketURLWhenOnlyLocalDBPresent(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("resolveService() error missing %q:\n%v", want, err)
 		}
+	}
+}
+
+func TestResolveServiceUsesProcessLocationOverrideForLocalDatabase(t *testing.T) {
+	setupLocalCLI(t)
+
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	testutil.CloneSeededDB(t, dbPath, "secret12")
+	config.SetLocationOverride(dbPath)
+	t.Cleanup(config.ClearLocationOverride)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		t.Fatalf("resolveService() error = %v", err)
+	}
+	if _, ok := svc.(*libticket.LocalService); !ok {
+		t.Fatalf("resolveService() returned %T, want *libticket.LocalService", svc)
+	}
+	status, err := svc.Status(context.Background())
+	if err != nil {
+		t.Fatalf("svc.Status() error = %v", err)
+	}
+	if status.Status != "ok" {
+		t.Fatalf("svc.Status().Status = %q, want %q", status.Status, "ok")
 	}
 }
 
@@ -6489,6 +6893,28 @@ func TestRunUpgradeDatabasePortsLegacyDatabase(t *testing.T) {
 	}
 }
 
+func TestRunListShowsSchemaUpgradeGuidanceForPreviousDatabase(t *testing.T) {
+	t.Setenv("TICKET_HOME", t.TempDir())
+	noColorOutput = true
+	t.Cleanup(func() { noColorOutput = false })
+
+	dbPath := createPreviousSchemaDatabaseForCLI(t)
+	err := run([]string{"-f", dbPath, "ls"})
+	if err == nil {
+		t.Fatal("run(ls) error = nil, want schema version guidance")
+	}
+	for _, want := range []string{
+		dbPath,
+		"schema version 5",
+		fmt.Sprintf("schema version %d", store.CurrentSchemaVersion),
+		"upgrade-database -o new_database/ticket.db",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("run(ls) error missing %q:\n%v", want, err)
+		}
+	}
+}
+
 func TestRunLabelCRUD(t *testing.T) {
 	setupLocalCLI(t)
 	taskID := createLocalTask(t, []string{"add", "Label Test"})
@@ -6765,8 +7191,15 @@ func TestRunTypedNamespaceListEmptyMessages(t *testing.T) {
 				t.Fatalf("run(%v) error = %v", tc.args, err)
 			}
 		})
-		if strings.TrimSpace(output) != tc.want {
-			t.Fatalf("run(%v) output = %q, want %q", tc.args, strings.TrimSpace(output), tc.want)
+		trimmed := strings.TrimSpace(output)
+		if len(tc.args) > 0 && tc.args[0] == "ls" {
+			if !strings.HasPrefix(trimmed, "PROJECT  PRIV — Private (1)") || !strings.Contains(trimmed, tc.want) {
+				t.Fatalf("run(%v) output = %q, want project header plus %q", tc.args, trimmed, tc.want)
+			}
+			continue
+		}
+		if trimmed != tc.want {
+			t.Fatalf("run(%v) output = %q, want %q", tc.args, trimmed, tc.want)
 		}
 	}
 }
@@ -8164,8 +8597,13 @@ func TestRunArchiveAndUnarchive(t *testing.T) {
 			t.Fatalf("archive error = %v", err)
 		}
 	})
-	if !strings.Contains(archiveOut, "archived: true") {
-		t.Fatalf("archive output should show archived=true:\n%s", archiveOut)
+	if strings.TrimSpace(archiveOut) != ref+" archived" {
+		t.Fatalf("archive output = %q, want %q", strings.TrimSpace(archiveOut), ref+" archived")
+	}
+	for _, unwanted := range []string{"archived: true", "type: task"} {
+		if strings.Contains(archiveOut, unwanted) {
+			t.Fatalf("archive output should be terse, found %q:\n%s", unwanted, archiveOut)
+		}
 	}
 
 	// archived ticket hidden from default list
@@ -8178,14 +8616,27 @@ func TestRunArchiveAndUnarchive(t *testing.T) {
 		t.Fatalf("archived ticket should not appear in default list:\n%s", listOut)
 	}
 
+	// archive verbose
+	archiveVerboseOut := captureStdout(t, func() {
+		if err := run([]string{"unarchive", "-id", ref}); err != nil {
+			t.Fatalf("unarchive reset error = %v", err)
+		}
+		if err := run([]string{"archive", "-id", ref, "-v"}); err != nil {
+			t.Fatalf("archive verbose error = %v", err)
+		}
+	})
+	if !strings.Contains(archiveVerboseOut, "archived: true") || !strings.Contains(archiveVerboseOut, "type: task") {
+		t.Fatalf("archive verbose output should include ticket detail:\n%s", archiveVerboseOut)
+	}
+
 	// unarchive
 	unarchiveOut := captureStdout(t, func() {
 		if err := run([]string{"unarchive", "-id", ref}); err != nil {
 			t.Fatalf("unarchive error = %v", err)
 		}
 	})
-	if !strings.Contains(unarchiveOut, "archived: false") {
-		t.Fatalf("unarchive output should show archived=false:\n%s", unarchiveOut)
+	if strings.TrimSpace(unarchiveOut) != ref+" unarchived" {
+		t.Fatalf("unarchive output = %q, want %q", strings.TrimSpace(unarchiveOut), ref+" unarchived")
 	}
 
 	// ticket reappears in list
@@ -8196,6 +8647,31 @@ func TestRunArchiveAndUnarchive(t *testing.T) {
 	})
 	if !strings.Contains(listOut2, "Archive me") {
 		t.Fatalf("unarchived ticket should appear in list:\n%s", listOut2)
+	}
+}
+
+func TestRunArchiveSupportsJSONOutput(t *testing.T) {
+	previousJSON := outputJSON
+	defer func() { outputJSON = previousJSON }()
+
+	setupLocalCLI(t)
+
+	id := createLocalTask(t, []string{"add", "Archive JSON"})
+	output := captureStdout(t, func() {
+		if err := run([]string{"archive", "-id", id, "-json"}); err != nil {
+			t.Fatalf("archive -json error = %v", err)
+		}
+	})
+
+	var ticket store.Ticket
+	if err := json.Unmarshal([]byte(output), &ticket); err != nil {
+		t.Fatalf("archive -json output parse error = %v\n%s", err, output)
+	}
+	if ticket.ID != id {
+		t.Fatalf("archive -json ticket.ID = %q, want %q", ticket.ID, id)
+	}
+	if !ticket.Archived {
+		t.Fatalf("archive -json ticket.Archived = %v, want true", ticket.Archived)
 	}
 }
 
@@ -8549,6 +9025,15 @@ func TestRowColorSuccess(t *testing.T) {
 	got := rowColor("develop/success")
 	if got != ansiGray {
 		t.Fatalf("rowColor(design/success) = %q, want ansiGray", got)
+	}
+}
+
+func TestTicketTypeColorBug(t *testing.T) {
+	if got := ticketTypeColor("bug"); got != ansiRed {
+		t.Fatalf("ticketTypeColor(bug) = %q, want %q", got, ansiRed)
+	}
+	if got := ticketTypeColor("task"); got != "" {
+		t.Fatalf("ticketTypeColor(task) = %q, want empty", got)
 	}
 }
 
@@ -9765,5 +10250,92 @@ func TestTicketSortKeyCompleteTicketsSinkToBottom(t *testing.T) {
 	}
 	if ticketSortKey(idle) >= ticketSortKey(done) {
 		t.Error("idle should sort before done")
+	}
+}
+
+func TestEffectiveTicketUpdatedAtPropagatesNestedChildren(t *testing.T) {
+	epicID := "TK-1"
+	storyID := "TK-2"
+	taskID := "TK-3"
+	tickets := []store.Ticket{
+		{ID: epicID, UpdatedAt: "2026-01-01 09:00:00"},
+		{ID: storyID, ParentID: &epicID, UpdatedAt: "2026-01-01 10:00:00"},
+		{ID: taskID, ParentID: &storyID, UpdatedAt: "2026-01-01 11:00:00"},
+	}
+
+	effective := effectiveTicketUpdatedAt(tickets)
+	if effective[epicID] != "2026-01-01 11:00:00" {
+		t.Fatalf("effective updated_at for epic = %q, want child timestamp", effective[epicID])
+	}
+	if effective[storyID] != "2026-01-01 11:00:00" {
+		t.Fatalf("effective updated_at for story = %q, want child timestamp", effective[storyID])
+	}
+}
+
+func TestRunListDefaultsToRecencyOrdering(t *testing.T) {
+	setupLocalCLI(t)
+
+	olderID := createLocalTask(t, []string{"add", "Older task"})
+	newerID := createLocalTask(t, []string{"add", "Newer task"})
+
+	db, err := store.Open(testDBPath(t))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`UPDATE tickets SET updated_at = ? WHERE ticket_id = ?`, "2026-01-01 09:00:00", olderID); err != nil {
+		t.Fatalf("update older ticket timestamp error = %v", err)
+	}
+	if _, err := db.Exec(`UPDATE tickets SET updated_at = ? WHERE ticket_id = ?`, "2026-01-01 10:00:00", newerID); err != nil {
+		t.Fatalf("update newer ticket timestamp error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"list", "-nocolor"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+	if strings.Index(output, newerID) >= strings.Index(output, olderID) {
+		t.Fatalf("list output should show newer ticket before older ticket:\n%s", output)
+	}
+}
+
+func TestRunListBubblesParentEpicByDescendantRecency(t *testing.T) {
+	setupLocalCLI(t)
+
+	epicID := createLocalTask(t, []string{"epic", "Recent Parent Epic"})
+	childID := createLocalTask(t, []string{"add", "-parent", epicID, "Recent Child"})
+	otherID := createLocalTask(t, []string{"add", "Other Root"})
+
+	db, err := store.Open(testDBPath(t))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	for _, tc := range []struct {
+		id        string
+		updatedAt string
+	}{
+		{id: epicID, updatedAt: "2026-01-01 09:00:00"},
+		{id: otherID, updatedAt: "2026-01-01 10:00:00"},
+		{id: childID, updatedAt: "2026-01-01 11:00:00"},
+	} {
+		if _, err := db.Exec(`UPDATE tickets SET updated_at = ? WHERE ticket_id = ?`, tc.updatedAt, tc.id); err != nil {
+			t.Fatalf("update timestamp for %s error = %v", tc.id, err)
+		}
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"list", "-nocolor"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+	if strings.Index(output, epicID) >= strings.Index(output, otherID) {
+		t.Fatalf("list output should bubble parent epic ahead of older roots:\n%s", output)
+	}
+	if !strings.Contains(output, childID) {
+		t.Fatalf("list output missing child ticket:\n%s", output)
 	}
 }

@@ -194,6 +194,65 @@ func TestAdminUserManagement(t *testing.T) {
 	}
 }
 
+func TestUserDefaultProjectLifecycle(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	user, err := CreateUser(context.Background(), db, "dora", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	privateProject, err := GetProjectByAlias(context.Background(), db, "private", user.ID)
+	if err != nil {
+		t.Fatalf("GetProjectByAlias(private) error = %v", err)
+	}
+	if err := SetUserDefaultProject(context.Background(), db, user.ID, privateProject.ID); err != nil {
+		t.Fatalf("SetUserDefaultProject() error = %v", err)
+	}
+
+	storedUser, err := GetUserByID(context.Background(), db, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID() error = %v", err)
+	}
+	if storedUser.DefaultProjectID == nil || *storedUser.DefaultProjectID != privateProject.ID {
+		t.Fatalf("GetUserByID().DefaultProjectID = %#v, want %d", storedUser.DefaultProjectID, privateProject.ID)
+	}
+
+	token, err := CreateSession(context.Background(), db, user.ID)
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	sessionUser, err := GetUserByToken(context.Background(), db, token)
+	if err != nil {
+		t.Fatalf("GetUserByToken() error = %v", err)
+	}
+	if sessionUser.DefaultProjectID == nil || *sessionUser.DefaultProjectID != privateProject.ID {
+		t.Fatalf("GetUserByToken().DefaultProjectID = %#v, want %d", sessionUser.DefaultProjectID, privateProject.ID)
+	}
+
+	defaultProject, err := GetUserDefaultProject(context.Background(), db, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserDefaultProject() error = %v", err)
+	}
+	if defaultProject.ID != privateProject.ID {
+		t.Fatalf("GetUserDefaultProject().ID = %d, want %d", defaultProject.ID, privateProject.ID)
+	}
+
+	if err := DeleteProject(context.Background(), db, privateProject.ID); err != nil {
+		t.Fatalf("DeleteProject() error = %v", err)
+	}
+	if _, err := GetUserDefaultProject(context.Background(), db, user.ID); !errors.Is(err, ErrProjectNotFound) {
+		t.Fatalf("GetUserDefaultProject() after delete error = %v, want ErrProjectNotFound", err)
+	}
+	clearedUser, err := GetUserByID(context.Background(), db, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID() after delete error = %v", err)
+	}
+	if clearedUser.DefaultProjectID != nil {
+		t.Fatalf("GetUserByID().DefaultProjectID after delete = %#v, want nil", clearedUser.DefaultProjectID)
+	}
+}
+
 func TestResetUserPassword(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)

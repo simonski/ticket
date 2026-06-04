@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -64,6 +65,79 @@ func TestOpenRejectsLegacyDatabaseWithoutSchemaVersion(t *testing.T) {
 	}
 	if !versionErr.UpgradeNeeded {
 		t.Fatal("SchemaVersionError.UpgradeNeeded = false, want true")
+	}
+}
+
+func createPreviousSchemaDatabaseForTest(t *testing.T) string {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "previous.db")
+	rawDB, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	_, err = rawDB.Exec(`
+		PRAGMA foreign_keys = ON;
+		CREATE TABLE users (
+			user_id TEXT PRIMARY KEY,
+			username TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			role TEXT NOT NULL,
+			plan_id INTEGER,
+			display_name TEXT NOT NULL,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			user_type TEXT NOT NULL DEFAULT 'user',
+			uuid TEXT NOT NULL DEFAULT '',
+			description TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '',
+			last_seen TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE schema_meta (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
+		INSERT INTO schema_meta (key, value) VALUES ('schema_version', '5');
+	`)
+	if err != nil {
+		if closeErr := rawDB.Close(); closeErr != nil {
+			t.Fatalf("rawDB.Close() error after exec failure = %v", closeErr)
+		}
+		t.Fatalf("rawDB.Exec() error = %v", err)
+	}
+	if err := rawDB.Close(); err != nil {
+		t.Fatalf("rawDB.Close() error = %v", err)
+	}
+	return dbPath
+}
+
+func TestOpenRejectsPreviousSchemaVersionWithUpgradeGuidance(t *testing.T) {
+	t.Parallel()
+
+	dbPath := createPreviousSchemaDatabaseForTest(t)
+	_, err := Open(dbPath)
+	if err == nil {
+		t.Fatal("Open() error = nil, want schema version error")
+	}
+	var versionErr *SchemaVersionError
+	if !errors.As(err, &versionErr) {
+		t.Fatalf("Open() error = %v, want SchemaVersionError", err)
+	}
+	if versionErr.Found != 5 {
+		t.Fatalf("SchemaVersionError.Found = %d, want 5", versionErr.Found)
+	}
+	if versionErr.Current != CurrentSchemaVersion {
+		t.Fatalf("SchemaVersionError.Current = %d, want %d", versionErr.Current, CurrentSchemaVersion)
+	}
+	for _, want := range []string{
+		"schema version 5",
+		"schema version 6",
+		"upgrade-database -o new_database/ticket.db",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Open() error missing %q: %v", want, err)
+		}
 	}
 }
 
@@ -178,5 +252,33 @@ func TestUpgradeDatabaseSupportsLegacyTicketsWithoutDraftColumn(t *testing.T) {
 	}
 	if ticket.Title != "No draft column" {
 		t.Fatalf("ticket.Title = %q, want %q", ticket.Title, "No draft column")
+	}
+}
+
+func TestUpgradeDatabasePortsPreviousSchemaVersion(t *testing.T) {
+	t.Parallel()
+
+	sourcePath := createPreviousSchemaDatabaseForTest(t)
+	targetPath := filepath.Join(t.TempDir(), "new_database", "ticket.db")
+	if err := UpgradeDatabase(context.Background(), sourcePath, targetPath); err != nil {
+		t.Fatalf("UpgradeDatabase() error = %v", err)
+	}
+	if got, err := DetectSchemaVersion(sourcePath); err != nil {
+		t.Fatalf("DetectSchemaVersion(source) error = %v", err)
+	} else if got != 5 {
+		t.Fatalf("DetectSchemaVersion(source) = %d, want 5", got)
+	}
+	if got, err := DetectSchemaVersion(targetPath); err != nil {
+		t.Fatalf("DetectSchemaVersion(target) error = %v", err)
+	} else if got != CurrentSchemaVersion {
+		t.Fatalf("DetectSchemaVersion(target) = %d, want %d", got, CurrentSchemaVersion)
+	}
+	targetDB, err := Open(targetPath)
+	if err != nil {
+		t.Fatalf("Open(target) error = %v", err)
+	}
+	defer targetDB.Close()
+	if !columnExists(context.Background(), targetDB, "users", "default_project_id") {
+		t.Fatal("users.default_project_id missing after upgrade")
 	}
 }

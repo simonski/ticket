@@ -43,6 +43,9 @@ type UserService interface {
 	CreateUser(ctx context.Context, username, password string) (store.User, error)
 	SetUserEnabled(ctx context.Context, username string, enabled bool) error
 	ListUsers(ctx context.Context) ([]store.User, error)
+	GetMyDefaultProject(ctx context.Context) (store.Project, error)
+	SetMyDefaultProject(ctx context.Context, projectRef string) (store.Project, error)
+	ClearMyDefaultProject(ctx context.Context) error
 	ListMyNotifications(ctx context.Context, status string, limit int) ([]store.UserNotification, error)
 	MarkNotificationRead(ctx context.Context, notificationID int64) (store.UserNotification, error)
 	DeleteUser(ctx context.Context, username string) error

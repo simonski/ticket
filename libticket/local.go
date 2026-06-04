@@ -218,6 +218,79 @@ func (s *LocalService) ListUsers(ctx context.Context) ([]store.User, error) {
 	return store.ListUsers(ctx, db, 0)
 }
 
+func (s *LocalService) GetMyDefaultProject(ctx context.Context) (store.Project, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Project{}, err
+	}
+	user, err := s.localUser(ctx, db)
+	if err != nil {
+		return store.Project{}, err
+	}
+	project, err := store.GetUserDefaultProject(ctx, db, user.ID)
+	if err != nil {
+		return store.Project{}, err
+	}
+	role, ok, err := store.ProjectRoleForUser(ctx, db, project.ID, user.ID)
+	if err != nil {
+		return store.Project{}, err
+	}
+	if !ok && project.Visibility != store.ProjectVisibilityPublic {
+		return store.Project{}, store.ErrProjectNotFound
+	}
+	if ok && role == "" {
+		return store.Project{}, store.ErrProjectNotFound
+	}
+	return project, nil
+}
+
+func (s *LocalService) SetMyDefaultProject(ctx context.Context, projectRef string) (store.Project, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Project{}, err
+	}
+	user, err := s.localUser(ctx, db)
+	if err != nil {
+		return store.Project{}, err
+	}
+	ref := strings.TrimSpace(projectRef)
+	var project store.Project
+	switch strings.ToLower(ref) {
+	case "public":
+		project, err = store.GetProjectByAlias(ctx, db, "public", "")
+	case "private":
+		project, err = store.GetProjectByAlias(ctx, db, "private", user.ID)
+	default:
+		project, err = store.GetProject(ctx, db, ref)
+	}
+	if err != nil {
+		return store.Project{}, err
+	}
+	role, ok, err := store.ProjectRoleForUser(ctx, db, project.ID, user.ID)
+	if err != nil {
+		return store.Project{}, err
+	}
+	if (!ok || role == "") && project.Visibility != store.ProjectVisibilityPublic {
+		return store.Project{}, store.ErrUnauthorized
+	}
+	if err := store.SetUserDefaultProject(ctx, db, user.ID, project.ID); err != nil {
+		return store.Project{}, err
+	}
+	return project, nil
+}
+
+func (s *LocalService) ClearMyDefaultProject(ctx context.Context) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	user, err := s.localUser(ctx, db)
+	if err != nil {
+		return err
+	}
+	return store.ClearUserDefaultProject(ctx, db, user.ID)
+}
+
 func (s *LocalService) ListMyNotifications(ctx context.Context, status string, limit int) ([]store.UserNotification, error) {
 	db, err := s.openDB()
 	if err != nil {

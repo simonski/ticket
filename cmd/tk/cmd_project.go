@@ -249,7 +249,11 @@ func runProject(args []string) error {
 				workflowNames[wf.ID] = wf.Name
 			}
 		}
-		printProjectTable(projects, resolveConfiguredProjectReference(cfg), workflowNames)
+		currentProjectMarker, markerErr := resolveProjectListMarker(context.Background(), cfg, svc)
+		if markerErr != nil {
+			return markerErr
+		}
+		printProjectTable(projects, currentProjectMarker, workflowNames)
 		return nil
 	case "get":
 		if len(args) > 2 {
@@ -288,6 +292,43 @@ func runProject(args []string) error {
 			return nil
 		}
 		return errors.New("tk project use has been removed; pass -project_id or set TICKET_PROJECT instead")
+	case "set-default":
+		fs := flag.NewFlagSet("project set-default", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		projectRef := fs.String("project_id", resolveConfiguredProjectReference(cfg), "project id, title, prefix, or alias")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() > 0 {
+			if strings.TrimSpace(*projectRef) != "" {
+				return errors.New("usage: tk project set-default [-project_id <id|title|prefix|alias>] [project-ref]")
+			}
+			*projectRef = strings.TrimSpace(fs.Arg(0))
+		}
+		if strings.TrimSpace(*projectRef) == "" {
+			return errors.New("project reference is required (pass -project_id or a positional project ref)")
+		}
+		project, err := svc.SetMyDefaultProject(context.Background(), strings.TrimSpace(*projectRef))
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(project)
+		}
+		fmt.Printf("default project set: %s — %s\n", project.Prefix, project.Title)
+		return nil
+	case "clear-default":
+		if len(args) != 1 {
+			return errors.New("usage: tk project clear-default")
+		}
+		if err := svc.ClearMyDefaultProject(context.Background()); err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(map[string]string{"status": "cleared"})
+		}
+		fmt.Println("default project cleared")
+		return nil
 	case "update":
 		if containsFlag(args[1:], "-id") {
 			// Parse -id from args so we don't require a current project
@@ -752,6 +793,41 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		return nil
 	default:
 		return fmt.Errorf("unknown project command %q; see: ticket project help", args[0])
+	}
+}
+
+func resolveProjectListMarker(ctx context.Context, cfg config.Config, svc libticket.Service) (string, error) {
+	projectRef := strings.TrimSpace(resolveConfiguredProjectReference(cfg))
+	if projectRef != "" {
+		project, err := svc.GetProject(ctx, projectRef)
+		switch {
+		case err == nil:
+			return strconv.FormatInt(project.ID, 10), nil
+		case errors.Is(err, store.ErrProjectNotFound):
+			return "", nil
+		default:
+			return "", err
+		}
+	}
+
+	repo := strings.TrimSpace(nearestGitRemoteFromCLI())
+	if repo != "" {
+		project, err := svc.FindProjectByGitRepository(ctx, repo)
+		switch {
+		case err == nil:
+			return strconv.FormatInt(project.ID, 10), nil
+		case !errors.Is(err, store.ErrProjectNotFound):
+			return "", err
+		}
+	}
+	project, err := svc.GetMyDefaultProject(ctx)
+	switch {
+	case err == nil:
+		return strconv.FormatInt(project.ID, 10), nil
+	case errors.Is(err, store.ErrProjectNotFound):
+		return "", nil
+	default:
+		return "", err
 	}
 }
 

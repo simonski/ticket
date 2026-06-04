@@ -37,6 +37,60 @@ func ticketSortKey(t store.Ticket) int {
 	return s
 }
 
+func effectiveTicketUpdatedAt(tickets []store.Ticket) map[string]string {
+	byID := make(map[string]store.Ticket, len(tickets))
+	children := make(map[string][]string, len(tickets))
+	for _, ticket := range tickets {
+		byID[ticket.ID] = ticket
+		if ticket.ParentID != nil {
+			children[*ticket.ParentID] = append(children[*ticket.ParentID], ticket.ID)
+		}
+	}
+
+	effective := make(map[string]string, len(tickets))
+	var visit func(id string) string
+	visit = func(id string) string {
+		if cached, ok := effective[id]; ok {
+			return cached
+		}
+		best := strings.TrimSpace(byID[id].UpdatedAt)
+		for _, childID := range children[id] {
+			if childUpdated := visit(childID); childUpdated > best {
+				best = childUpdated
+			}
+		}
+		effective[id] = best
+		return best
+	}
+
+	for _, ticket := range tickets {
+		visit(ticket.ID)
+	}
+	return effective
+}
+
+func ticketListMoreRecent(left, right store.Ticket, effectiveUpdatedAt map[string]string) bool {
+	leftEffective := strings.TrimSpace(effectiveUpdatedAt[left.ID])
+	rightEffective := strings.TrimSpace(effectiveUpdatedAt[right.ID])
+	if leftEffective != rightEffective {
+		return leftEffective > rightEffective
+	}
+
+	leftUpdated := strings.TrimSpace(left.UpdatedAt)
+	rightUpdated := strings.TrimSpace(right.UpdatedAt)
+	if leftUpdated != rightUpdated {
+		return leftUpdated > rightUpdated
+	}
+
+	leftSort := ticketSortKey(left)
+	rightSort := ticketSortKey(right)
+	if leftSort != rightSort {
+		return leftSort < rightSort
+	}
+
+	return left.ID < right.ID
+}
+
 func ticketIsOpenForList(t store.Ticket) bool {
 	if t.Archived || t.Complete {
 		return false
@@ -582,6 +636,7 @@ func runList(args []string) error {
 		if outputJSON {
 			return printJSON(tickets)
 		}
+		printListProjectHeader(project)
 		if strings.TrimSpace(*taskType) == "" {
 			fmt.Println(noTicketsAvailableForProject(project.Title))
 			return nil
@@ -609,10 +664,9 @@ func runList(args []string) error {
 	if outputJSON {
 		return printJSON(tickets)
 	}
-	// Sort: tickets in later stages or with success/fail state sink to the bottom
-	// so in-progress work is visible first (TK-189).
+	effectiveUpdatedAt := effectiveTicketUpdatedAt(tickets)
 	sort.SliceStable(tickets, func(i, j int) bool {
-		return ticketSortKey(tickets[i]) < ticketSortKey(tickets[j])
+		return ticketListMoreRecent(tickets[i], tickets[j], effectiveUpdatedAt)
 	})
 	// Build agent username set so we can prefix agent assignees.
 	agentUsernames := make(map[string]bool)
@@ -621,6 +675,7 @@ func runList(args []string) error {
 			agentUsernames[a.Username] = true
 		}
 	}
+	printListProjectHeader(project)
 	printTicketTable(tickets, parentKeys, agentUsernames, statusUnicode, *includeAll)
 	return nil
 }
@@ -2616,6 +2671,9 @@ func runTicketCreate(args []string) error {
 		if v, ok := fileFields["project"]; ok && *project == "" {
 			*project = v
 		}
+		if v, ok := fileFields["project_id"]; ok && *project == "" {
+			*project = v
+		}
 		if v, ok := fileFields["dor"]; ok && *dor == "" {
 			*dor = v
 		}
@@ -2631,7 +2689,7 @@ func runTicketCreate(args []string) error {
 	}
 
 	if title == "" {
-		return errors.New("usage: tk add|create|new [-f filename] [-commit] [-title title] [-t type] [-p priority] [-a assignee] [-d description] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-parent id] [-project project] [-estimate_effort n] [-estimate_complete rfc3339] [title words | @filename]")
+		return errors.New("usage: tk add|create|new [-f filename] [-commit] [-title title] [-t type] [-p priority] [-a assignee] [-d description] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-parent id] [-project project] [-project_id project] [-estimate_effort n] [-estimate_complete rfc3339] [title words | @filename]")
 	}
 	dorMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(normalizedArgs, "-dor"), containsFlag(normalizedArgs, "-dor-map"))
 	if err != nil {
@@ -2692,6 +2750,7 @@ func normalizeTicketCreateArgs(args []string) ([]string, error) {
 		"-git-branch":        true,
 		"-estimate_complete": true,
 		"-parent":            true,
+		"-project_id":        true,
 		"-project":           true,
 		"-m":                 true,
 	}

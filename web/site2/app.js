@@ -694,6 +694,11 @@
             return parsed;
         }
 
+        function currentDefaultProjectID() {
+            const value = state.status && state.status.user ? Number(state.status.user.default_project_id) : 0;
+            return Number.isFinite(value) && value > 0 ? value : null;
+        }
+
         function availableViewNames() {
             return visibleNavItems().map((item) => item.view);
         }
@@ -1234,10 +1239,15 @@
 
         function renderProjectMenu() {
             const current = getCurrentProject();
-            els.projectMenuButton.textContent = current ? (current.title + " (" + current.prefix + ")") : "Projects";
+            const defaultProjectID = currentDefaultProjectID();
+            const currentIsDefault = current && defaultProjectID === current.id;
+            els.projectMenuButton.textContent = current ? (current.title + " (" + current.prefix + ")" + (currentIsDefault ? " · default" : "")) : "Projects";
             const otherProjects = state.projects.filter((project) => project.id !== state.selectedProjectID);
             els.projectMenuList.innerHTML = otherProjects.length
-                ? otherProjects.map((project) => "<button type=\"button\" class=\"menu-item\" data-project-switch=\"" + project.id + "\">" + escapeHTML(project.title + " (" + project.prefix + ")") + "</button>").join("")
+                ? otherProjects.map((project) => {
+                    const label = project.title + " (" + project.prefix + ")" + (defaultProjectID === project.id ? " · default" : "");
+                    return "<button type=\"button\" class=\"menu-item\" data-project-switch=\"" + project.id + "\">" + escapeHTML(label) + "</button>";
+                }).join("")
                 : "<div class=\"account-name\">No other projects</div>";
         }
 
@@ -1373,6 +1383,9 @@
             state.projects = Array.isArray(projects) ? projects.map(normalizeProject) : [];
             if (!state.selectedProjectID) {
                 state.selectedProjectID = loadStoredSelectedProjectID();
+            }
+            if (!state.selectedProjectID) {
+                state.selectedProjectID = currentDefaultProjectID();
             }
             if (!state.selectedProjectID && state.projects.length) {
                 state.selectedProjectID = state.projects[0].id;
@@ -1825,8 +1838,12 @@
                 els.projectList.innerHTML = "<div class=\"empty\">No projects yet.</div>";
                 return;
             }
+            const defaultProjectID = currentDefaultProjectID();
             els.projectList.innerHTML = state.projects.map((project) => {
                 const active = project.id === state.selectedProjectID ? " active" : "";
+                const isDefault = project.id === defaultProjectID;
+                const defaultChip = isDefault ? "<span class=\"chip\">default</span>" : "";
+                const defaultButton = "<button type=\"button\" class=\"btn-ghost\" data-project-default-id=\"" + project.id + "\">" + (isDefault ? "Clear default" : "Set default") + "</button>";
                 return "<div class=\"entity-card" + active + "\" data-project-id=\"" + project.id + "\">" +
                     "<h4>" + escapeHTML(project.title) + " <small>(" + escapeHTML(project.prefix) + ")</small></h4>" +
                     "<p>" + escapeHTML(project.description || "No description") + "</p>" +
@@ -1834,6 +1851,8 @@
                     "<span class=\"chip\">" + escapeHTML(project.visibility || "public") + "</span>" +
                     "<span class=\"chip\">requests " + (project.accepts_new_members ? "open" : "closed") + "</span>" +
                     "<span class=\"chip\">draft " + String(Boolean(project.default_draft)) + "</span>" +
+                    defaultChip +
+                    defaultButton +
                     "</div></div>";
             }).join("");
         }
@@ -3379,6 +3398,27 @@
 
         function bindProjectHandlers() {
             els.projectList.addEventListener("click", (event) => {
+                const defaultButton = event.target.closest("[data-project-default-id]");
+                if (defaultButton) {
+                    event.stopPropagation();
+                    const projectID = Number(defaultButton.dataset.projectDefaultId);
+                    const isDefault = currentDefaultProjectID() === projectID;
+                    const request = isDefault
+                        ? api("/api/users/me/default-project", { method: "DELETE" })
+                        : api("/api/users/me/default-project", { method: "PUT", body: JSON.stringify({ project_ref: String(projectID) }) });
+                    request.then(() => {
+                        if (!state.status) {
+                            state.status = {};
+                        }
+                        if (!state.status.user) {
+                            state.status.user = {};
+                        }
+                        state.status.user.default_project_id = isDefault ? null : projectID;
+                        renderAll();
+                        setNotice(isDefault ? "Default project cleared." : "Default project updated.");
+                    }).catch((error) => setNotice(error.message, true));
+                    return;
+                }
                 const card = event.target.closest("[data-project-id]");
                 if (!card) {
                     return;

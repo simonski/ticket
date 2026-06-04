@@ -731,6 +731,181 @@ tk history CUS-42
 
 The CLI should support only the aliases that are part of the documented command surface.
 
+## Planned MCP Server Interface
+
+TK-24 scopes MCP work to a design-ready v1 surface, not the final
+implementation. The MCP server exists to let external agent hosts discover
+project context, inspect ticket state, and perform the small set of mutations an
+agent needs during normal software-delivery workflows without scraping CLI text
+or re-learning the REST API.
+
+### Runtime And Transport
+
+The first implementation should stay inside the existing Go product instead of
+introducing a second runtime.
+
+- the server should be added as a Go subcommand such as `tk mcp serve`
+- the implementation should reuse the existing config resolution,
+  authentication, project routing, and `libticket.Service` contract instead of
+  reimplementing them in a wrapper process
+- v1 should use MCP stdio transport only
+- remote Streamable HTTP transport is deferred until there is a concrete
+  multi-client deployment need that justifies exposing MCP directly from
+  `tk server`
+
+This keeps the "single Go binary" shape intact, avoids Node.js packaging and
+version-skew problems, and lets the MCP layer share the same business rules as
+the CLI, TUI, and HTTP API.
+
+### Authentication And Project Resolution
+
+The MCP server should reuse the same runtime resolution model as `tk`:
+
+- server selection from `TICKET_URL`
+- bearer-token reuse from `TICKET_TOKEN` or
+  `$TICKET_HOME/credentials.json`
+- username/password login only when an operator explicitly chooses to start the
+  MCP server from fresh credentials
+- repo-local `.ticket/config.json` for current `project_id`
+- nearest git `origin` discovery when the process is started from a working tree
+
+For model predictability, MCP tools should not rely on hidden project fallback
+when the caller is making project-scoped reads or writes. The server may still
+use the normal Ticket resolution rules internally, but the tool contract should
+prefer explicit `project_ref` inputs and should expose how a project was
+resolved when inference is used.
+
+Design rules:
+
+- `list_tickets` must require `project_ref`, because the current API only lists
+  tickets through a project-scoped endpoint
+- `create_ticket` may accept omitted `project_ref` and follow the normal Ticket
+  resolution path, but the tool description should recommend explicit project
+  input unless the caller just resolved the current project intentionally
+- responses that depend on inferred project context should include a
+  `resolved_project` object and a `resolution_source` field such as
+  `explicit`, `repo_config`, `git_repository`, or `private_fallback`
+
+### V1 MCP Surface
+
+V1 should stay small and center on the workflows an agent actually needs:
+identify the right project, inspect tickets, narrow a backlog, update ticket
+content, add execution notes, and optionally claim work.
+
+#### Tools
+
+1. `resolve_current_project`
+   - Returns the effective project in the current runtime context plus the
+     source of that resolution.
+   - Use this before project-scoped work when the caller does not already know
+     the project.
+2. `list_projects`
+   - Lists projects visible to the authenticated caller with compact fields:
+     `project_id`, `prefix`, `title`, `visibility`, `status`, `git_repositories`
+     and current-project marker.
+3. `get_project`
+   - Returns one project's detail and workflow summary by id, prefix, or alias.
+4. `list_tickets`
+   - Requires `project_ref`.
+   - Supports `q`, `type`, `stage`, `state`, `status`, `assignee`,
+     `include_archived`, and `limit`.
+   - This replaces a separate `search_tickets` tool; search is just filtered
+     listing.
+5. `get_ticket`
+   - Returns one ticket by human key or ID with model-useful fields:
+     core metadata, parent/child counts, draft/complete/archived flags,
+     comments preview, and workflow status.
+6. `create_ticket`
+   - Creates task/bug/epic/chore/spike-style tickets with the existing Ticket
+     rules for parent, project, and initial lifecycle validation.
+7. `update_ticket`
+   - Updates content and assignment fields plus lifecycle through `status` or
+     `state`.
+   - Tool help must explain that `success` advances the workflow and that active
+     tickets still require an assignee.
+   - The tool should not expose arbitrary stage jumps that bypass current
+     workflow rules.
+8. `add_ticket_comment`
+   - Adds operator or agent notes without forcing full-ticket rewrites.
+9. `claim_ticket`
+   - Calls the existing claim/request flow so an agent can request its next
+     piece of work or claim a specific ticket intentionally.
+
+#### Resources
+
+- `ticket://project/{project_ref}/workflow`
+  - Returns stages, roles, and default guidance for the resolved project.
+- `ticket://ticket/{ticket_ref}/execution-packet`
+  - Returns the merged execution packet already exposed by the server so agents
+    can consume project, role, and phase guidance without reconstructing it.
+
+#### Prompts
+
+- `summarize_project_backlog`
+  - Guides a host to resolve a project, list candidate tickets, and summarize
+    the most relevant open work.
+- `prepare_ticket_for_development`
+  - Guides a host to inspect one ticket, compare it with workflow/project
+    guidance, and propose updates or comments that make it ready for
+    implementation.
+
+### Output Shape, Errors, And Pagination
+
+The MCP layer should optimize for model reasoning, not raw REST mirroring.
+
+- tool outputs should be compact, typed, and decision-ready rather than exposing
+  every API field
+- every mutation response should echo the stable identifiers and the fields most
+  likely to matter to the next tool call
+- ticket list responses should include a normalized summary row shape and the
+  project they belong to
+
+Errors should be translated into actionable messages, for example:
+
+- `Authentication required. Run tk login, set TICKET_TOKEN, or start the MCP server with explicit credentials.`
+- `Project CUS was not found or is not visible to the current user.`
+- `Ticket TK-42 cannot move to active without an assignee.`
+- `Ticket TK-7 has child tickets, so lifecycle changes must happen through descendants.`
+
+V1 should not invent cursor semantics that the existing backend does not have.
+
+- expose backend-native `limit` filters everywhere
+- expose `offset` only on MCP methods that sit on endpoints already supporting
+  `offset`
+- for `list_tickets`, which is currently limit-only, return `returned_count`,
+  `applied_limit`, and `may_have_more` instead of pretending there is a stable
+  cursor
+
+### Validation Strategy
+
+The implementation ticket that follows this design should prove usefulness at the
+MCP layer, not only protocol compliance.
+
+Required validation:
+
+1. focused unit tests for tool-schema validation, config/auth resolution,
+   project-resolution reporting, and error translation
+2. integration tests against both local and HTTP-backed `libticket.Service`
+   fixtures so the MCP layer does not drift from the shared Ticket contract
+3. MCP Inspector smoke coverage for registration, tool descriptions, success
+   paths, and common failure paths
+4. an `evals.xml` set with at least 10 multi-step agent tasks covering read,
+   filter, update, comment, claim, and error-recovery workflows
+5. at least one end-to-end workflow where a model resolves a project, finds a
+   ticket, reads the execution packet, updates the ticket, and leaves a comment
+
+### Deferred From V1
+
+The first release should stay intentionally narrow. Defer:
+
+- remote Streamable HTTP transport
+- OAuth-specific auth flows beyond existing Ticket credentials and bearer tokens
+- bulk ticket mutations
+- label, dependency, document, team, and workflow-admin tool families
+- websocket subscriptions and push notifications
+- server-initiated sampling flows
+- generalized "mirror the whole REST API as MCP tools" expansion
+
 ## Web Application
 
 The web application is embedded into the Go binary with `go:embed`.

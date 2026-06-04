@@ -311,6 +311,106 @@ func (c *Client) ListUsers(ctx context.Context) ([]store.User, error) {
 	return users, err
 }
 
+func (c *Client) GetMyDefaultProject(ctx context.Context) (store.Project, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Project{}, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return store.Project{}, err
+		}
+		project, err := store.GetUserDefaultProject(ctx, db, user.ID)
+		if err != nil {
+			return store.Project{}, err
+		}
+		role, ok, err := store.ProjectRoleForUser(ctx, db, project.ID, user.ID)
+		if err != nil {
+			return store.Project{}, err
+		}
+		if (!ok || role == "") && project.Visibility != store.ProjectVisibilityPublic {
+			return store.Project{}, store.ErrProjectNotFound
+		}
+		return project, nil
+	}
+	var project store.Project
+	err := c.doJSON(ctx, http.MethodGet, "/api/users/me/default-project", nil, &project)
+	if err == nil {
+		return project, nil
+	}
+	var statusErr *HTTPStatusError
+	if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusNotFound {
+		return store.Project{}, store.ErrProjectNotFound
+	}
+	return project, err
+}
+
+func (c *Client) SetMyDefaultProject(ctx context.Context, projectRef string) (store.Project, error) {
+	ref := strings.TrimSpace(projectRef)
+	if ref == "" {
+		return store.Project{}, errors.New("project reference is required")
+	}
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Project{}, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return store.Project{}, err
+		}
+		var project store.Project
+		switch strings.ToLower(ref) {
+		case "public":
+			project, err = store.GetProjectByAlias(ctx, db, "public", "")
+		case "private":
+			project, err = store.GetProjectByAlias(ctx, db, "private", user.ID)
+		default:
+			project, err = store.GetProject(ctx, db, ref)
+		}
+		if err != nil {
+			return store.Project{}, err
+		}
+		role, ok, err := store.ProjectRoleForUser(ctx, db, project.ID, user.ID)
+		if err != nil {
+			return store.Project{}, err
+		}
+		if (!ok || role == "") && project.Visibility != store.ProjectVisibilityPublic {
+			return store.Project{}, store.ErrUnauthorized
+		}
+		if err := store.SetUserDefaultProject(ctx, db, user.ID, project.ID); err != nil {
+			return store.Project{}, err
+		}
+		return project, nil
+	}
+	var project store.Project
+	err := c.doJSON(ctx, http.MethodPut, "/api/users/me/default-project", map[string]string{"project_ref": ref}, &project)
+	if err == nil {
+		return project, nil
+	}
+	var statusErr *HTTPStatusError
+	if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusNotFound {
+		return store.Project{}, store.ErrProjectNotFound
+	}
+	return project, err
+}
+
+func (c *Client) ClearMyDefaultProject(ctx context.Context) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return err
+		}
+		return store.ClearUserDefaultProject(ctx, db, user.ID)
+	}
+	return c.doJSON(ctx, http.MethodDelete, "/api/users/me/default-project", nil, nil)
+}
+
 func (c *Client) ListMyNotifications(ctx context.Context, status string, limit int) ([]store.UserNotification, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

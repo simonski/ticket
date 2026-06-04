@@ -51,7 +51,7 @@ tk bug "Login fails on Safari"
 tk epic "Authentication overhaul"
 
 # With full options
-tk new -t task -title "Fix signup" -d "Description here" -ac "Acceptance criteria" -p <project-id> -parent <epic-id>
+tk new -t task -title "Fix signup" -d "Description here" -ac "Acceptance criteria" -project_id <project-id> -parent <epic-id>
 
 # Create and specify priority/estimates
 tk new -title "Urgent fix" -priority 1 -estimate_effort 3
@@ -205,8 +205,8 @@ tk history <id>
 
 ```bash
 # Archive / restore
-tk archive -id <id>
-tk unarchive -id <id>
+tk archive -id <id> [-v]
+tk unarchive -id <id> [-v]
 
 # Close / reopen
 tk close -id <id>

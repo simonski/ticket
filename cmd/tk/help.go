@@ -130,8 +130,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk health TK-1",
 	},
 	"project": {
-		usage:   "tk project <create|list|get|use|set-draft|request-access|my-access-requests|access-requests|approve-access-request|reject-access-request|workflow|add-user|remove-user|add-team|remove-team>|<id> <update|enable|disable>",
-		details: []string{"Manages projects.", "Projects are addressed by prefix or numeric id.", "Select a project per command with `-project_id` or set `TICKET_PROJECT`; repo git-origin matching is used when no explicit project is provided.", "Project membership supports both users and teams.", "`set-draft` controls whether new tickets default to draft mode for the project.", "`request-access` submits an access request for a gated project that accepts new members.", "`my-access-requests` lets the current user review their own pending and decided membership requests.", "`access-requests`, `approve-access-request`, and `reject-access-request` let project admins review and decide pending membership requests, optionally with a decision note."},
+		usage:   "tk project <create|list|get|use|set-default|clear-default|set-draft|request-access|my-access-requests|access-requests|approve-access-request|reject-access-request|workflow|add-user|remove-user|add-team|remove-team>|<id> <update|enable|disable>",
+		details: []string{"Manages projects.", "Projects are addressed by prefix or numeric id.", "Select a project per command with `-project_id` or set `TICKET_PROJECT`; repo git-origin matching is used when no explicit project is provided.", "If neither is set, Ticket falls back to your saved server-side default project before the private-project alias.", "`tk project ls` marks the effective current project with `*` when it can be resolved explicitly, from the repository git remote, or from your saved default project.", "`tk project set-default <ref>` saves a per-user default project; `tk project clear-default` removes it.", "Project membership supports both users and teams.", "`set-draft` controls whether new tickets default to draft mode for the project.", "`request-access` submits an access request for a gated project that accepts new members.", "`my-access-requests` lets the current user review their own pending and decided membership requests.", "`access-requests`, `approve-access-request`, and `reject-access-request` let project admins review and decide pending membership requests, optionally with a decision note."},
 		example: "tk project CUS update -title \"Customer Portal\"",
 	},
 	"team": {
@@ -141,7 +141,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"list": {
 		usage:   "tk list|ls [-type <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-d] [-unicode] [-plain] [-count] [-expect_equals <n>] [-expect_notequals <n>]",
-		details: []string{"Lists tickets in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default closed and archived tickets are hidden; use `-a` to include closed tickets, `-d` to also include archived tickets. Combined flags like `-ad` are supported.", "`-count` prints only the number of matching tickets, and the expectation flags exit non-zero with the actual count when the comparison fails."},
+		details: []string{"Lists tickets in the active project with optional type, lifecycle, assignee, and limit filters.", "Output starts with the resolved current project, then lists tickets newest-first; parent epics bubble up with recent child activity.", "Nested ticket titles are indented by depth, and bug rows render the `bug` type in red when color output is enabled.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default closed and archived tickets are hidden; use `-a` to include closed tickets, `-d` to also include archived tickets. Combined flags like `-ad` are supported.", "`-count` prints only the number of matching tickets, and the expectation flags exit non-zero with the actual count when the comparison fails."},
 		example: "tk list -type bug -count -expect_equals 2",
 	},
 	"orphans": {
@@ -232,8 +232,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk complete TK-42",
 	},
 	"add": {
-		usage:   "tk add|create|new [-f <file>] [-commit] [-title <title>] [-t <type>] [-p <priority>] [-a <assignee>] [-d <description>] [-ac <criteria>] [-parent <id>] [-project <project>] [-estimate_effort <n>] [-estimate_complete <rfc3339>] [title words]",
-		details: []string{"Creates a ticket-like entity in the active project.", "Positional title words and `-title` are equivalent ways to set the title.", "`-f` reads multiple ticket entries from a file: headings `#`, `##`, `###` define ticket hierarchy (children attach to the nearest parent heading), description is the remaining text, `labels: a,b` sets labels, `type: bug` overrides type, and `id: TK-1` updates an existing ticket entry.", "Without `-commit`, `-f` prints the intended outcomes only. With `-commit`, entries are created/updated and the file is written back with `id:` values for newly created tickets.", "Defaults: `type=ticket`, `stage=design`, `state=idle`, `priority=1`, blank assignee, blank description, blank acceptance criteria, blank parent, current project, `estimate_effort=0`, blank `estimate_complete`."},
+		usage:   "tk add|create|new [-f <file>] [-commit] [-title <title>] [-t <type>] [-p <priority>] [-a <assignee>] [-d <description>] [-ac <criteria>] [-parent <id>] [-project <project>] [-project_id <project>] [-estimate_effort <n>] [-estimate_complete <rfc3339>] [title words]",
+		details: []string{"Creates a ticket-like entity in the active project.", "Positional title words and `-title` are equivalent ways to set the title.", "`-project` and `-project_id` are equivalent ways to target a specific project for this creation command; `-p` remains the priority flag.", "`-f` reads multiple ticket entries from a file: headings `#`, `##`, `###` define ticket hierarchy (children attach to the nearest parent heading), description is the remaining text, `labels: a,b` sets labels, `type: bug` overrides type, and `id: TK-1` updates an existing ticket entry.", "Without `-commit`, `-f` prints the intended outcomes only. With `-commit`, entries are created/updated and the file is written back with `id:` values for newly created tickets.", "Defaults: `type=ticket`, `stage=design`, `state=idle`, `priority=1`, blank assignee, blank description, blank acceptance criteria, blank parent, current project, `estimate_effort=0`, blank `estimate_complete`."},
 		example: "tk add \"Customers can reset their password.\"",
 	},
 	"comment": {
@@ -257,13 +257,13 @@ var helpIndex = map[string]commandHelp{
 		example: "tk open TK-1",
 	},
 	"archive": {
-		usage:   "tk archive [-id] <id>",
-		details: []string{"Archives a ticket.", "Archived tickets are hidden from default `tk ls` output."},
+		usage:   "tk archive [-id] <id> [-v]",
+		details: []string{"Archives a ticket.", "By default prints a brief success line; use `-v` for full ticket detail.", "Archived tickets are hidden from default `tk ls` output."},
 		example: "tk archive TK-1",
 	},
 	"unarchive": {
-		usage:   "tk unarchive [-id] <id>",
-		details: []string{"Unarchives a ticket so it appears in default `tk ls` output."},
+		usage:   "tk unarchive [-id] <id> [-v]",
+		details: []string{"Unarchives a ticket so it appears in default `tk ls` output.", "By default prints a brief success line; use `-v` for full ticket detail."},
 		example: "tk unarchive TK-1",
 	},
 	"ready": {
@@ -491,8 +491,12 @@ var helpIndex = map[string]commandHelp{
 func renderRootUsage() string {
 	var b strings.Builder
 	b.WriteString(renderBanner())
-	h := "\x1b[38;5;117m" // pastel blue
-	r := "\x1b[0m"
+	h := ""
+	r := ""
+	if !noColorOutput {
+		h = "\x1b[38;5;117m" // pastel blue
+		r = "\x1b[0m"
+	}
 	b.WriteString("\n" + h + "USAGE" + r + "\n")
 	b.WriteString("  tk <noun> <verb> [flags]\n")
 	b.WriteString("  Verbs: ls, new, get, update, rm (consistent across commands)\n\n")
@@ -621,6 +625,8 @@ var projectUsage = renderNamespaceUsage("PROJECT", "tk project <command> [flags]
 	{"new -title <name>", "Create a project"},
 	{"get <id>", "Show project details"},
 	{"use [<id>]", "Switch active project (or show current)"},
+	{"set-default [-project_id <id>] [<id>]", "Save your default project"},
+	{"clear-default", "Clear your saved default project"},
 	{"request-access [-project_id <id>]", "Request access to a project"},
 	{"my-access-requests", "List your project access requests"},
 	{"access-requests [-project_id <id>]", "List project access requests"},

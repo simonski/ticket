@@ -64,6 +64,11 @@ func renderBanner() string {
 	lines := bannerLines(selectBannerWord())
 	var b strings.Builder
 	for i, line := range lines {
+		if noColorOutput {
+			b.WriteString(line)
+			b.WriteByte('\n')
+			continue
+		}
 		color := bannerColors[i%len(bannerColors)]
 		b.WriteString(color)
 		b.WriteString(line)

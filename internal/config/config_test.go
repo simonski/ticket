@@ -12,6 +12,13 @@ func setupConfigTestHome(t *testing.T) string {
 	t.Helper()
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_USERNAME", "")
+	t.Setenv("TICKET_TOKEN", "")
+	t.Setenv("TICKET_PASSWORD", "")
+	t.Setenv("TICKET_PROJECT", "")
+	ClearLocationOverride()
+	t.Cleanup(ClearLocationOverride)
 	origDir, _ := os.Getwd()
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("Chdir(tempDir) error = %v", err)

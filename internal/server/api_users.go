@@ -72,7 +72,7 @@ func (r *router) registerUserHandlers() {
 	})
 
 	mux.HandleFunc("/api/users/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost && r.Method != http.MethodDelete && r.Method != http.MethodGet {
+		if r.Method != http.MethodPost && r.Method != http.MethodDelete && r.Method != http.MethodGet && r.Method != http.MethodPut {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
@@ -80,6 +80,51 @@ func (r *router) registerUserHandlers() {
 		trimmed := strings.TrimPrefix(r.URL.Path, "/api/users/")
 		parts := strings.Split(trimmed, "/")
 		if r.Method == http.MethodGet {
+			if len(parts) == 3 && parts[0] == "me" && parts[1] == "default-project" {
+				user, err := requireUser(db, r)
+				if err != nil {
+					writeAuthError(w, err)
+					return
+				}
+				project, role, err := resolveProjectPathForUser(r.Context(), db, user, parts[2], false)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				if !canReadProject(role) {
+					writeStoreError(w, store.ErrUnauthorized)
+					return
+				}
+				writeJSON(w, http.StatusOK, project)
+				return
+			}
+			if len(parts) == 2 && parts[0] == "me" && parts[1] == "default-project" {
+				user, err := requireUser(db, r)
+				if err != nil {
+					writeAuthError(w, err)
+					return
+				}
+				project, err := store.GetUserDefaultProject(r.Context(), db, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrProjectNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeStoreError(w, err)
+					return
+				}
+				role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				if !canReadProject(role) {
+					writeStoreError(w, store.ErrProjectNotFound)
+					return
+				}
+				writeJSON(w, http.StatusOK, project)
+				return
+			}
 			if len(parts) == 2 && parts[0] == "me" && parts[1] == "access-requests" {
 				user, err := requireUser(db, r)
 				if err != nil {
@@ -119,6 +164,43 @@ func (r *router) registerUserHandlers() {
 			return
 		}
 
+		if r.Method == http.MethodPut && len(parts) == 2 && parts[0] == "me" && parts[1] == "default-project" {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload struct {
+				ProjectRef string `json:"project_ref"`
+			}
+			decodeErr := json.NewDecoder(r.Body).Decode(&payload)
+			if decodeErr != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			project, role, err := resolveProjectPathForUser(r.Context(), db, user, payload.ProjectRef, false)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			if !canReadProject(role) {
+				writeStoreError(w, store.ErrUnauthorized)
+				return
+			}
+			setErr := store.SetUserDefaultProject(r.Context(), db, user.ID, project.ID)
+			if setErr != nil {
+				writeStoreError(w, setErr)
+				return
+			}
+			refreshed, err := store.GetUserDefaultProject(r.Context(), db, user.ID)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, refreshed)
+			return
+		}
+
 		if r.Method == http.MethodPost && len(parts) == 4 && parts[0] == "me" && parts[1] == "notifications" && parts[3] == "read" {
 			user, err := requireUser(db, r)
 			if err != nil {
@@ -136,6 +218,20 @@ func (r *router) registerUserHandlers() {
 				return
 			}
 			writeJSON(w, http.StatusOK, notification)
+			return
+		}
+
+		if r.Method == http.MethodDelete && len(parts) == 2 && parts[0] == "me" && parts[1] == "default-project" {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			if err := store.ClearUserDefaultProject(r.Context(), db, user.ID); err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 			return
 		}
 
