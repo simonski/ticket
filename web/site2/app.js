@@ -9,7 +9,6 @@
             passkeyStatus: "",
             passkeyStatusError: false,
             accountModalOpen: false,
-            accountModalSource: "profile",
             currentView: "tickets",
             viewScrollByPanel: {},
             scrollPersistenceReady: false,
@@ -2047,12 +2046,10 @@
             }
             els.accountModal.classList.toggle("open", Boolean(state.accountModalOpen));
             if (els.accountModalTitle) {
-                els.accountModalTitle.textContent = state.accountModalSource === "settings" ? "Account settings" : "Profile & security";
+                els.accountModalTitle.textContent = "Account settings";
             }
             if (els.accountModalSummary) {
-                els.accountModalSummary.textContent = isAdmin()
-                    ? "Manage your passkeys here. Admin application settings stay available from this dialog too."
-                    : "Manage your passkeys for website and CLI sign-in.";
+                els.accountModalSummary.textContent = "Manage your passkeys for website and CLI sign-in.";
             }
             if (els.accountOpenConfigButton) {
                 els.accountOpenConfigButton.classList.toggle("hidden", !isAdmin());
@@ -3734,8 +3731,7 @@
             }
         }
 
-        async function openAccountModal(source) {
-            state.accountModalSource = source || "profile";
+        async function openAccountModal() {
             state.accountModalOpen = true;
             setPasskeyStatus("", false);
             renderAccountModal();
@@ -6688,8 +6684,15 @@
             });
         }
         document.addEventListener("keydown", (event) => {
-            if (event.key === "Escape" && els.dialogOverlay && !els.dialogOverlay.classList.contains("hidden")) {
+            if (event.key !== "Escape") {
+                return;
+            }
+            if (els.dialogOverlay && !els.dialogOverlay.classList.contains("hidden")) {
                 closeDialog(false);
+            } else if (state.accountModalOpen) {
+                closeAccountModal();
+            } else if (els.ticketModal && els.ticketModal.classList.contains("open")) {
+                closeTicketModal();
             }
         });
         state.viewScrollByPanel = loadStoredViewScrollByPanel();

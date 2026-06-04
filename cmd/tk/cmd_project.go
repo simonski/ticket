@@ -183,7 +183,10 @@ func runProject(args []string) error {
 		if strings.TrimSpace(*title) == "" && fs.NArg() > 0 {
 			*title = strings.Join(fs.Args(), " ")
 		} else if fs.NArg() != 0 {
-			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-id <id>] [-wow text] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-description text] [-workflow id]")
+			return errors.New("usage: tk project create -title <title> -prefix <prefix>\n" +
+				"  [-id <id>] [-description text] [-workflow id]\n" +
+				"  [-wow text] [-dor text] [-dod text] [-ac text]\n" +
+				"  [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...]")
 		}
 		if strings.TrimSpace(*prefix) == "" {
 			return errors.New("project prefix is required")
@@ -548,7 +551,8 @@ func runProjectAddUser(svc libticket.Service, args []string) error {
 		return err
 	}
 	if *userID == "" || strings.TrimSpace(*projectID) == "" || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
-		return errors.New("usage: tk project add-user -user_id <id> -project_id <id|prefix|public|private> -role <observer|commenter|member|admin>")
+		return errors.New("usage: tk project add-user -user_id <id> -project_id <id|prefix|public|private>\n" +
+			"  -role <observer|commenter|member|admin>")
 	}
 	project, err := svc.GetProject(context.Background(), strings.TrimSpace(*projectID))
 	if err != nil {
@@ -603,7 +607,8 @@ func runProjectAddTeam(svc libticket.Service, args []string) error {
 		return err
 	}
 	if *teamID == 0 || strings.TrimSpace(*projectID) == "" || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
-		return errors.New("usage: tk project add-team -team_id <id> -project_id <id|prefix|public|private> -role <observer|commenter|member|admin>")
+		return errors.New("usage: tk project add-team -team_id <id> -project_id <id|prefix|public|private>\n" +
+			"  -role <observer|commenter|member|admin>")
 	}
 	project, err := svc.GetProject(context.Background(), strings.TrimSpace(*projectID))
 	if err != nil {

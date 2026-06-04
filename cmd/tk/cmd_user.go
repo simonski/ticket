@@ -288,7 +288,10 @@ func runCount(args []string) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: tk count [-project_id <id>] [-type <type>] [-stage <stage>] [-state <state>] [-status <status>] [-user <user>] [-search <text>] [-a] [-d] [-expect_equals <n>] [-expect_notequals <n>]")
+		return errors.New("usage: tk count\n" +
+			"  [-project_id <id>] [-type <type>] [-stage <stage>] [-state <state>] [-status <status>]\n" +
+			"  [-user <user>] [-search <text>] [-a] [-d]\n" +
+			"  [-expect_equals <n>] [-expect_notequals <n>]")
 	}
 	cfg, err := config.Load()
 	if err != nil {

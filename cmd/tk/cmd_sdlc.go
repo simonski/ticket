@@ -125,7 +125,8 @@ func runWorkflow(args []string) error {
 			return err
 		}
 		if *wfID == 0 || *name == "" {
-			return errors.New("usage: tk workflow add-stage -id <workflow_id> -name <stage> [-d <desc>] [-wow <wow>] [-dor <ready>] [-dod <done>] [-order <n>]")
+			return errors.New("usage: tk workflow add-stage -id <workflow_id> -name <stage>\n" +
+				"  [-d <desc>] [-wow <wow>] [-dor <ready>] [-dod <done>] [-order <n>]")
 		}
 		stageWoW := strings.TrimSpace(*wow)
 		if stageWoW == "" {
@@ -161,7 +162,8 @@ func runWorkflow(args []string) error {
 			return err
 		}
 		if *stageID == 0 || *name == "" {
-			return errors.New("usage: tk workflow stage-update -stage-id <id> -name <name> [-d <desc>] [-ac <criteria>] [-wow <wow>] [-dor <ready>] [-dod <done>]")
+			return errors.New("usage: tk workflow stage-update -stage-id <id> -name <name>\n" +
+				"  [-d <desc>] [-ac <criteria>] [-wow <wow>] [-dor <ready>] [-dod <done>]")
 		}
 		stageWoW := strings.TrimSpace(*wow)
 		if stageWoW == "" {
@@ -419,7 +421,8 @@ func runWorkflow(args []string) error {
 			return err
 		}
 		if *workflowID == 0 || *roleID == 0 || strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
-			return errors.New("usage: tk workflow role-update -workflow_id <id> -role_id <id> -title <title> [-description <text>] [-ac <text>]")
+			return errors.New("usage: tk workflow role-update -workflow_id <id> -role_id <id> -title <title>\n" +
+				"  [-description <text>] [-ac <text>]")
 		}
 		if _, err := workflowScopedRole(svc, *workflowID, *roleID); err != nil {
 			return err

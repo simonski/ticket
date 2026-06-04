@@ -371,7 +371,9 @@ func runRole(args []string) error {
 			return err
 		}
 		if strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
-			return errors.New("usage: tk role create -title <title> [-id <id>] [-description <text>] [-dor <text>] [-dod <text>] [-ac <text>] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...]")
+			return errors.New("usage: tk role create -title <title> [-id <id>] [-description <text>]\n" +
+				"  [-dor <text>] [-dod <text>] [-ac <text>]\n" +
+				"  [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...]")
 		}
 		dorMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(args[1:], "-dor"), containsFlag(args[1:], "-dor-map"))
 		if err != nil {
@@ -421,7 +423,9 @@ func runRole(args []string) error {
 			return err
 		}
 		if *id == 0 || fs.NArg() != 0 {
-			return errors.New("usage: tk role update -id <id> [-title <title>] [-description <text>] [-dor <text>] [-dod <text>] [-ac <text>] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...]")
+			return errors.New("usage: tk role update -id <id> [-title <title>] [-description <text>]\n" +
+				"  [-dor <text>] [-dod <text>] [-ac <text>]\n" +
+				"  [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...]")
 		}
 		roles, err := svc.ListRoles(context.Background())
 		if err != nil {

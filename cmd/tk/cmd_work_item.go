@@ -42,7 +42,8 @@ func runWorkItem(args []string) error {
 		}
 		ticketID, rest, err := resolveIDFlag(*id, fs.Args())
 		if err != nil || len(rest) != 0 || ticketID == "" {
-			return errors.New("usage: tk work-item list [-id] <ticket-id> [-status <active|success|fail|stopped>] [-assignee_type <human|agent>] [-limit <n>]")
+			return errors.New("usage: tk work-item list [-id] <ticket-id>\n" +
+				"  [-status <active|success|fail|stopped>] [-assignee_type <human|agent>] [-limit <n>]")
 		}
 		items, err := api.ListWorkItems(ctx, ticketID, *status, *assigneeType, *limit)
 		if err != nil {
@@ -137,7 +138,9 @@ func runWorkItem(args []string) error {
 			return err
 		}
 		if len(fs.Args()) != 0 {
-			return errors.New("usage: tk work-item queue [-project_id <id>] [-id <ticket-id>] [-dry-run] [-explain] [-strategy <priority|order|aging>] [-preview]")
+			return errors.New("usage: tk work-item queue\n" +
+				"  [-project_id <id>] [-id <ticket-id>]\n" +
+				"  [-dry-run] [-explain] [-strategy <priority|order|aging>] [-preview]")
 		}
 		resolvedProjectID, err := resolveWorkItemProjectID(ctx, cfg, svc, *projectID)
 		if err != nil {
@@ -225,7 +228,8 @@ func runWorkItem(args []string) error {
 			return err
 		}
 		if len(fs.Args()) != 0 || strings.TrimSpace(*title) == "" {
-			return errors.New("usage: tk work-item create [-project_id <id>] -title <title> [-type <task|bug|story|chore>] [-description <text>] [-start]")
+			return errors.New("usage: tk work-item create -title <title>\n" +
+				"  [-project_id <id>] [-type <task|bug|story|chore>] [-description <text>] [-start]")
 		}
 		resolvedProjectID, err := resolveWorkItemProjectID(ctx, cfg, svc, *projectID)
 		if err != nil {

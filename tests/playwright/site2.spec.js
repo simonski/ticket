@@ -1171,7 +1171,7 @@ test("passkey login signs in from the website without posting a password", async
   expect(requests.find((request) => request.path === "/api/auth/passkey/poll")).toBeTruthy();
 });
 
-test("profile/settings modal manages website passkeys", async ({ page }) => {
+test("account settings modal manages website passkeys", async ({ page }) => {
   await installSite2Mock(page, {
     passkeys: [
       { credential_id: "cred-old", name: "Laptop", created_at: "now", updated_at: "now", last_used_at: "" },
@@ -1204,14 +1204,9 @@ test("profile/settings modal manages website passkeys", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
 
   await page.locator("#account-menu-button").click();
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Account settings" }).click();
   await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Open app settings" })).toBeVisible();
-  await page.getByRole("button", { name: "Close" }).click();
-
-  await page.locator("#account-menu-button").click();
-  await page.getByRole("button", { name: "Profile" }).click();
-  await expect(page.getByRole("heading", { name: "Profile & security" })).toBeVisible();
   await expect(page.locator("#account-passkey-list")).toContainText("Laptop");
 
   await page.locator("[data-passkey-id='cred-old'] [data-passkey-action='rename']").click();
@@ -1459,7 +1454,7 @@ test.beforeEach(async ({ page }) => {
   });
   await page.locator("#login-username").fill("admin");
   await page.locator("#login-password").fill("secret");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
 });
 

@@ -639,7 +639,10 @@ func runList(args []string) error {
 		taskType = &v
 	}
 	if *limit < 0 {
-		return errors.New("usage: tk list|ls [<type>] [-type <type>] [-t <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-d] [-label <name>] [-count] [-expect_equals <n>] [-expect_notequals <n>]")
+		return errors.New("usage: tk list|ls [<type>]\n" +
+			"  [-type <type>] [-t <type>] [-stage <stage>] [-state <state>] [-status <stage/state>]\n" +
+			"  [-u <user>] [-n <limit>] [-a] [-d] [-label <name>]\n" +
+			"  [-count] [-expect_equals <n>] [-expect_notequals <n>]")
 	}
 	hasExpectEquals := strings.TrimSpace(*expectEquals) != ""
 	hasExpectNotEquals := strings.TrimSpace(*expectNotEquals) != ""
@@ -1033,7 +1036,9 @@ func runSearch(args []string) error {
 		return err
 	}
 	if query == "" {
-		return errors.New("usage: tk search <free form query> [-status <status>] [-title <text>] [-description <text>] [-priority <n>] [-owner <user>]")
+		return errors.New("usage: tk search <free form query>\n" +
+			"  [-status <status>] [-title <text>] [-description <text>]\n" +
+			"  [-priority <n>] [-owner <user>]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1901,7 +1906,9 @@ func runHistory(args []string) error {
 	}
 
 	if len(remaining) != 1 {
-		return errors.New("usage: tk history [-n <limit>] [-offset <offset>] [-user_id ID] [-agent_id ID] [-team_id ID] [<id>]")
+		return errors.New("usage: tk history [<id>]\n" +
+			"  [-n <limit>] [-offset <offset>]\n" +
+			"  [-user_id ID] [-agent_id ID] [-team_id ID]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -2089,10 +2096,14 @@ func runIntervene(args []string) error {
 	}
 	ticketID, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: tk intervene [-id] <id> -outcome <retry-role|retry-stage|split-work|cancel> [-m comment]")
+		return errors.New("usage: tk intervene [-id] <id>\n" +
+			"  -outcome <retry-role|retry-stage|split-work|cancel>\n" +
+			"  [-m comment]")
 	}
 	if strings.TrimSpace(*outcome) == "" {
-		return errors.New("usage: tk intervene [-id] <id> -outcome <retry-role|retry-stage|split-work|cancel> [-m comment]")
+		return errors.New("usage: tk intervene [-id] <id>\n" +
+			"  -outcome <retry-role|retry-stage|split-work|cancel>\n" +
+			"  [-m comment]")
 	}
 
 	_, svc, _, err := resolveCurrentProjectClient()
@@ -2774,7 +2785,13 @@ func runTicketCreate(args []string) error {
 	}
 
 	if title == "" {
-		return errors.New("usage: tk add|create|new [-f filename] [-commit] [-title title] [-t type] [-p priority] [-a assignee] [-d description] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-parent id] [-project project] [-project_id project] [-estimate_effort n] [-estimate_complete rfc3339] [title words | @filename]")
+		return errors.New("usage: tk add|create|new [title words | @filename]\n" +
+			"  [-f filename] [-commit]\n" +
+			"  [-title title] [-t type] [-p priority] [-a assignee]\n" +
+			"  [-d description] [-dor text] [-dod text] [-ac text]\n" +
+			"  [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...]\n" +
+			"  [-parent id] [-project project] [-project_id project]\n" +
+			"  [-estimate_effort n] [-estimate_complete rfc3339]")
 	}
 	dorMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(normalizedArgs, "-dor"), containsFlag(normalizedArgs, "-dor-map"))
 	if err != nil {
