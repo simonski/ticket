@@ -1857,6 +1857,119 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 	}
 }
 
+func TestRunLoginWithPasskey(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	var pollCalls int32
+	baseURL := ""
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/auth/passkey/login/start":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"verification_url":"` + baseURL + `/passkey?code=abc123","code":"abc123","expires_at":"2099-01-01T00:00:00Z"}`))
+		case "/api/auth/passkey/poll":
+			call := atomic.AddInt32(&pollCalls, 1)
+			w.Header().Set("Content-Type", "application/json")
+			if call == 1 {
+				w.WriteHeader(http.StatusAccepted)
+				_, _ = w.Write([]byte(`{"status":"pending"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"status":"complete","token":"passkey-token","user":{"username":"alice","role":"user"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	baseURL = server.URL
+	setTestLocation(t, server.URL)
+	t.Setenv("TICKET_URL", server.URL)
+
+	oldOpener := passkeyBrowserOpener
+	oldInterval := passkeyPollInterval
+	passkeyBrowserOpener = func(target string) error {
+		if target != server.URL+"/passkey?code=abc123" {
+			t.Fatalf("browser target = %q", target)
+		}
+		return nil
+	}
+	passkeyPollInterval = 0
+	t.Cleanup(func() {
+		passkeyBrowserOpener = oldOpener
+		passkeyPollInterval = oldInterval
+	})
+
+	output := captureStdout(t, func() {
+		if err := runLogin([]string{"--passkey", "-username", "alice"}); err != nil {
+			t.Fatalf("runLogin(--passkey) error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "logged in as alice") {
+		t.Fatalf("runLogin(--passkey) output = %q", output)
+	}
+	creds, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatalf("LoadCredentials() error = %v", err)
+	}
+	remoteCreds, ok := creds.Remote(server.URL)
+	if !ok || remoteCreds.Token != "passkey-token" {
+		t.Fatalf("stored remote credentials = %#v", remoteCreds)
+	}
+}
+
+func TestRunUserPasskeyEnroll(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	baseURL := ""
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/auth/passkey/register/start":
+			if r.Header.Get("Authorization") != "Bearer stored-token" {
+				t.Fatalf("register start auth header = %q", r.Header.Get("Authorization"))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"verification_url":"` + baseURL + `/passkey?code=enroll1","code":"enroll1","expires_at":"2099-01-01T00:00:00Z"}`))
+		case "/api/auth/passkey/poll":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"complete"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	baseURL = server.URL
+	setTestLocation(t, server.URL)
+	t.Setenv("TICKET_URL", server.URL)
+	if err := config.SaveRemoteCredentials(server.URL, "alice", "stored-token"); err != nil {
+		t.Fatalf("SaveRemoteCredentials() error = %v", err)
+	}
+
+	oldOpener := passkeyBrowserOpener
+	oldInterval := passkeyPollInterval
+	passkeyBrowserOpener = func(target string) error {
+		if target != server.URL+"/passkey?code=enroll1" {
+			t.Fatalf("browser target = %q", target)
+		}
+		return nil
+	}
+	passkeyPollInterval = 0
+	t.Cleanup(func() {
+		passkeyBrowserOpener = oldOpener
+		passkeyPollInterval = oldInterval
+	})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"user", "passkey", "enroll", "-name", "Laptop"}); err != nil {
+			t.Fatalf("run(user passkey enroll) error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "passkey enrolled") {
+		t.Fatalf("user passkey enroll output = %q", output)
+	}
+}
+
 func TestRunRegisterPendingApprovalPrintsHelpfulMessage(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
@@ -1982,12 +2095,6 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"server_version":"9.8.7","user":{"username":"alice","role":"user","default_project_id":7}}`))
-		case "/api/users/me/default-project":
-			if r.Header.Get("Authorization") != "Bearer env-token" {
-				t.Fatalf("default-project auth header = %q", r.Header.Get("Authorization"))
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"project_id":7,"prefix":"DEF","title":"Default Project"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -2012,14 +2119,12 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		"9.8.7",
 		"CLIENT_VERSION",
 		strings.TrimSpace(embeddedVersion),
-		"DEFAULT_PROJECT",
-		"DEF",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
 		}
 	}
-	for _, unwanted := range []string{"TICKET_HOME", "config_file", "authenticated", "connection", "password         : (using TICKET_TOKEN)"} {
+	for _, unwanted := range []string{"TICKET_HOME", "config_file", "authenticated", "connection", "password         : (using TICKET_TOKEN)", "DEFAULT_PROJECT"} {
 		if strings.Contains(output, unwanted) {
 			t.Fatalf("runStatus(remote) should not show %q:\n%s", unwanted, output)
 		}
@@ -4406,14 +4511,9 @@ func TestRunGetAcceptsPositionalID(t *testing.T) {
 		t.Fatalf("expected positional id to work, got %v", err)
 	}
 
-	// no id now falls back to the most recent ticket in the current project
-	output := captureStdout(t, func() {
-		if err := run([]string{"get"}); err != nil {
-			t.Fatalf("expected empty get to resolve most recent ticket, got %v", err)
-		}
-	})
-	if !strings.Contains(output, "id/type") || !strings.Contains(output, taskID+"/task") || !strings.Contains(output, "title") || !strings.Contains(output, "Positional ID Get") {
-		t.Fatalf("get output missing most recent ticket:\n%s", output)
+	// no id should return a usage error
+	if err := run([]string{"get"}); err == nil {
+		t.Fatal("expected error when no id provided, got nil")
 	}
 }
 
@@ -6047,8 +6147,8 @@ func TestRunProjectSetDefaultAffectsFallbackResolution(t *testing.T) {
 			t.Fatalf("status error = %v", err)
 		}
 	})
-	if !strings.Contains(statusOutput, "DEFAULT_PROJECT") || !strings.Contains(statusOutput, "DEF") {
-		t.Fatalf("status output missing default project:\n%s", statusOutput)
+	if strings.Contains(statusOutput, "DEFAULT_PROJECT") {
+		t.Fatalf("status output should not show DEFAULT_PROJECT:\n%s", statusOutput)
 	}
 
 	ticketID := createLocalTask(t, []string{"create", "-title", "Uses saved default"})

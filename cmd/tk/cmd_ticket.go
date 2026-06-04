@@ -900,18 +900,9 @@ func runGet(args []string) error {
 	}
 	ticketRef := strings.TrimSpace(*id)
 	if ticketRef == "" {
-		project, projectErr := requireCurrentProject(cfg, svc)
-		if projectErr != nil {
-			return projectErr
-		}
-		latest, latestErr := mostRecentTicket(svc, project.ID, "")
-		if latestErr != nil {
-			return latestErr
-		}
-		ticketRef = latest.ID
-	} else {
-		ticketRef = normalizeBareTicketRef(cfg, svc, ticketRef)
+		return errors.New("usage: " + usage)
 	}
+	ticketRef = normalizeBareTicketRef(cfg, svc, ticketRef)
 	ticket, err := svc.GetTicket(context.Background(), ticketRef)
 	if err != nil {
 		return err
