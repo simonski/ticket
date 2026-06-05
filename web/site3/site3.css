@@ -31,28 +31,28 @@
             color-scheme: dark;
             --background: hsl(240 10% 3.9%);
             --foreground: hsl(0 0% 98%);
-            --card: hsl(240 10% 3.9%);
+            --card: hsl(240 6% 10%);
             --card-foreground: hsl(0 0% 98%);
             --primary: hsl(0 0% 98%);
             --primary-foreground: hsl(240 5.9% 10%);
-            --secondary: hsl(240 3.7% 15.9%);
-            --secondary-foreground: hsl(0 0% 98%);
-            --muted: hsl(240 3.7% 15.9%);
+            --secondary: hsl(240 4% 18%);
+            --secondary-foreground: hsl(0 0% 90%);
+            --muted: hsl(240 4% 18%);
             --muted-foreground: hsl(240 5% 64.9%);
-            --accent: hsl(240 3.7% 15.9%);
+            --accent: hsl(240 4% 22%);
             --accent-foreground: hsl(0 0% 98%);
-            --destructive: hsl(0 62.8% 30.6%);
+            --destructive: hsl(0 62.8% 45%);
             --destructive-foreground: hsl(0 0% 98%);
-            --border: hsl(240 3.7% 15.9%);
-            --input: hsl(240 3.7% 15.9%);
+            --border: hsl(240 4% 22%);
+            --input: hsl(240 4% 15%);
             --ring: hsl(240 4.9% 83.9%);
             --sidebar: hsl(240 5.9% 10%);
             --sidebar-foreground: hsl(240 4.8% 95.9%);
-            --success: hsl(142 76% 36%);
+            --success: hsl(142 60% 40%);
             --success-foreground: hsl(0 0% 98%);
             --warning: hsl(38 92% 50%);
             --warning-foreground: hsl(0 0% 98%);
-            --shadow: 0 1px 3px hsl(0 0% 0% / 0.3), 0 1px 2px hsl(0 0% 0% / 0.2);
+            --shadow: 0 1px 3px hsl(0 0% 0% / 0.4), 0 1px 2px hsl(0 0% 0% / 0.3);
         }
 
         * {
@@ -127,6 +127,47 @@
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        .dark button {
+            background: hsl(240 4% 28%);
+            border-color: hsl(240 4% 40%);
+            color: hsl(0 0% 92%);
+        }
+
+        .dark button:hover {
+            background: hsl(240 4% 35%);
+            border-color: hsl(240 4% 48%);
+            color: hsl(0 0% 100%);
+        }
+
+        .dark .btn-primary {
+            background: hsl(0 0% 92%);
+            color: hsl(240 5.9% 10%);
+            border-color: hsl(0 0% 92%);
+        }
+
+        .dark .btn-primary:hover {
+            background: hsl(0 0% 100%);
+            border-color: hsl(0 0% 100%);
+            color: hsl(240 5.9% 10%);
+        }
+
+        .dark .btn-danger {
+            background: hsl(var(--destructive) / 0.2);
+            color: hsl(var(--destructive));
+            border-color: hsl(var(--destructive) / 0.35);
+        }
+
+        .dark .btn-ghost {
+            background: transparent;
+            border-color: hsl(240 4% 30%);
+            color: hsl(0 0% 80%);
+        }
+
+        .dark .btn-ghost:hover {
+            background: hsl(240 4% 22%);
+            color: hsl(0 0% 98%);
         }
 
         .btn-primary {
@@ -272,6 +313,10 @@
             transition: opacity 0.4s ease;
         }
 
+        .dark .login-screen {
+            background: hsl(240 10% 2%);
+        }
+
         .login-card,
         .modal-card {
             width: min(100%, 400px);
@@ -280,6 +325,13 @@
             box-shadow: var(--shadow);
             border-radius: calc(var(--radius) + 2px);
             padding: 24px;
+        }
+
+        .dark .login-card,
+        .dark .modal-card {
+            background: hsl(240 5% 16%);
+            border-color: hsl(240 4% 38%);
+            box-shadow: 0 8px 40px hsl(0 0% 0% / 0.6), 0 0 0 1px hsl(240 4% 38%);
         }
 
         .login-card h1 {
@@ -334,6 +386,21 @@
             outline: none;
             border-color: hsl(var(--ring));
             box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+        }
+
+        .dark .field input,
+        .dark .field textarea,
+        .dark .field select {
+            background: hsl(240 5% 12%);
+            border-color: hsl(240 4% 28%);
+            color: hsl(0 0% 95%);
+        }
+
+        .dark .field input:focus,
+        .dark .field textarea:focus,
+        .dark .field select:focus {
+            border-color: hsl(var(--ring));
+            background: hsl(240 5% 14%);
         }
 
         .field textarea {
@@ -525,7 +592,12 @@
             gap: 8px;
         }
 
-        /* Dark mode toggle */
+        /* Dark mode toggle — icons controlled by CSS so they're correct before JS runs */
+        #theme-sun { display: none; }
+        #theme-moon { display: block; }
+        html.dark #theme-sun { display: block; }
+        html.dark #theme-moon { display: none; }
+
         .theme-toggle-button {
             width: 32px;
             height: 32px;

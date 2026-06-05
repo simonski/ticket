@@ -1187,19 +1187,10 @@
     <script src="/app.js"></script>
     <script>
     (function() {
-        function updateThemeIcons() {
-            var dark = document.documentElement.classList.contains('dark');
-            var sun = document.getElementById('theme-sun');
-            var moon = document.getElementById('theme-moon');
-            if (sun) sun.style.display = dark ? 'block' : 'none';
-            if (moon) moon.style.display = dark ? 'none' : 'block';
-        }
         function toggleDarkMode() {
             var isDark = document.documentElement.classList.toggle('dark');
             localStorage.setItem('ticket-theme', isDark ? 'dark' : 'light');
-            updateThemeIcons();
         }
-        updateThemeIcons();
         var btn = document.getElementById('theme-toggle');
         if (btn) btn.addEventListener('click', toggleDarkMode);
     })();
