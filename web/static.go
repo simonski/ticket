@@ -10,15 +10,16 @@ import (
 const (
 	DefaultSite = "default"
 	Site2       = "site2"
+	Site3       = "site3"
 )
 
 // Static contains the embedded frontend assets served by the HTTP server.
 //
-//go:embed static/* site2/*
+//go:embed static/* site2/* site3/*
 var Static embed.FS
 
 func AvailableSites() []string {
-	return []string{DefaultSite, Site2}
+	return []string{DefaultSite, Site2, Site3}
 }
 
 func SiteFS(name string) (fs.FS, error) {
@@ -27,6 +28,8 @@ func SiteFS(name string) (fs.FS, error) {
 		return fs.Sub(Static, "static")
 	case Site2:
 		return fs.Sub(Static, "site2")
+	case Site3:
+		return fs.Sub(Static, "site3")
 	default:
 		return nil, fmt.Errorf("unknown embedded site %q", name)
 	}

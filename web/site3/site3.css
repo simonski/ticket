@@ -1,0 +1,1948 @@
+        :root {
+            color-scheme: light;
+            --background: hsl(0 0% 100%);
+            --foreground: hsl(240 10% 3.9%);
+            --card: hsl(0 0% 100%);
+            --card-foreground: hsl(240 10% 3.9%);
+            --primary: hsl(240 5.9% 10%);
+            --primary-foreground: hsl(0 0% 98%);
+            --secondary: hsl(240 4.8% 95.9%);
+            --secondary-foreground: hsl(240 5.9% 10%);
+            --muted: hsl(240 4.8% 95.9%);
+            --muted-foreground: hsl(240 3.8% 46.1%);
+            --accent: hsl(240 4.8% 95.9%);
+            --accent-foreground: hsl(240 5.9% 10%);
+            --destructive: hsl(0 84.2% 60.2%);
+            --destructive-foreground: hsl(0 0% 98%);
+            --border: hsl(240 5.9% 90%);
+            --input: hsl(240 5.9% 90%);
+            --ring: hsl(240 5.9% 64.9%);
+            --radius: 0.5rem;
+            --sidebar: hsl(240 5.9% 10%);
+            --sidebar-foreground: hsl(240 4.8% 95.9%);
+            --success: hsl(142 76% 36%);
+            --success-foreground: hsl(0 0% 98%);
+            --warning: hsl(38 92% 50%);
+            --warning-foreground: hsl(0 0% 2%);
+            --shadow: 0 1px 3px hsl(240 5.9% 10% / 0.08), 0 1px 2px hsl(240 5.9% 10% / 0.04);
+        }
+
+        .dark {
+            color-scheme: dark;
+            --background: hsl(240 10% 3.9%);
+            --foreground: hsl(0 0% 98%);
+            --card: hsl(240 10% 3.9%);
+            --card-foreground: hsl(0 0% 98%);
+            --primary: hsl(0 0% 98%);
+            --primary-foreground: hsl(240 5.9% 10%);
+            --secondary: hsl(240 3.7% 15.9%);
+            --secondary-foreground: hsl(0 0% 98%);
+            --muted: hsl(240 3.7% 15.9%);
+            --muted-foreground: hsl(240 5% 64.9%);
+            --accent: hsl(240 3.7% 15.9%);
+            --accent-foreground: hsl(0 0% 98%);
+            --destructive: hsl(0 62.8% 30.6%);
+            --destructive-foreground: hsl(0 0% 98%);
+            --border: hsl(240 3.7% 15.9%);
+            --input: hsl(240 3.7% 15.9%);
+            --ring: hsl(240 4.9% 83.9%);
+            --sidebar: hsl(240 5.9% 10%);
+            --sidebar-foreground: hsl(240 4.8% 95.9%);
+            --success: hsl(142 76% 36%);
+            --success-foreground: hsl(0 0% 98%);
+            --warning: hsl(38 92% 50%);
+            --warning-foreground: hsl(0 0% 98%);
+            --shadow: 0 1px 3px hsl(0 0% 0% / 0.3), 0 1px 2px hsl(0 0% 0% / 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+            min-height: 100vh;
+        }
+
+        button,
+        input,
+        select,
+        textarea {
+            font: inherit;
+            color: hsl(var(--foreground));
+            background: hsl(var(--background));
+        }
+
+        /* ── Landing canvas ─────────────────────────────────────────── */
+
+        html.landing-active body {
+            overflow: hidden;
+            background: #000;
+        }
+
+        html.landing-active #login-screen {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #landing-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 100;
+            display: block;
+            background: #000;
+        }
+
+        html:not(.landing-active) #landing-canvas {
+            display: none;
+        }
+
+        /* ── Buttons ────────────────────────────────────────────────── */
+
+        button {
+            border: 0;
+            border-radius: var(--radius);
+            padding: 8px 14px;
+            cursor: pointer;
+            background: hsl(var(--secondary));
+            color: hsl(var(--secondary-foreground));
+            border: 1px solid hsl(var(--border));
+            transition: background 0.15s ease, opacity 0.15s ease;
+            font-size: 0.875rem;
+            font-weight: 500;
+            line-height: 1.25rem;
+        }
+
+        button:hover {
+            background: hsl(var(--accent));
+            color: hsl(var(--accent-foreground));
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            border-color: hsl(var(--primary));
+        }
+
+        .btn-primary:hover {
+            background: hsl(var(--primary) / 0.9);
+            color: hsl(var(--primary-foreground));
+        }
+
+        .btn-danger {
+            background: hsl(var(--destructive) / 0.1);
+            color: hsl(var(--destructive));
+            border-color: hsl(var(--destructive) / 0.2);
+        }
+
+        .btn-danger:hover {
+            background: hsl(var(--destructive) / 0.2);
+            color: hsl(var(--destructive));
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border-color: hsl(var(--border));
+        }
+
+        .btn-ghost:hover {
+            background: hsl(var(--accent));
+            color: hsl(var(--accent-foreground));
+        }
+
+        .icon-button-danger {
+            min-width: 36px;
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+        }
+
+        .icon-trash {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.85;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* ── Utilities ──────────────────────────────────────────────── */
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 9999px;
+            padding: 2px 8px;
+            background: hsl(var(--secondary));
+            color: hsl(var(--secondary-foreground));
+            font-size: 11px;
+            font-weight: 500;
+            border: 1px solid hsl(var(--border));
+        }
+
+        .select-shell {
+            position: relative;
+            min-width: 180px;
+        }
+
+        .select-shell::after {
+            content: "▾";
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: hsl(var(--muted-foreground));
+            pointer-events: none;
+            font-size: 12px;
+        }
+
+        .select-shell select {
+            appearance: none;
+            width: 100%;
+            border: 1px solid hsl(var(--input));
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+            border-radius: var(--radius);
+            padding: 8px 32px 8px 12px;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        /* ── Version overlay ────────────────────────────────────────── */
+
+        .version-overlay {
+            position: fixed;
+            right: 0.7rem;
+            bottom: 0.55rem;
+            z-index: 35;
+            background: hsl(var(--sidebar));
+            color: hsl(var(--sidebar-foreground) / 0.6);
+            border: 1px solid hsl(var(--sidebar-foreground) / 0.1);
+            border-radius: 9999px;
+            padding: 0.2rem 0.55rem;
+            font-size: 0.72rem;
+            letter-spacing: 0.02em;
+            pointer-events: none;
+        }
+
+        /* ── Login screen ───────────────────────────────────────────── */
+
+        .screen {
+            min-height: 100vh;
+        }
+
+        .login-screen {
+            display: grid;
+            place-items: center;
+            padding: 32px;
+            background: hsl(var(--background));
+            transition: opacity 0.4s ease;
+        }
+
+        .login-card,
+        .modal-card {
+            width: min(100%, 400px);
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            box-shadow: var(--shadow);
+            border-radius: calc(var(--radius) + 2px);
+            padding: 24px;
+        }
+
+        .login-card h1 {
+            margin: 0 0 24px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            text-align: center;
+            color: hsl(var(--foreground));
+        }
+
+        .subtitle {
+            margin: 0 0 20px;
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+        }
+
+        /* ── Form primitives ────────────────────────────────────────── */
+
+        .stack {
+            display: grid;
+            gap: 12px;
+        }
+
+        .field {
+            display: grid;
+            gap: 4px;
+        }
+
+        .field label {
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: hsl(var(--foreground));
+        }
+
+        .field input,
+        .field textarea,
+        .field select {
+            width: 100%;
+            border: 1px solid hsl(var(--input));
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+            border-radius: var(--radius);
+            padding: 8px 12px;
+            font-size: 0.875rem;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .field input:focus,
+        .field textarea:focus,
+        .field select:focus {
+            outline: none;
+            border-color: hsl(var(--ring));
+            box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+        }
+
+        .field textarea {
+            min-height: 108px;
+            resize: vertical;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .row > * {
+            flex: 1 1 180px;
+        }
+
+        /* ── App layout ─────────────────────────────────────────────── */
+
+        .app-layout {
+            min-height: 100vh;
+            display: grid;
+            grid-template-rows: 56px minmax(0, 1fr);
+        }
+
+        .shell {
+            display: grid;
+            grid-template-columns: 210px minmax(0, 1fr);
+            min-height: 0;
+        }
+
+        /* ── Sidebar ────────────────────────────────────────────────── */
+
+        .sidebar {
+            padding: 12px 8px;
+            background: hsl(var(--sidebar));
+            color: hsl(var(--sidebar-foreground));
+            display: grid;
+            grid-template-rows: auto auto 1fr auto;
+            gap: 6px;
+            position: sticky;
+            top: 56px;
+            height: calc(100vh - 56px);
+            overflow-y: auto;
+            align-self: start;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px 8px;
+        }
+
+        .brand-mark {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            background: hsl(var(--sidebar-foreground));
+        }
+
+        .nav {
+            display: grid;
+            gap: 2px;
+        }
+
+        .nav button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-align: left;
+            justify-content: flex-start;
+            border-radius: var(--radius);
+            padding: 6px 8px;
+            background: transparent;
+            border: 1px solid transparent;
+            color: hsl(var(--sidebar-foreground) / 0.6);
+            font-size: 0.875rem;
+            cursor: grab;
+            box-shadow: none;
+            transition: background 0.1s ease, color 0.1s ease;
+        }
+
+        .nav button:hover {
+            background: hsl(var(--sidebar-foreground) / 0.08);
+            color: hsl(var(--sidebar-foreground));
+        }
+
+        .nav button.dragging {
+            opacity: 0.55;
+        }
+
+        .nav-icon {
+            width: 20px;
+            height: 20px;
+            display: inline-grid;
+            place-items: center;
+            border-radius: calc(var(--radius) - 2px);
+            background: hsl(var(--sidebar-foreground) / 0.1);
+            flex: 0 0 auto;
+        }
+
+        .nav-icon svg {
+            width: 13px;
+            height: 13px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .nav button.active {
+            background: hsl(var(--sidebar-foreground));
+            color: hsl(var(--sidebar));
+            border-color: transparent;
+        }
+
+        .nav button.active .nav-icon {
+            background: hsl(var(--sidebar) / 0.2);
+        }
+
+        /* ── Main area ──────────────────────────────────────────────── */
+
+        .main {
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+            background: hsl(var(--background));
+        }
+
+        /* ── Topbar ─────────────────────────────────────────────────── */
+
+        .topbar {
+            padding: 0 16px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: hsl(var(--sidebar));
+            color: hsl(var(--sidebar-foreground));
+            border-bottom: 1px solid hsl(var(--sidebar-foreground) / 0.08);
+            height: 56px;
+        }
+
+        .topbar-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .project-menu-button {
+            min-width: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 6px 10px;
+            background: hsl(var(--sidebar-foreground) / 0.08);
+            border-color: hsl(var(--sidebar-foreground) / 0.12);
+            color: hsl(var(--sidebar-foreground));
+            font-size: 0.875rem;
+            border-radius: var(--radius);
+        }
+
+        .project-menu-button:hover {
+            background: hsl(var(--sidebar-foreground) / 0.14);
+            color: hsl(var(--sidebar-foreground));
+        }
+
+        .project-menu-button::after {
+            content: "▾";
+            color: hsl(var(--sidebar-foreground) / 0.5);
+            font-size: 11px;
+        }
+
+        .project-dropdown {
+            left: 0;
+            right: auto;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Dark mode toggle */
+        .theme-toggle-button {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius);
+            background: transparent;
+            border-color: hsl(var(--sidebar-foreground) / 0.12);
+            color: hsl(var(--sidebar-foreground) / 0.6);
+        }
+
+        .theme-toggle-button:hover {
+            background: hsl(var(--sidebar-foreground) / 0.1);
+            color: hsl(var(--sidebar-foreground));
+        }
+
+        .theme-toggle-button svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .avatar-button {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: inline-grid;
+            place-items: center;
+            border-radius: 9999px;
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            border-color: transparent;
+        }
+
+        .avatar-button:hover {
+            background: hsl(var(--primary) / 0.85);
+            color: hsl(var(--primary-foreground));
+        }
+
+        /* Override avatar in topbar context to use sidebar colors */
+        .topbar .avatar-button {
+            background: hsl(var(--sidebar-foreground));
+            color: hsl(var(--sidebar));
+        }
+
+        .topbar .avatar-button:hover {
+            background: hsl(var(--sidebar-foreground) / 0.88);
+            color: hsl(var(--sidebar));
+        }
+
+        .account-menu {
+            position: relative;
+        }
+
+        .account-dropdown {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 6px);
+            min-width: 192px;
+            padding: 6px;
+            display: none;
+            gap: 2px;
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: calc(var(--radius) + 2px);
+            box-shadow: 0 4px 12px hsl(var(--foreground) / 0.1), 0 2px 4px hsl(var(--foreground) / 0.06);
+            z-index: 50;
+        }
+
+        .account-dropdown.open {
+            display: grid;
+        }
+
+        .account-name {
+            padding: 6px 8px 8px;
+            color: hsl(var(--muted-foreground));
+            font-size: 0.75rem;
+            border-bottom: 1px solid hsl(var(--border));
+            margin-bottom: 2px;
+        }
+
+        .menu-item {
+            width: 100%;
+            display: flex;
+            justify-content: flex-start;
+            border-radius: calc(var(--radius) - 2px);
+            padding: 7px 8px;
+            background: transparent;
+            border-color: transparent;
+            color: hsl(var(--foreground));
+            font-size: 0.875rem;
+            box-shadow: none;
+        }
+
+        .menu-item:hover {
+            background: hsl(var(--accent));
+            color: hsl(var(--accent-foreground));
+        }
+
+        /* ── Notices ────────────────────────────────────────────────── */
+
+        .notice {
+            margin: 0 18px;
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--muted));
+            color: hsl(var(--muted-foreground));
+            min-height: 44px;
+            display: none;
+            align-items: center;
+            font-size: 0.875rem;
+        }
+
+        .notice.visible {
+            display: flex;
+        }
+
+        .notice.error {
+            color: hsl(var(--destructive));
+            border-color: hsl(var(--destructive) / 0.3);
+            background: hsl(var(--destructive) / 0.08);
+        }
+
+        /* ── Content + views ────────────────────────────────────────── */
+
+        .content {
+            padding: 16px 18px 20px;
+            min-width: 0;
+            height: 100%;
+            overflow: auto;
+        }
+
+        .view {
+            display: none;
+            min-width: 0;
+        }
+
+        .view.active {
+            display: grid;
+            gap: 14px;
+        }
+
+        #view-documents {
+            position: relative;
+        }
+
+        .document-drop-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 8;
+            pointer-events: none;
+            opacity: 0;
+            display: grid;
+            place-items: center;
+            transition: opacity 0.18s ease;
+        }
+
+        .document-drop-overlay-card {
+            width: min(560px, calc(100% - 28px));
+            border: 2px dashed hsl(var(--primary) / 0.4);
+            border-radius: calc(var(--radius) + 4px);
+            background: hsl(var(--card));
+            box-shadow: 0 8px 24px hsl(var(--foreground) / 0.1);
+            text-align: center;
+            padding: 28px 18px;
+            transform: scale(0.985);
+            transition: transform 0.18s ease;
+        }
+
+        .document-drop-overlay-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        #view-documents.document-drop-active .document-drop-overlay {
+            opacity: 1;
+        }
+
+        #view-documents.document-drop-active .document-drop-overlay-card {
+            transform: scale(1);
+            animation: documentDropPulse 0.9s ease-in-out infinite;
+        }
+
+        #view-documents.document-drop-uploading .document-drop-overlay {
+            opacity: 1;
+        }
+
+        #view-documents.document-drop-uploading .document-drop-overlay-card {
+            border-color: hsl(var(--primary) / 0.7);
+            animation: documentDropUploading 0.9s linear infinite;
+        }
+
+        #view-documents.document-drop-success .document-drop-overlay {
+            opacity: 1;
+        }
+
+        #view-documents.document-drop-success .document-drop-overlay-card {
+            border-color: hsl(var(--success) / 0.7);
+            background: hsl(var(--success) / 0.06);
+            animation: documentDropSuccess 0.45s ease-out 1;
+        }
+
+        @keyframes documentDropPulse {
+            0% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.2), 0 8px 24px hsl(var(--foreground) / 0.1); }
+            70% { box-shadow: 0 0 0 8px hsl(var(--primary) / 0), 0 8px 24px hsl(var(--foreground) / 0.1); }
+            100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0), 0 8px 24px hsl(var(--foreground) / 0.1); }
+        }
+
+        @keyframes documentDropUploading {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.012); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes documentDropSuccess {
+            0% { transform: scale(0.98); opacity: 0.6; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* ── Split layout ───────────────────────────────────────────── */
+
+        .split {
+            grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+            align-items: start;
+        }
+
+        /* ── Panels ─────────────────────────────────────────────────── */
+
+        .panel {
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: calc(var(--radius) + 2px);
+            box-shadow: var(--shadow);
+            padding: 16px;
+            min-width: 0;
+        }
+
+        .panel h2,
+        .panel h3 {
+            margin: 0 0 6px;
+            line-height: 1.1;
+            color: hsl(var(--card-foreground));
+        }
+
+        .panel-head {
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .panel-head-spaced {
+            margin-top: 24px;
+        }
+
+        .panel-head-tight {
+            margin: 0;
+        }
+
+        .panel-padded {
+            padding: 16px;
+        }
+
+        .tag-row-spaced {
+            margin-top: 10px;
+        }
+
+        .meta-top {
+            margin-top: 8px;
+        }
+
+        .field-align-end {
+            align-self: end;
+        }
+
+        /* ── Entity/ticket cards ────────────────────────────────────── */
+
+        .entity-list,
+        .mini-list {
+            display: grid;
+            gap: 6px;
+            max-height: 70vh;
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        .entity-card,
+        .ticket-card,
+        .stage-card {
+            border-radius: var(--radius);
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--card));
+            padding: 10px 12px;
+            color: hsl(var(--card-foreground));
+        }
+
+        .entity-card {
+            cursor: pointer;
+            transition: border-color 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        .entity-card:hover {
+            border-color: hsl(var(--ring));
+        }
+
+        .entity-card.active {
+            border-color: hsl(var(--primary) / 0.4);
+            box-shadow: 0 0 0 1px hsl(var(--primary) / 0.15);
+        }
+
+        .entity-card h4,
+        .ticket-card h4,
+        .stage-card h4 {
+            margin: 0 0 4px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .entity-card p,
+        .ticket-card p,
+        .stage-card p,
+        .meta {
+            margin: 0;
+            color: hsl(var(--muted-foreground));
+            font-size: 0.8125rem;
+            line-height: 1.45;
+        }
+
+        .config-settings-list .entity-card {
+            border-left: 3px solid hsl(var(--primary) / 0.3);
+        }
+
+        .config-key {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.8125rem;
+            letter-spacing: -0.01em;
+        }
+
+        .config-value-preview {
+            color: hsl(var(--muted-foreground));
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .config-setting-value {
+            min-height: 220px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            line-height: 1.45;
+        }
+
+        .entity-actions,
+        .editor-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 14px;
+        }
+
+        /* ── Kanban board ───────────────────────────────────────────── */
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(220px, 1fr));
+            gap: 10px;
+            align-items: start;
+            overflow-x: auto;
+            padding-bottom: 6px;
+        }
+
+        .lane {
+            display: grid;
+            gap: 8px;
+            align-content: start;
+            min-height: 300px;
+            border-radius: var(--radius);
+            padding: 10px;
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--secondary));
+        }
+
+        .lane.drag-target,
+        .stage-card.drag-target,
+        .role-chip.drag-target,
+        .workflow-role-card.drag-target {
+            border-color: hsl(var(--ring));
+            box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+        }
+
+        .lane-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .ticket-card {
+            display: grid;
+            gap: 6px;
+            cursor: grab;
+            background: hsl(var(--card));
+        }
+
+        .ticket-card small,
+        .stage-card small {
+            color: hsl(var(--muted-foreground));
+        }
+
+        .tag-row,
+        .role-chip-row {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .role-chip {
+            border-radius: 9999px;
+            padding: 4px 8px;
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--card));
+            color: hsl(var(--card-foreground));
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: grab;
+            font-size: 0.8125rem;
+        }
+
+        /* ── Workflow board ─────────────────────────────────────────── */
+
+        .workflow-board-head {
+            margin-bottom: 12px;
+        }
+
+        .workflow-compact-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .workflow-compact-select {
+            min-width: 220px;
+        }
+
+        .workflow-view-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 3px;
+            border-radius: 9999px;
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--secondary));
+        }
+
+        .workflow-view-button {
+            min-width: 68px;
+            padding: 6px 12px;
+            border-radius: 9999px;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+            color: hsl(var(--muted-foreground));
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-color: transparent;
+        }
+
+        .workflow-view-button.active,
+        .workflow-view-button[aria-pressed="true"] {
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+        }
+
+        .workflow-view-button:hover {
+            background: hsl(var(--accent));
+            color: hsl(var(--accent-foreground));
+        }
+
+        .workflow-view-button.active:hover,
+        .workflow-view-button[aria-pressed="true"]:hover {
+            background: hsl(var(--primary) / 0.9);
+            color: hsl(var(--primary-foreground));
+        }
+
+        .workflow-list-hidden {
+            display: none;
+        }
+
+        .workflow-settings-panel {
+            margin-bottom: 16px;
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            background: hsl(var(--secondary) / 0.5);
+            padding: 12px;
+        }
+
+        .workflow-settings-panel summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            width: 100%;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: hsl(var(--foreground));
+        }
+
+        .workflow-settings-panel summary > * {
+            pointer-events: none;
+        }
+
+        .workflow-settings-panel summary::after {
+            content: "▸";
+            color: hsl(var(--muted-foreground));
+            font-size: 13px;
+            transition: transform 0.15s ease;
+        }
+
+        .workflow-settings-panel summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .workflow-settings-panel[open] summary::after {
+            transform: rotate(90deg);
+        }
+
+        .workflow-settings-panel[open] summary {
+            margin-bottom: 12px;
+        }
+
+        .workflow-settings-grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        .workflow-choice-field {
+            padding: 0;
+            margin: 0;
+            border: 0;
+            min-width: 0;
+        }
+
+        .workflow-choice-field legend {
+            padding: 0;
+            margin-bottom: 6px;
+            font-size: 0.75rem;
+            color: hsl(var(--muted-foreground));
+            font-weight: 500;
+        }
+
+        .workflow-choice-group {
+            display: grid;
+            gap: 8px;
+        }
+
+        .workflow-choice-card {
+            display: grid;
+            gap: 3px;
+            padding: 10px 12px;
+            border-radius: var(--radius);
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--card));
+            cursor: pointer;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .workflow-choice-card:hover {
+            border-color: hsl(var(--ring));
+        }
+
+        .workflow-choice-card input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .workflow-choice-title {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: hsl(var(--foreground));
+        }
+
+        .workflow-choice-copy {
+            font-size: 0.75rem;
+            line-height: 1.45;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .workflow-choice-card:has(input:checked) {
+            border-color: hsl(var(--primary) / 0.4);
+            background: hsl(var(--primary) / 0.04);
+            box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.12);
+        }
+
+        .workflow-choice-card:has(input:focus-visible) {
+            outline: 2px solid hsl(var(--ring));
+            outline-offset: 2px;
+        }
+
+        .workflow-stage-footer {
+            display: grid;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .workflow-stage-footer .entity-actions {
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .workflow-stage-board {
+            display: flex;
+            gap: 12px;
+            align-items: start;
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+
+        .workflow-stage-board.graph-mode {
+            display: grid;
+            gap: 16px;
+            overflow: visible;
+        }
+
+        .stage-grid {
+            display: grid;
+            grid-auto-flow: column;
+            grid-auto-columns: minmax(280px, 320px);
+            gap: 10px;
+            align-items: start;
+            flex: 0 0 auto;
+        }
+
+        .stage-grid.stage-grid-graph {
+            display: block;
+            min-width: 0;
+            width: 100%;
+            flex: 1 1 auto;
+        }
+
+        .stage-card {
+            display: grid;
+            gap: 12px;
+            cursor: grab;
+            min-height: 100%;
+            background: hsl(var(--card));
+            box-shadow: var(--shadow);
+        }
+
+        .workflow-stage-lane {
+            width: 320px;
+            min-height: 420px;
+            align-content: start;
+            flex: 0 0 auto;
+        }
+
+        .workflow-stage-board.graph-mode .stage-create-card {
+            width: min(100%, 360px);
+            min-height: 0;
+        }
+
+        .workflow-graph-viewport {
+            position: relative;
+            overflow: auto;
+            min-height: 540px;
+            border-radius: var(--radius);
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--secondary));
+            cursor: grab;
+            touch-action: none;
+        }
+
+        .workflow-graph-viewport.is-panning {
+            cursor: grabbing;
+        }
+
+        .workflow-graph-frame {
+            display: block;
+            min-width: 100%;
+            min-height: 100%;
+            padding: 28px;
+            box-sizing: border-box;
+        }
+
+        .workflow-graph-surface {
+            position: relative;
+            margin: 0 auto;
+            background-image:
+                linear-gradient(hsl(var(--border) / 0.6) 1px, transparent 1px),
+                linear-gradient(90deg, hsl(var(--border) / 0.6) 1px, transparent 1px);
+            background-size: 40px 40px, 40px 40px;
+            border-radius: var(--radius);
+        }
+
+        .workflow-graph-links {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+            pointer-events: none;
+        }
+
+        .workflow-graph-edge {
+            fill: none;
+            stroke: hsl(var(--primary) / 0.7);
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .workflow-graph-edge-both {
+            stroke: hsl(var(--primary));
+        }
+
+        .workflow-graph-node {
+            position: absolute;
+            width: 184px;
+        }
+
+        .workflow-graph-node-button {
+            width: 100%;
+            min-height: 58px;
+            padding: 12px 16px;
+            border-radius: 9999px;
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--card));
+            color: hsl(var(--card-foreground));
+            text-align: center;
+            box-shadow: var(--shadow);
+            cursor: pointer;
+            transition: border-color 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        .workflow-graph-node-button:hover {
+            border-color: hsl(var(--ring));
+            box-shadow: 0 4px 12px hsl(var(--foreground) / 0.1);
+        }
+
+        .workflow-graph-node-title {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stage-card-top,
+        .stage-create-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .stage-card-heading {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .stage-card-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .stage-card-move-button {
+            min-width: 32px;
+            padding: 6px 10px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .workflow-stage-title-wrap {
+            min-width: 0;
+        }
+
+        .stage-card-title-button {
+            width: 100%;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+            text-align: left;
+            color: hsl(var(--foreground));
+            border-color: transparent;
+        }
+
+        .stage-card-title-button:hover {
+            background: transparent;
+            color: hsl(var(--foreground));
+        }
+
+        .stage-card-order {
+            width: 28px;
+            height: 28px;
+            border-radius: var(--radius);
+            display: grid;
+            place-items: center;
+            background: hsl(var(--secondary));
+            color: hsl(var(--secondary-foreground));
+            font-size: 11px;
+            font-weight: 700;
+            flex: 0 0 auto;
+            border: 1px solid hsl(var(--border));
+        }
+
+        .stage-card-title {
+            width: 100%;
+            margin: 0;
+            font-size: 1.125rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .stage-card-title-button:focus-visible {
+            outline: none;
+        }
+
+        .stage-card-title-button:focus-visible .stage-card-title {
+            box-shadow: inset 0 -2px 0 hsl(var(--primary) / 0.5);
+        }
+
+        .stage-card-summary-grid {
+            display: grid;
+            gap: 8px;
+        }
+
+        .stage-card-panel {
+            border-radius: var(--radius);
+            padding: 10px;
+            background: hsl(var(--secondary));
+            border: 1px solid hsl(var(--border));
+        }
+
+        .stage-card-panel span {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .stage-card-panel strong {
+            display: block;
+            font-size: 0.8125rem;
+            line-height: 1.45;
+            color: hsl(var(--foreground));
+        }
+
+        .stage-card-dropzone {
+            min-height: 120px;
+            padding: 8px;
+            border-radius: var(--radius);
+            background: hsl(var(--secondary) / 0.5);
+            border: 1px dashed hsl(var(--border));
+        }
+
+        .workflow-role-list {
+            display: grid;
+            gap: 8px;
+            align-content: start;
+        }
+
+        .workflow-role-card {
+            position: relative;
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--card));
+        }
+
+        .workflow-role-card strong {
+            font-size: 0.875rem;
+        }
+
+        .workflow-role-card[data-role-description]:not([data-role-description=""])::after {
+            content: attr(data-role-description);
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 10px);
+            transform: translate(-50%, 6px);
+            width: max-content;
+            max-width: min(240px, calc(100vw - 48px));
+            padding: 8px 12px;
+            border-radius: var(--radius);
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            font-size: 0.75rem;
+            line-height: 1.45;
+            white-space: normal;
+            text-align: left;
+            box-shadow: 0 8px 20px hsl(var(--foreground) / 0.15);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            z-index: 6;
+            transition: opacity 0.18s ease 0.4s, transform 0.18s ease 0.4s, visibility 0s linear 0.4s;
+        }
+
+        .workflow-role-card[data-role-description]:not([data-role-description=""])::before {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 4px);
+            transform: translateX(-50%);
+            border-width: 6px 6px 0 6px;
+            border-style: solid;
+            border-color: hsl(var(--primary)) transparent transparent transparent;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            z-index: 6;
+            transition: opacity 0.18s ease 0.4s, visibility 0s linear 0.4s;
+        }
+
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):hover::after,
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):hover::before,
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):focus-within::after,
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):focus-within::before {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):hover::after,
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):focus-within::after {
+            transform: translate(-50%, 0);
+        }
+
+        .workflow-role-empty {
+            min-height: 96px;
+            display: grid;
+            place-items: center;
+            padding: 12px;
+        }
+
+        .stage-card-add-role {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: end;
+        }
+
+        .stage-card-add-role .select-shell {
+            min-width: 0;
+        }
+
+        .stage-card-section {
+            border-top: 1px solid hsl(var(--border));
+            padding-top: 10px;
+        }
+
+        .stage-card-section summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            gap: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: hsl(var(--foreground));
+        }
+
+        .stage-card-section summary > * {
+            pointer-events: none;
+        }
+
+        .stage-card-section-title {
+            flex: 1 1 auto;
+        }
+
+        .stage-card-section summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .stage-card-section summary::after {
+            content: "▸";
+            color: hsl(var(--muted-foreground));
+            font-size: 13px;
+            transition: transform 0.15s ease;
+        }
+
+        .stage-card-section[open] summary::after {
+            transform: rotate(90deg);
+        }
+
+        .stage-card-section[open] summary {
+            margin-bottom: 10px;
+        }
+
+        .stage-card-section-body {
+            display: grid;
+            gap: 10px;
+        }
+
+        .stage-card-actions {
+            margin-top: 12px;
+        }
+
+        .stage-create-card {
+            cursor: default;
+            border-style: dashed;
+            border-width: 1px;
+            background: hsl(var(--secondary) / 0.5);
+            width: 320px;
+            min-height: 420px;
+            flex: 0 0 auto;
+        }
+
+        .stage-create-card .field textarea {
+            min-height: 74px;
+        }
+
+        .stage-card .field textarea {
+            min-height: 84px;
+        }
+
+        .stage-card.is-dragging {
+            opacity: 0.55;
+        }
+
+        .stage-create-card.drag-target {
+            border-color: hsl(var(--ring));
+            box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+        }
+
+        .empty {
+            padding: 18px;
+            border-radius: var(--radius);
+            border: 1px dashed hsl(var(--border));
+            color: hsl(var(--muted-foreground));
+            text-align: center;
+            font-size: 0.875rem;
+        }
+
+        /* ── Modals ─────────────────────────────────────────────────── */
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: hsl(var(--foreground) / 0.5);
+            backdrop-filter: blur(4px);
+            display: none;
+            place-items: center;
+            padding: 24px;
+            z-index: 10;
+        }
+
+        .modal.open {
+            display: grid;
+        }
+
+        .modal-card {
+            width: min(100%, 960px);
+            max-height: calc(100vh - 48px);
+            overflow: auto;
+        }
+
+        .modal-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.7fr);
+            gap: 18px;
+        }
+
+        .account-modal-card {
+            width: min(100%, 760px);
+        }
+
+        .account-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .account-modal-header h2,
+        .account-panel h3 {
+            margin: 0;
+        }
+
+        .account-modal-body {
+            display: grid;
+            gap: 18px;
+        }
+
+        .account-panel {
+            display: grid;
+            gap: 12px;
+        }
+
+        .account-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .account-passkey-create {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 12px;
+            align-items: end;
+        }
+
+        .account-passkey-create button {
+            white-space: nowrap;
+        }
+
+        /* ── History / comments lists ───────────────────────────────── */
+
+        .history-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .history-item {
+            padding: 8px 12px;
+            border-radius: var(--radius);
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--card));
+            color: hsl(var(--card-foreground));
+            font-size: 0.875rem;
+        }
+
+        .history-item .meta {
+            color: hsl(var(--muted-foreground));
+        }
+
+        .history-item-agent {
+            border-color: hsl(var(--primary) / 0.2);
+            background: hsl(var(--secondary));
+            box-shadow: inset 3px 0 0 hsl(var(--primary) / 0.4);
+        }
+
+        .history-item-system {
+            background: hsl(var(--secondary) / 0.6);
+            border-color: hsl(var(--border));
+        }
+
+        /* ── Dialog ─────────────────────────────────────────────────── */
+
+        .dialog-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 70;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background: hsl(var(--foreground) / 0.4);
+            backdrop-filter: blur(6px);
+        }
+
+        .dialog {
+            width: min(400px, 100%);
+            border-radius: calc(var(--radius) + 2px);
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--card));
+            box-shadow: 0 16px 48px hsl(var(--foreground) / 0.15);
+            padding: 20px;
+        }
+
+        .dialog-message {
+            margin: 0 0 16px;
+            color: hsl(var(--card-foreground));
+            line-height: 1.5;
+            font-size: 0.9375rem;
+        }
+
+        .dialog-input-wrap {
+            margin-bottom: 16px;
+        }
+
+        .dialog-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* ── Goal chat ──────────────────────────────────────────────── */
+
+        .goal-chat-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            border: 1px solid hsl(var(--border));
+            border-radius: 9999px;
+            padding: 3px 10px;
+            background: hsl(var(--card));
+            color: hsl(var(--muted-foreground));
+            font-size: 0.75rem;
+        }
+
+        .goal-chat-status.processing {
+            color: hsl(var(--success));
+            border-color: hsl(var(--success) / 0.3);
+            background: hsl(var(--success) / 0.08);
+        }
+
+        .goal-chat-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 9999px;
+            background: hsl(var(--muted-foreground) / 0.5);
+        }
+
+        .goal-chat-status.processing .goal-chat-status-dot {
+            background: hsl(var(--success));
+            animation: goal-chat-pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes goal-chat-pulse {
+            0% { transform: scale(0.9); opacity: 0.55; }
+            50% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(0.9); opacity: 0.55; }
+        }
+
+        .goal-chat-log {
+            padding: 4px 2px;
+        }
+
+        .goal-chat-log .history-item {
+            max-width: 88%;
+            width: fit-content;
+        }
+
+        .goal-chat-log .history-item-user {
+            justify-self: end;
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            border-color: hsl(var(--primary));
+        }
+
+        .goal-chat-log .history-item-user .meta {
+            color: hsl(var(--primary-foreground) / 0.7);
+        }
+
+        .goal-chat-log .history-item-agent,
+        .goal-chat-log .history-item-system {
+            justify-self: start;
+        }
+
+        .goal-chat-log .history-item-latest-agent {
+            position: relative;
+            padding-left: 22px;
+        }
+
+        .goal-chat-log .history-item-latest-agent .agent-live-dot {
+            position: absolute;
+            top: 9px;
+            left: 8px;
+            width: 8px;
+            height: 8px;
+            border-radius: 9999px;
+            background: hsl(var(--destructive));
+        }
+
+        .goal-chat-log .history-item-latest-agent.agent-active .agent-live-dot {
+            background: hsl(var(--success));
+            animation: goal-chat-jitter 0.22s linear infinite;
+        }
+
+        .goal-chat-log .history-item-latest-agent.agent-stopped .agent-live-dot {
+            background: hsl(var(--destructive));
+            animation: none;
+        }
+
+        @keyframes goal-chat-jitter {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(0.6px, -0.4px); }
+            50% { transform: translate(-0.7px, 0.5px); }
+            75% { transform: translate(0.5px, 0.7px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        .agent-harness-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(220px, 1fr));
+            gap: 10px;
+        }
+
+        .agent-harness-divider {
+            height: 1px;
+            margin: 14px 0;
+            background: hsl(var(--border));
+        }
+
+        .goal-decomposition-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            background: hsl(var(--card));
+            padding: 7px 10px;
+        }
+
+        .goal-decomposition-item .meta {
+            flex: 1;
+        }
+
+        .goal-decomposition-controls {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        /* ── Responsive ─────────────────────────────────────────────── */
+
+        @media (max-width: 1180px) {
+            .shell,
+            .split,
+            .modal-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: static;
+                height: auto;
+            }
+
+            .workflow-stage-board {
+                flex-direction: column;
+                overflow-x: visible;
+            }
+
+            .workflow-stage-board.graph-mode {
+                grid-template-columns: 1fr;
+            }
+
+            .workflow-graph-viewport {
+                min-height: 640px;
+            }
+
+            .workflow-compact-controls {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .workflow-stage-lane,
+            .stage-create-card {
+                width: 100%;
+            }
+
+            .board {
+                grid-template-columns: repeat(2, minmax(240px, 1fr));
+            }
+        }
+
+        @media (max-width: 720px) {
+            .content,
+            .topbar {
+                padding-left: 14px;
+                padding-right: 14px;
+            }
+
+            .agent-harness-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stage-grid {
+                grid-auto-flow: row;
+                grid-auto-columns: unset;
+                width: 100%;
+            }
+
+            .stage-grid.stage-grid-graph {
+                width: 100%;
+            }
+
+            .workflow-compact-select {
+                min-width: 0;
+                flex: 1 1 220px;
+            }
+
+            .workflow-view-toggle {
+                order: 3;
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .workflow-view-button {
+                flex: 1 1 0;
+            }
+
+            .notice {
+                margin-left: 14px;
+                margin-right: 14px;
+            }
+
+            .board {
+                grid-template-columns: 1fr;
+            }
+        }
