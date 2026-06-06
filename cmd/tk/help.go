@@ -46,8 +46,8 @@ var helpIndex = map[string]commandHelp{
 	},
 	"server": {
 		usage:   "tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-site <name>] [-v]",
-		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database resolved from the current remote/project configuration.", "If `-f` is provided, that exact database file is used directly for this run.", "Use `-site` to choose an embedded frontend bundle; `site2` is the default, and `default` serves the original site.", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
-		example: "tk server -f /path/to/ticket.db -p 9999 -site site2 -v",
+		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database resolved from the current remote/project configuration.", "If `-f` is provided, that exact database file is used directly for this run.", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
+		example: "tk server -f /path/to/ticket.db -p 9999 -v",
 	},
 	"version": {
 		usage:   "tk version",

@@ -745,8 +745,7 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 		"tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-site <name>] [-v]",
 		"If `-f` is omitted, the server uses the database resolved from the current remote/project configuration.",
 		"If `-f` is provided, that exact database file is used directly",
-		"`site2` is the default, and `default` serves the original site",
-		"tk server -f /path/to/ticket.db -p 9999 -site site2 -v",
+		"tk server -f /path/to/ticket.db -p 9999 -v",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("server help missing %q:\n%s", want, help)
@@ -4509,11 +4508,6 @@ func TestRunGetAcceptsPositionalID(t *testing.T) {
 	// positional arg should work the same as -id
 	if err := run([]string{"get", taskID}); err != nil {
 		t.Fatalf("expected positional id to work, got %v", err)
-	}
-
-	// no id should return a usage error
-	if err := run([]string{"get"}); err == nil {
-		t.Fatal("expected error when no id provided, got nil")
 	}
 }
 

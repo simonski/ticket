@@ -331,6 +331,22 @@
             };
         }
 
+        function listUsers() {
+            return get("/api/users");
+        }
+
+        function getTeamMembers(teamID) {
+            return get("/api/teams/" + encodeURIComponent(teamID) + "/users");
+        }
+
+        function addTeamMember(teamID, userID, role, jobTitle) {
+            return post("/api/teams/" + encodeURIComponent(teamID) + "/users", { user_id: userID, role: role, job_title: jobTitle || "" });
+        }
+
+        function removeTeamMember(teamID, userID) {
+            return del("/api/teams/" + encodeURIComponent(teamID) + "/users/" + encodeURIComponent(userID));
+        }
+
         return {
             setToken: setToken,
             getToken: getToken,
@@ -365,6 +381,10 @@
             setProjectAccessRequestStatus: setProjectAccessRequestStatus,
             setRegistrationPolicy: setRegistrationPolicy,
             fetchDocumentFile: fetchDocumentFile,
+            listUsers: listUsers,
+            getTeamMembers: getTeamMembers,
+            addTeamMember: addTeamMember,
+            removeTeamMember: removeTeamMember,
         };
     }
 

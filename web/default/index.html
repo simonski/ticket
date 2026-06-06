@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ticket</title>
+    <link rel="stylesheet" href="/site.css">
+    <script>
+    (function () {
+        var s = localStorage.getItem('tk-theme');
+        if (s === 'dark' || (!s && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+        document.documentElement.classList.add('landing-active');
+        document.addEventListener('DOMContentLoaded', function () {
+            function toggle() {
+                var d = document.documentElement.classList.toggle('dark');
+                localStorage.setItem('tk-theme', d ? 'dark' : 'light');
+            }
+            ['theme-toggle', 'login-theme-toggle'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) el.addEventListener('click', toggle);
+            });
+        });
+    }());
+    </script>
+</head>
+<body>
+
+<canvas id="landing-canvas"></canvas>
+
+<!-- ── Auth ──────────────────────────────────────────────────────── -->
+<div id="login-screen" class="login-screen">
+    <button id="login-theme-toggle" class="icon-btn login-theme-btn" type="button" aria-label="Toggle theme">
+        <svg id="login-theme-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg id="login-theme-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <form id="login-form" class="auth-card">
+        <div class="auth-brand">ticket</div>
+        <div class="field">
+            <label for="login-username">Username</label>
+            <input id="login-username" name="username" autocomplete="username" autofocus required>
+        </div>
+        <div class="field">
+            <label for="login-password">Password</label>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="auth-actions">
+            <button class="btn btn-primary" type="submit">Sign in</button>
+            <button id="login-passkey-button" class="btn" type="button">Use passkey</button>
+            <button id="show-register-button" class="btn hidden" type="button">Create account</button>
+        </div>
+        <div id="login-error" class="auth-error"></div>
+    </form>
+    <form id="register-form" class="auth-card hidden">
+        <div class="auth-brand">ticket</div>
+        <div class="field">
+            <label for="register-username">Username</label>
+            <input id="register-username" name="username" autocomplete="username" required>
+        </div>
+        <div class="field">
+            <label for="register-email">Email</label>
+            <input id="register-email" name="email" type="email" autocomplete="email" placeholder="optional">
+        </div>
+        <div class="field">
+            <label for="register-password">Password</label>
+            <input id="register-password" name="password" type="password" autocomplete="new-password" placeholder="optional; leave blank to generate one">
+        </div>
+        <div class="auth-actions">
+            <button class="btn btn-primary" type="submit">Create account</button>
+            <button id="hide-register-button" class="btn" type="button">Back to sign in</button>
+        </div>
+        <div id="register-help" class="auth-error">Leave password blank to let the server generate one.</div>
+    </form>
+</div>
+
+<!-- ── App shell ─────────────────────────────────────────────────── -->
+<div id="app-shell" class="app-shell hidden">
+
+    <header class="topbar">
+        <div class="topbar-left">
+            <div class="dropdown-wrap">
+                <button id="project-menu-button" class="project-btn" type="button" aria-haspopup="true" aria-expanded="false">
+                    Projects <span class="chevron">&#9662;</span>
+                </button>
+                <div id="project-menu-dropdown" class="dropdown project-dropdown">
+                    <div id="project-menu-list"></div>
+                    <button id="project-create-link" class="dropdown-item" type="button">+ Create project</button>
+                </div>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle theme">
+                <svg id="theme-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                <svg id="theme-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+            <div class="dropdown-wrap">
+                <button id="account-menu-button" class="avatar-btn" type="button" aria-haspopup="true" aria-expanded="false">U</button>
+                <div id="account-menu-dropdown" class="dropdown">
+                    <div id="account-menu-name" class="dropdown-label"></div>
+                    <button class="dropdown-item" type="button" data-account-action="account">Account settings</button>
+                    <button id="logout-button" class="dropdown-item" type="button">Log out</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="body-layout">
+        <aside class="sidebar">
+            <div class="nav-section-label">General</div>
+            <nav id="main-nav" class="nav-list"></nav>
+            <div class="nav-section-label nav-admin-section">Admin</div>
+            <nav id="admin-nav" class="nav-list"></nav>
+        </aside>
+        <main class="main-content">
+            <div id="app-notice" class="notice"></div>
+            <div class="views-wrap">
+
+                <!-- Board -->
+                <section id="view-tickets" class="view active">
+                    <div class="view-header">
+                        <div>
+                            <h1>Board</h1>
+                            <p class="meta">Drag tickets between stages to update status.</p>
+                        </div>
+                        <div class="view-actions">
+                            <input id="board-search" type="search" placeholder="Filter tickets" class="input-sm">
+                            <label class="checkbox-label"><input id="board-hide-done" type="checkbox"> hide done</label>
+                            <button id="new-ticket-button" class="btn btn-primary" type="button">New ticket</button>
+                        </div>
+                    </div>
+                    <div id="ticket-board" class="board"></div>
+                </section>
+
+                <!-- Goals -->
+                <section id="view-goals" class="view">
+                    <div class="view-header">
+                        <div>
+                            <h1>Goals</h1>
+                            <p class="meta">Capture goals, refine with AI.</p>
+                        </div>
+                        <div class="view-actions">
+                            <select id="goal-inbox-status-filter" class="select-sm">
+                                <option value="">all statuses</option>
+                                <option value="draft">draft</option>
+                                <option value="refining">refining</option>
+                                <option value="ready">ready</option>
+                            </select>
+                            <select id="goal-inbox-sort" class="select-sm">
+                                <option value="updated_desc">recently updated</option>
+                                <option value="priority_asc">priority</option>
+                                <option value="status">status</option>
+                            </select>
+                            <button id="new-goal-button" class="btn btn-primary" type="button">New goal</button>
+                        </div>
+                    </div>
+                    <div class="view-split">
+                    <div class="card">
+                        <div id="goal-list" class="item-list"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 id="goal-editor-title">Goal editor</h2>
+                        </div>
+                        <form id="goal-form" class="form-stack">
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="goal-title">Title</label>
+                                    <input id="goal-title" required>
+                                </div>
+                                <div class="field field-narrow">
+                                    <label for="goal-priority">Priority</label>
+                                    <input id="goal-priority" type="number" min="1" value="1">
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="goal-description">Description</label>
+                                <textarea id="goal-description"></textarea>
+                            </div>
+                            <div class="field">
+                                <label for="goal-notes">Notes / acceptance criteria</label>
+                                <textarea id="goal-notes"></textarea>
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="goal-eta">ETA</label>
+                                    <input id="goal-eta" placeholder="YYYY-MM-DD">
+                                </div>
+                                <div class="field">
+                                    <label for="goal-status">Status</label>
+                                    <input id="goal-status" readonly>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-goal-button" class="btn btn-primary" type="submit">Save goal</button>
+                                <button id="refine-goal-button" class="btn" type="button">Refine</button>
+                                <button id="ready-goal-button" class="btn" type="button">Ready</button>
+                                <button id="delete-goal-button" class="btn btn-danger" type="button">Delete</button>
+                                <button id="reset-goal-button" class="btn btn-ghost" type="button">Clear</button>
+                            </div>
+                        </form>
+
+                        <div class="card-section">
+                            <div class="card-section-head">
+                                <h3>Agent configuration</h3>
+                                <p id="agent-harness-summary" class="meta">Hierarchy: goal &#8594; project &#8594; system.</p>
+                            </div>
+                            <div class="agent-grid">
+                                <div class="field">
+                                    <label for="system-agent-provider">System default</label>
+                                    <select id="system-agent-provider"></select>
+                                </div>
+                                <div class="field">
+                                    <label for="resolved-agent-model">Effective model</label>
+                                    <input id="resolved-agent-model" readonly>
+                                </div>
+                                <div class="form-actions" style="padding:0">
+                                    <button id="save-system-agent-model" class="btn" type="button">Save system default</button>
+                                </div>
+                                <div class="field">
+                                    <label for="project-agent-provider">Project override</label>
+                                    <select id="project-agent-provider"></select>
+                                </div>
+                                <div class="form-actions" style="padding:0">
+                                    <button id="save-project-agent-model" class="btn" type="button">Save project override</button>
+                                    <button id="clear-project-agent-model" class="btn btn-ghost" type="button">Clear</button>
+                                </div>
+                                <div class="field">
+                                    <label for="goal-agent-provider">Goal override</label>
+                                    <select id="goal-agent-provider"></select>
+                                </div>
+                                <div class="form-actions" style="padding:0">
+                                    <button id="save-goal-agent-model" class="btn" type="button">Save goal override</button>
+                                    <button id="clear-goal-agent-model" class="btn btn-ghost" type="button">Clear</button>
+                                </div>
+                                <div class="field">
+                                    <label for="resolved-agent-provider">Effective provider</label>
+                                    <input id="resolved-agent-provider" readonly>
+                                </div>
+                                <div class="field">
+                                    <label for="resolved-agent-url">Effective URL</label>
+                                    <input id="resolved-agent-url" readonly>
+                                </div>
+                                <div class="field">
+                                    <label for="resolved-agent-api-key">API key set</label>
+                                    <input id="resolved-agent-api-key" readonly>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card-section">
+                            <div class="card-section-head">
+                                <h3>Refine with AI</h3>
+                                <span id="goal-chat-status" class="status-badge">idle</span>
+                            </div>
+                            <div id="goal-chat-log" class="chat-log"></div>
+                            <div class="chat-input-row">
+                                <input id="goal-chat-input" placeholder="Refine this goal into an actionable plan&#8230;">
+                                <button id="goal-chat-send" class="btn btn-primary" type="button">Send</button>
+                            </div>
+                            <div class="form-stack" style="padding-top:0">
+                                <div class="field">
+                                    <label for="goal-refined-goal">Refined goal</label>
+                                    <textarea id="goal-refined-goal" placeholder="Final clarified goal statement"></textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="goal-decomposition">Decomposition</label>
+                                    <textarea id="goal-decomposition" placeholder="- Objective 1&#10;- Epic A&#10;- Story A1 &#8230;"></textarea>
+                                </div>
+                                <div class="field">
+                                    <label>Decomposition items</label>
+                                    <div id="goal-decomposition-list" class="decomp-list"></div>
+                                    <div class="inline-add">
+                                        <input id="goal-decomposition-item-input" placeholder="Add objective / epic / story">
+                                        <button id="goal-decomposition-item-add" class="btn" type="button">Add item</button>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button id="goal-use-last-agent-response" class="btn" type="button">Use last agent response</button>
+                                    <button id="save-goal-refinement-button" class="btn btn-primary" type="button">Save refinement output</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    </div><!-- /view-split -->
+                </section>
+
+                <!-- Providers -->
+                <section id="view-providers" class="view">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>AI Providers</h2>
+                            <button id="new-provider-config-button" class="btn btn-primary" type="button">New config</button>
+                        </div>
+                        <div class="form-stack">
+                            <div class="field">
+                                <label for="provider-config-select">Select configuration</label>
+                                <select id="provider-config-select" class="select-sm"></select>
+                            </div>
+                        </div>
+                        <form id="provider-config-form" class="form-stack">
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="provider-config-id">ID</label>
+                                    <input id="provider-config-id" placeholder="copilot-default">
+                                </div>
+                                <div class="field">
+                                    <label for="provider-config-label">Label</label>
+                                    <input id="provider-config-label" placeholder="GitHub Copilot default">
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="provider-config-model">Default model</label>
+                                <input id="provider-config-model" placeholder="gpt-5.3-codex">
+                            </div>
+                            <div class="field">
+                                <label for="provider-config-url">Base URL</label>
+                                <input id="provider-config-url" placeholder="https://api.example.com">
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="provider-config-auth-type">Auth type</label>
+                                    <select id="provider-config-auth-type">
+                                        <option value="bearer">bearer</option>
+                                        <option value="basic">basic</option>
+                                        <option value="none">none</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="provider-config-requires-url">Requires URL</label>
+                                    <select id="provider-config-requires-url">
+                                        <option value="true">yes</option>
+                                        <option value="false">no</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="provider-config-api-key">API key</label>
+                                <input id="provider-config-api-key" type="password" placeholder="optional if auth_type=none">
+                            </div>
+                            <div class="field">
+                                <label for="provider-config-models">Available models (one per line)</label>
+                                <textarea id="provider-config-models" placeholder="gpt-5.3-codex&#10;gpt-5"></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-provider-config-button" class="btn btn-primary" type="submit">Save config</button>
+                                <button id="delete-provider-config-button" class="btn btn-danger" type="button">Delete config</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Config -->
+                <section id="view-config" class="view split">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2>Configuration</h2>
+                                <div id="config-settings-summary" class="meta"></div>
+                            </div>
+                            <button id="new-config-setting-button" class="btn btn-primary" type="button">New key</button>
+                        </div>
+                        <div id="config-settings-list" class="item-list"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 id="config-setting-editor-title">Config editor</h2>
+                        </div>
+                        <form id="config-setting-form" class="form-stack">
+                            <div class="field">
+                                <label for="config-setting-key">Key</label>
+                                <input id="config-setting-key" placeholder="registration_enabled" autocomplete="off" required>
+                            </div>
+                            <div class="field">
+                                <label for="config-setting-value">Value</label>
+                                <textarea id="config-setting-value" class="mono" placeholder="1"></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-config-setting-button" class="btn btn-primary" type="submit">Save setting</button>
+                                <button id="delete-config-setting-button" class="btn btn-danger" type="button">Delete</button>
+                                <button id="reset-config-setting-button" class="btn btn-ghost" type="button">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Documents -->
+                <section id="view-documents" class="view split">
+                    <div id="document-drop-overlay" class="doc-drop-zone" aria-hidden="true">
+                        <div class="doc-drop-msg">
+                            <p class="doc-drop-title">Drop files to upload</p>
+                            <p class="meta">Text, Markdown, JSON, code&#8230;</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2>Documents</h2>
+                                <p class="meta">Drop text files to upload.</p>
+                            </div>
+                            <button id="new-document-button" class="btn btn-primary" type="button">New document</button>
+                        </div>
+                        <div id="document-list" class="item-list"></div>
+                    </div>
+                    <div class="card" id="documents-view">
+                        <div class="card-header">
+                            <h2 id="document-editor-title">Document editor</h2>
+                        </div>
+                        <form id="document-form" class="form-stack">
+                            <div class="field">
+                                <label for="document-title">Title</label>
+                                <input id="document-title" required>
+                            </div>
+                            <div class="field">
+                                <label for="document-description">Description</label>
+                                <textarea id="document-description"></textarea>
+                            </div>
+                            <div class="field">
+                                <label for="document-notes">Notes</label>
+                                <textarea id="document-notes"></textarea>
+                            </div>
+                            <div class="field">
+                                <label for="document-content">Content</label>
+                                <textarea id="document-content" class="mono"></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-document-button" class="btn btn-primary" type="submit">Save document</button>
+                                <button id="delete-document-button" class="btn btn-danger" type="button">Delete</button>
+                                <button id="reset-document-button" class="btn btn-ghost" type="button">Clear</button>
+                            </div>
+                        </form>
+                        <div class="card-section">
+                            <div class="card-section-head"><h3>Files</h3></div>
+                            <div id="document-files-list" class="item-list"></div>
+                            <div class="form-stack" style="padding-top:8px">
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="document-upload-file">Upload file</label>
+                                        <input id="document-upload-file" type="file">
+                                    </div>
+                                    <div class="field">
+                                        <label for="document-upload-name">Custom name</label>
+                                        <input id="document-upload-name" placeholder="Optional custom file name">
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button id="upload-document-file-button" class="btn" type="button">Upload file</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Interventions -->
+                <section id="view-interventions" class="view">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2>Mailbox</h2>
+                                <p class="meta">Tickets in <code>fail</code> state requiring human action.</p>
+                            </div>
+                            <div class="card-actions">
+                                <select id="intervention-filter" class="select-sm">
+                                    <option value="all">all</option>
+                                    <option value="unassigned">unassigned</option>
+                                    <option value="agent">agent assigned</option>
+                                    <option value="human">human assigned</option>
+                                </select>
+                                <select id="intervention-sort" class="select-sm">
+                                    <option value="priority">priority</option>
+                                    <option value="order">order</option>
+                                    <option value="recent">most recent</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="intervention-report-summary" class="meta card-meta-pad"></div>
+                        <div id="intervention-trends-summary" class="meta card-meta-pad"></div>
+                        <div id="intervention-list" class="item-list"></div>
+                    </div>
+                </section>
+
+                <!-- Projects -->
+                <section id="view-projects" class="view">
+                    <div class="view-header">
+                        <div><h1>Projects</h1><p class="meta">Manage projects and their settings.</p></div>
+                        <div class="view-actions">
+                            <button id="new-project-button" class="btn btn-primary" type="button">New project</button>
+                        </div>
+                    </div>
+                    <div class="view-split">
+                    <div class="card">
+                        <div id="project-list" class="item-list"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 id="project-editor-title">Project editor</h2>
+                            <span class="meta">Prefix, defaults, repo, and visibility.</span>
+                        </div>
+                        <form id="project-form" class="form-stack">
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="project-prefix">Prefix</label>
+                                    <input id="project-prefix" maxlength="5" autocomplete="off" required>
+                                </div>
+                                <div class="field">
+                                    <label for="project-title">Title</label>
+                                    <input id="project-title" required>
+                                </div>
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="project-visibility">Visibility</label>
+                                    <select id="project-visibility">
+                                        <option value="public">public</option>
+                                        <option value="team">team</option>
+                                        <option value="private">private</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="project-default-draft">Default draft</label>
+                                    <select id="project-default-draft">
+                                        <option value="false">false</option>
+                                        <option value="true">true</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="project-workflow">Default workflow</label>
+                                    <select id="project-workflow"></select>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="project-git-repository">Git repository</label>
+                                <input id="project-git-repository" placeholder="owner/repo or URL">
+                            </div>
+                            <div class="field">
+                                <label for="project-accepts-new-members">Membership requests</label>
+                                <select id="project-accepts-new-members">
+                                    <option value="false">closed</option>
+                                    <option value="true">allow requests</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="project-description">Description</label>
+                                <textarea id="project-description"></textarea>
+                            </div>
+                            <div class="field">
+                                <label for="project-ac">Acceptance criteria</label>
+                                <textarea id="project-ac"></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-project-button" class="btn btn-primary" type="submit">Save project</button>
+                                <button id="delete-project-button" class="btn btn-danger" type="button">Delete</button>
+                                <button id="reset-project-button" class="btn btn-ghost" type="button">Clear</button>
+                            </div>
+                        </form>
+                        <div id="project-access-requests-panel" class="card-section hidden">
+                            <div class="card-section-head">
+                                <h3>Access requests</h3>
+                                <p id="project-access-requests-summary" class="meta">Pending membership requests.</p>
+                            </div>
+                            <div id="project-access-requests-list" class="item-list"></div>
+                        </div>
+                        <div id="project-history-panel" class="card-section">
+                            <div class="card-section-head">
+                                <h3>Recent project history</h3>
+                                <p id="project-history-summary" class="meta"></p>
+                            </div>
+                            <div id="project-history-list" class="item-list"></div>
+                        </div>
+                        <div id="project-request-access-panel" class="card-section">
+                            <div class="card-section-head">
+                                <h3>Request project access</h3>
+                            </div>
+                            <form id="project-request-access-form" class="form-stack" style="padding-top:0">
+                                <div class="field">
+                                    <label for="project-request-access-ref">Project ref</label>
+                                    <input id="project-request-access-ref" placeholder="PREFIX or 12" required>
+                                </div>
+                                <div class="field">
+                                    <label for="project-request-access-message">Message</label>
+                                    <textarea id="project-request-access-message" placeholder="Optional context for admins."></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button id="project-request-access-button" class="btn btn-primary" type="submit">Request access</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div id="project-my-access-requests-panel" class="card-section hidden">
+                            <div class="card-section-head">
+                                <h3>My access requests</h3>
+                                <p id="project-my-access-requests-summary" class="meta"></p>
+                            </div>
+                            <div id="project-my-access-requests-list" class="item-list"></div>
+                        </div>
+                        <div id="project-notifications-panel" class="card-section">
+                            <div class="card-section-head">
+                                <h3>Notifications</h3>
+                                <p id="project-notifications-summary" class="meta"></p>
+                            </div>
+                            <div id="project-notifications-list" class="item-list"></div>
+                        </div>
+                    </div>
+                    </div><!-- /view-split -->
+                </section>
+
+                <!-- Plans -->
+                <section id="view-plans" class="view split">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2>Plans</h2>
+                                <p class="meta">Manage limits and onboarding.</p>
+                            </div>
+                            <button id="new-plan-button" class="btn btn-primary" type="button">New plan</button>
+                        </div>
+                        <div id="plan-list" class="item-list"></div>
+                    </div>
+                    <div class="card">
+                        <div id="plan-admin-panel" class="card-section">
+                            <div class="card-section-head">
+                                <h3>Onboarding policy</h3>
+                                <p class="meta">Default plan and registration behavior.</p>
+                            </div>
+                            <div class="form-stack" style="padding-top:0">
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="default-plan-select">Default plan</label>
+                                        <select id="default-plan-select"></select>
+                                    </div>
+                                    <div class="field">
+                                        <label for="registration-enabled-select">Registration</label>
+                                        <select id="registration-enabled-select">
+                                            <option value="true">enabled</option>
+                                            <option value="false">disabled</option>
+                                        </select>
+                                    </div>
+                                    <div class="field">
+                                        <label for="registration-auto-approve-select">Auto-approve</label>
+                                        <select id="registration-auto-approve-select">
+                                            <option value="true">enabled</option>
+                                            <option value="false">manual approval</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button id="save-plan-admin-button" class="btn btn-primary" type="button">Save onboarding policy</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-header">
+                            <div>
+                                <h2 id="plan-editor-title">Plan editor</h2>
+                                <span class="meta">Quotas and automatic membership actions.</span>
+                            </div>
+                        </div>
+                        <form id="plan-form" class="form-stack">
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="plan-slug">Slug</label>
+                                    <input id="plan-slug" required>
+                                </div>
+                                <div class="field">
+                                    <label for="plan-name">Name</label>
+                                    <input id="plan-name" required>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="plan-description">Description</label>
+                                <textarea id="plan-description"></textarea>
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="plan-max-projects">Max projects</label>
+                                    <input id="plan-max-projects" type="number" min="0">
+                                </div>
+                                <div class="field">
+                                    <label for="plan-max-private-projects">Max private</label>
+                                    <input id="plan-max-private-projects" type="number" min="0">
+                                </div>
+                                <div class="field">
+                                    <label for="plan-max-tickets">Max tickets</label>
+                                    <input id="plan-max-tickets" type="number" min="0">
+                                </div>
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="plan-max-tickets-per-project">Per project</label>
+                                    <input id="plan-max-tickets-per-project" type="number" min="0">
+                                </div>
+                                <div class="field">
+                                    <label for="plan-max-team-memberships">Memberships</label>
+                                    <input id="plan-max-team-memberships" type="number" min="0">
+                                </div>
+                                <div class="field">
+                                    <label for="plan-max-api-calls-per-day">API calls/day</label>
+                                    <input id="plan-max-api-calls-per-day" type="number" min="0">
+                                </div>
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="plan-default-project-alias">Default project</label>
+                                    <select id="plan-default-project-alias">
+                                        <option value="public">public</option>
+                                        <option value="private">private</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="plan-auto-assign-public-team">Auto public team</label>
+                                    <select id="plan-auto-assign-public-team">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="plan-auto-create-private-project">Auto private project</label>
+                                    <select id="plan-auto-create-private-project">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="plan-auto-create-private-team">Auto private team</label>
+                                    <select id="plan-auto-create-private-team">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-plan-button" class="btn btn-primary" type="submit">Save plan</button>
+                                <button id="delete-plan-button" class="btn btn-danger" type="button">Delete</button>
+                                <button id="reset-plan-button" class="btn btn-ghost" type="button">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Workflows -->
+                <section id="view-workflows" class="view">
+                    <div class="view-header">
+                        <div><h1 id="workflow-editor-title">Workflows</h1></div>
+                        <div class="view-actions">
+                            <select id="workflow-select" class="select-sm"></select>
+                            <div class="segmented">
+                                <button id="workflow-view-board" class="seg-btn active" type="button">Board</button>
+                                <button id="workflow-view-graph" class="seg-btn" type="button">Graph</button>
+                            </div>
+                            <button id="new-workflow-button" class="btn btn-primary" type="button">New workflow</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div id="workflow-list" class="item-list" hidden></div>
+                        <details id="workflow-settings" class="workflow-settings-panel">
+                            <summary><span>Workflow settings</span></summary>
+                            <form id="workflow-form" class="form-stack">
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="workflow-name">Name</label>
+                                        <input id="workflow-name" required>
+                                    </div>
+                                    <div class="field">
+                                        <label for="workflow-description">Description</label>
+                                        <textarea id="workflow-description" style="min-height:50px"></textarea>
+                                    </div>
+                                </div>
+                                <fieldset class="field-group">
+                                    <legend>Approval policy</legend>
+                                    <div class="radio-group">
+                                        <label><input id="workflow-approval-policy-single" type="radio" name="workflow-approval-policy" value="single_role" checked> Single role</label>
+                                        <label><input id="workflow-approval-policy-all" type="radio" name="workflow-approval-policy" value="all_roles"> All roles</label>
+                                    </div>
+                                </fieldset>
+                                <fieldset class="field-group">
+                                    <legend>Progression mode</legend>
+                                    <div class="radio-group">
+                                        <label><input id="workflow-progression-mode-linear" type="radio" name="workflow-progression-mode" value="linear" checked> Linear</label>
+                                        <label><input id="workflow-progression-mode-stage-only" type="radio" name="workflow-progression-mode" value="stage_only"> Stage only</label>
+                                    </div>
+                                </fieldset>
+                                <div class="form-actions">
+                                    <button id="delete-workflow-button" class="btn btn-danger" type="button">Delete workflow</button>
+                                </div>
+                            </form>
+                        </details>
+                        <div id="workflow-stage-board" class="workflow-stage-board">
+                            <div id="stage-grid" class="stage-grid"></div>
+                            <form id="new-stage-form" class="stage-create-card" data-stage-drop-end="true">
+                                <h4>New stage</h4>
+                                <div class="field">
+                                    <label for="new-stage-name">Stage name</label>
+                                    <input id="new-stage-name" required placeholder="review">
+                                </div>
+                                <div class="field">
+                                    <label for="new-stage-wow">Way of working</label>
+                                    <textarea id="new-stage-wow" placeholder="How work moves in this stage"></textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="new-stage-dor">Definition of ready</label>
+                                    <textarea id="new-stage-dor" placeholder="What must be true before entry"></textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="new-stage-dod">Definition of done</label>
+                                    <textarea id="new-stage-dod" placeholder="What marks the stage complete"></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button id="save-stage-button" class="btn btn-primary" type="submit">Add stage</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div id="workflow-validation-summary" class="meta" style="padding:8px 16px"></div>
+                        <div class="form-actions" style="padding:8px 16px 12px">
+                            <button id="validate-workflow-button" class="btn" type="button">Validate graph</button>
+                            <button id="auto-chain-transitions-button" class="btn" type="button">Auto-chain transitions</button>
+                            <button id="save-all-stages-button" class="btn btn-primary" type="button">Save all stages</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Users (admin only) -->
+                <section id="view-users" class="view">
+                    <div class="view-header">
+                        <div><h1>Users</h1><p class="meta">Manage user accounts and access.</p></div>
+                        <div class="view-actions">
+                            <button id="new-user-button" class="btn btn-primary" type="button">New user</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div id="user-list" class="item-list"></div>
+                    </div>
+                </section>
+
+                <!-- Roles -->
+                <section id="view-roles" class="view split">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Roles</h2>
+                            <button id="new-role-button" class="btn btn-primary" type="button">New role</button>
+                        </div>
+                        <div id="role-list" class="item-list"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 id="role-editor-title">Role editor</h2>
+                        </div>
+                        <form id="role-form" class="form-stack">
+                            <div class="field">
+                                <label for="role-title">Title</label>
+                                <input id="role-title" required>
+                            </div>
+                            <div class="field">
+                                <label for="role-workflow">Workflow</label>
+                                <select id="role-workflow"></select>
+                            </div>
+                            <div class="field">
+                                <label for="role-description">Description</label>
+                                <textarea id="role-description"></textarea>
+                            </div>
+                            <div class="field">
+                                <label for="role-ac">Acceptance criteria</label>
+                                <textarea id="role-ac"></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-role-button" class="btn btn-primary" type="submit">Save role</button>
+                                <button id="delete-role-button" class="btn btn-danger" type="button">Delete</button>
+                                <button id="reset-role-button" class="btn btn-ghost" type="button">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Agents -->
+                <section id="view-agents" class="view split">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Agents</h2>
+                            <button id="new-agent-button" class="btn btn-primary" type="button">New agent</button>
+                        </div>
+                        <div id="agent-list" class="item-list"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 id="agent-editor-title">Agent editor</h2>
+                        </div>
+                        <form id="agent-form" class="form-stack">
+                            <div class="field">
+                                <label for="agent-id">ID</label>
+                                <input id="agent-id" disabled>
+                            </div>
+                            <div class="field">
+                                <label class="checkbox-label"><input id="agent-enabled" type="checkbox" disabled> Enabled</label>
+                            </div>
+                            <div class="field">
+                                <label for="agent-new-password">New password</label>
+                                <input id="agent-new-password" type="password" placeholder="leave blank to keep existing">
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-agent-button" class="btn btn-primary" type="submit">Rotate password</button>
+                                <button id="toggle-agent-button" class="btn" type="button">Enable / disable</button>
+                                <button id="delete-agent-button" class="btn btn-danger" type="button">Delete</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Teams -->
+                <section id="view-teams" class="view split">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Teams</h2>
+                            <button id="new-team-button" class="btn btn-primary" type="button">New team</button>
+                        </div>
+                        <div id="team-list" class="item-list"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 id="team-editor-title">Team editor</h2>
+                        </div>
+                        <form id="team-form" class="form-stack">
+                            <div class="field">
+                                <label for="team-name">Name</label>
+                                <input id="team-name" required>
+                            </div>
+                            <div class="field">
+                                <label for="team-parent">Parent team</label>
+                                <select id="team-parent"></select>
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-team-button" class="btn btn-primary" type="submit">Save team</button>
+                                <button id="delete-team-button" class="btn btn-danger" type="button">Delete</button>
+                                <button id="reset-team-button" class="btn btn-ghost" type="button">Clear</button>
+                            </div>
+                        </form>
+                        <div class="card-section" id="team-members-section">
+                            <div class="card-section-head">
+                                <h3>Members</h3>
+                                <div class="card-actions">
+                                    <select id="team-invite-user-select" class="select-sm"></select>
+                                    <select id="team-invite-role" class="select-sm">
+                                        <option value="member">Member</option>
+                                        <option value="owner">Owner</option>
+                                    </select>
+                                    <button id="team-invite-button" class="btn" type="button">Add</button>
+                                </div>
+                            </div>
+                            <div id="team-member-list" class="item-list"></div>
+                        </div>
+                    </div>
+                </section>
+
+            </div><!-- /views-wrap -->
+        </main>
+    </div><!-- /body-layout -->
+</div><!-- /app-shell -->
+
+<!-- ── Ticket modal ───────────────────────────────────────────────── -->
+<div id="ticket-modal" class="modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-box">
+        <div class="modal-header">
+            <h2 id="ticket-modal-title">Ticket</h2>
+            <button id="close-ticket-modal" class="icon-btn" type="button" aria-label="Close">&#10005;</button>
+        </div>
+        <form id="ticket-form" class="modal-grid">
+            <div class="modal-main">
+                <div class="field-row" style="margin-bottom:12px">
+                    <div class="field field-narrow">
+                        <label for="ticket-type">Type</label>
+                        <select id="ticket-type"></select>
+                    </div>
+                    <div class="field field-narrow">
+                        <label for="ticket-status">Status</label>
+                        <select id="ticket-status">
+                            <option value="open">open</option>
+                            <option value="closed">closed</option>
+                            <option value="archived">archived</option>
+                        </select>
+                    </div>
+                    <div class="field field-narrow">
+                        <label for="ticket-stage">Stage</label>
+                        <select id="ticket-stage"></select>
+                    </div>
+                </div>
+                <div class="field" style="margin-bottom:10px">
+                    <label for="ticket-title">Title</label>
+                    <input id="ticket-title" required>
+                </div>
+                <div class="field-row">
+                    <div class="field field-narrow">
+                        <label for="ticket-priority">Priority</label>
+                        <input id="ticket-priority" type="number" value="0">
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="ticket-description">Description</label>
+                    <textarea id="ticket-description"></textarea>
+                </div>
+                <div class="field">
+                    <label for="ticket-ac">Acceptance criteria</label>
+                    <textarea id="ticket-ac"></textarea>
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label for="ticket-parent">Parent ticket</label>
+                        <input id="ticket-parent" placeholder="CUS-1">
+                    </div>
+                    <div class="field">
+                        <label for="ticket-workflow">Workflow</label>
+                        <select id="ticket-workflow"></select>
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label for="ticket-draft">Draft</label>
+                        <select id="ticket-draft">
+                            <option value="false">false</option>
+                            <option value="true">true</option>
+                        </select>
+                    </div>
+                    <div class="field field-narrow">
+                        <label for="ticket-estimate-effort">Estimate</label>
+                        <input id="ticket-estimate-effort" type="number" value="0">
+                    </div>
+                    <div class="field field-narrow">
+                        <label for="ticket-order">Order</label>
+                        <input id="ticket-order" type="number" value="0">
+                    </div>
+                    <div class="field field-narrow">
+                        <label for="ticket-health">Health</label>
+                        <input id="ticket-health" type="number" value="0" min="0" max="10">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button id="save-ticket-button" class="btn btn-primary" type="submit">Save ticket</button>
+                    <button id="delete-ticket-button" class="btn btn-danger" type="button">Delete</button>
+                </div>
+                <div class="form-actions" style="padding-top:0">
+                    <button id="ticket-open-button" class="btn btn-ghost" type="button">Open</button>
+                    <button id="ticket-close-button" class="btn btn-ghost" type="button">Close</button>
+                    <button id="ticket-archive-button" class="btn btn-ghost" type="button">Archive</button>
+                    <button id="ticket-unarchive-button" class="btn btn-ghost" type="button">Unarchive</button>
+                </div>
+                <div class="modal-section">
+                    <div class="section-heading">Labels</div>
+                    <div id="ticket-labels" class="tag-row"></div>
+                    <div class="inline-add">
+                        <select id="ticket-label-select"></select>
+                        <button id="add-ticket-label-button" class="btn" type="button">Add</button>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <div class="section-heading">Dependencies</div>
+                    <div id="ticket-dependencies" class="tag-row"></div>
+                    <div class="inline-add">
+                        <input id="ticket-dependency-input" placeholder="OPS-100">
+                        <button id="add-ticket-dependency-button" class="btn" type="button">Add dependency</button>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <div class="section-heading">Time log</div>
+                    <div id="ticket-time-total" class="meta"></div>
+                    <div id="ticket-time-entries" class="item-list"></div>
+                    <div class="inline-add">
+                        <input id="ticket-time-minutes" type="number" min="1" value="30" style="width:80px" placeholder="mins">
+                        <input id="ticket-time-note" placeholder="Work log note">
+                        <button id="add-ticket-time-button" class="btn" type="button">Log time</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-sidebar">
+                <div class="modal-section">
+                    <div class="section-heading">History</div>
+                    <div id="ticket-history" class="history-list"></div>
+                </div>
+                <div class="modal-section">
+                    <div class="section-heading">Comments</div>
+                    <div id="ticket-comments" class="history-list"></div>
+                    <div class="inline-add-col" style="padding:10px 16px">
+                        <textarea id="ticket-comment-input" placeholder="Add an update for this ticket" rows="2"></textarea>
+                        <button id="add-ticket-comment-button" class="btn btn-primary" type="button">Add comment</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── Account modal ──────────────────────────────────────────────── -->
+<div id="account-modal" class="modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-box modal-box-sm">
+        <div class="modal-header">
+            <div>
+                <h2 id="account-modal-title">Account settings</h2>
+                <p id="account-modal-summary" class="meta">Manage your passkeys for website and CLI sign-in.</p>
+            </div>
+            <button id="close-account-modal" class="icon-btn" type="button" aria-label="Close">&#10005;</button>
+        </div>
+        <div style="padding:16px">
+            <div id="account-profile-details" class="item-list"></div>
+            <div class="form-actions" style="padding-top:8px">
+                <button id="account-open-config-button" class="btn btn-ghost hidden" type="button">Open app settings</button>
+            </div>
+            <div class="section-heading" style="margin-top:16px">Passkeys</div>
+            <div class="inline-add" style="padding:8px 0;margin-bottom:6px">
+                <input id="account-passkey-name" type="text" placeholder="MacBook Pro">
+                <button id="account-passkey-enroll-button" class="btn" type="button">Enroll passkey</button>
+            </div>
+            <div id="account-passkey-status" class="meta"></div>
+            <div id="account-passkey-list" class="item-list"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Dialog ─────────────────────────────────────────────────────── -->
+<div id="dialog-overlay" class="dialog-overlay hidden">
+    <div id="dialog-box" class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="dialog-message">
+        <p id="dialog-message" class="dialog-message"></p>
+        <div id="dialog-input-wrap" class="field hidden">
+            <input id="dialog-input" type="text">
+        </div>
+        <div class="dialog-actions">
+            <button id="dialog-cancel" class="btn btn-ghost" type="button">Cancel</button>
+            <button id="dialog-ok" class="btn btn-primary" type="button">OK</button>
+        </div>
+    </div>
+</div>
+
+<div id="version-overlay" class="version-badge">server: unknown</div>
+
+<script src="/three.min.js"></script>
+<script src="/landing.js"></script>
+<script src="/api.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

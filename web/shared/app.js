@@ -101,6 +101,8 @@
             selectedConfigSettingKey: "",
             selectedProviderConfigID: "",
             navOrder: [],
+            users: [],
+            teamMembers: [],
         };
 
         const TICKET_TYPES = ["epic", "task", "bug", "spike", "chore", "story", "note", "question", "requirement", "decision"];
@@ -111,18 +113,19 @@
         const VIEW_SCROLL_STORAGE_KEY = "site2.viewScroll";
         const NAV_ORDER_STORAGE_KEY = "site2.navOrder";
         const NAV_ITEMS = [
-            { view: "goals", label: "Goals", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3l3 6 6 .9-4.5 4.4 1.1 6.2L12 17.8 6.4 20.5l1.1-6.2L3 9.9 9 9z\"></path></svg>" },
-            { view: "tickets", label: "Board", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16\"></path><path d=\"M4 12h16\"></path><path d=\"M4 17h10\"></path></svg>" },
-            { view: "documents", label: "Documents", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 3h7l5 5v13H7z\"></path><path d=\"M14 3v5h5\"></path><path d=\"M9 13h8\"></path><path d=\"M9 17h8\"></path></svg>" },
-            { view: "config", label: "Config", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M12 17v4\"></path><path d=\"M4.9 6.3l2.8 2\"></path><path d=\"M16.3 15.7l2.8 2\"></path><path d=\"M3 12h4\"></path><path d=\"M17 12h4\"></path><path d=\"M4.9 17.7l2.8-2\"></path><path d=\"M16.3 8.3l2.8-2\"></path><circle cx=\"12\" cy=\"12\" r=\"3.5\"></circle></svg>" },
-            { view: "providers", label: "Providers", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2l3 3-3 3-3-3z\"></path><path d=\"M4 11l3-3 3 3-3 3z\"></path><path d=\"M20 11l-3-3-3 3 3 3z\"></path><path d=\"M12 20l-3-3 3-3 3 3z\"></path></svg>" },
-            { view: "plans", label: "Plans", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 4h12v16H6z\"></path><path d=\"M9 8h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 16h4\"></path></svg>" },
-            { view: "interventions", label: "Mailbox", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
-            { view: "projects", label: "Projects", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 7h18\"></path><path d=\"M6 7v10\"></path><path d=\"M12 7v10\"></path><path d=\"M18 7v10\"></path><path d=\"M3 17h18\"></path></svg>" },
-            { view: "workflows", label: "Workflows", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
-            { view: "roles", label: "Roles", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8a3 3 0 1 0 0.001 0\"></path><path d=\"M17 16a3 3 0 1 0 0.001 0\"></path><path d=\"M9.5 10.5l5 3\"></path></svg>" },
-            { view: "agents", label: "Agents", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M8 8a4 4 0 1 1 8 0\"></path><path d=\"M7 13h10v7H7z\"></path></svg>" },
-            { view: "teams", label: "Teams", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 11a2.5 2.5 0 1 0 0.001 0\"></path><path d=\"M16 9a2 2 0 1 0 0.001 0\"></path><path d=\"M4 19a4 4 0 0 1 8 0\"></path><path d=\"M14 19a3 3 0 0 1 6 0\"></path></svg>" },
+            { view: "goals", label: "Goals", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3l3 6 6 .9-4.5 4.4 1.1 6.2L12 17.8 6.4 20.5l1.1-6.2L3 9.9 9 9z\"></path></svg>" },
+            { view: "tickets", label: "Board", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16\"></path><path d=\"M4 12h16\"></path><path d=\"M4 17h10\"></path></svg>" },
+            { view: "documents", label: "Documents", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 3h7l5 5v13H7z\"></path><path d=\"M14 3v5h5\"></path><path d=\"M9 13h8\"></path><path d=\"M9 17h8\"></path></svg>" },
+            { view: "interventions", label: "Mailbox", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
+            { view: "projects", label: "Projects", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 7h18\"></path><path d=\"M6 7v10\"></path><path d=\"M12 7v10\"></path><path d=\"M18 7v10\"></path><path d=\"M3 17h18\"></path></svg>" },
+            { view: "workflows", label: "Workflows", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
+            { view: "roles", label: "Roles", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8a3 3 0 1 0 0.001 0\"></path><path d=\"M17 16a3 3 0 1 0 0.001 0\"></path><path d=\"M9.5 10.5l5 3\"></path></svg>" },
+            { view: "teams", label: "Teams", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 11a2.5 2.5 0 1 0 0.001 0\"></path><path d=\"M16 9a2 2 0 1 0 0.001 0\"></path><path d=\"M4 19a4 4 0 0 1 8 0\"></path><path d=\"M14 19a3 3 0 0 1 6 0\"></path></svg>" },
+            { view: "config", label: "Config", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M12 17v4\"></path><path d=\"M4.9 6.3l2.8 2\"></path><path d=\"M16.3 15.7l2.8 2\"></path><path d=\"M3 12h4\"></path><path d=\"M17 12h4\"></path><path d=\"M4.9 17.7l2.8-2\"></path><path d=\"M16.3 8.3l2.8-2\"></path><circle cx=\"12\" cy=\"12\" r=\"3.5\"></circle></svg>" },
+            { view: "providers", label: "Providers", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2l3 3-3 3-3-3z\"></path><path d=\"M4 11l3-3 3 3-3 3z\"></path><path d=\"M20 11l-3-3-3 3 3 3z\"></path><path d=\"M12 20l-3-3 3-3 3 3z\"></path></svg>" },
+            { view: "plans", label: "Plans", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 4h12v16H6z\"></path><path d=\"M9 8h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 16h4\"></path></svg>" },
+            { view: "agents", label: "Agents", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M8 8a4 4 0 1 1 8 0\"></path><path d=\"M7 13h10v7H7z\"></path></svg>" },
+            { view: "users", label: "Users", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"></path><circle cx=\"9\" cy=\"7\" r=\"4\"></circle><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"></path><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"></path></svg>" },
         ];
         let navDragView = "";
         let goalChatIdleTimer = null;
@@ -156,6 +159,13 @@
             projectMenuList: document.getElementById("project-menu-list"),
             projectCreateLink: document.getElementById("project-create-link"),
             mainNav: document.getElementById("main-nav"),
+            adminNav: document.getElementById("admin-nav"),
+            userList: document.getElementById("user-list"),
+            newUserButton: document.getElementById("new-user-button"),
+            teamMemberList: document.getElementById("team-member-list"),
+            teamInviteUserSelect: document.getElementById("team-invite-user-select"),
+            teamInviteRole: document.getElementById("team-invite-role"),
+            teamInviteButton: document.getElementById("team-invite-button"),
             planAdminPanel: document.getElementById("plan-admin-panel"),
             defaultPlanSelect: document.getElementById("default-plan-select"),
             registrationEnabledSelect: document.getElementById("registration-enabled-select"),
@@ -578,6 +588,12 @@
         function visibleNavItems() {
             return NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin());
         }
+        function visibleGeneralNavItems() {
+            return NAV_ITEMS.filter((item) => item.section !== "admin" && (!item.adminOnly || isAdmin()));
+        }
+        function visibleAdminNavItems() {
+            return NAV_ITEMS.filter((item) => item.section === "admin" && isAdmin());
+        }
 
         function isPermissionErrorMessage(message) {
             return /forbidden|unauthorized|access denied/i.test(String(message || ""));
@@ -771,21 +787,42 @@
         }
 
         function renderMainNav() {
-            const visibleItems = visibleNavItems();
-            const navByView = new Map(visibleItems.map((item) => [item.view, item]));
-            const order = sanitizeNavOrder(state.navOrder && state.navOrder.length ? state.navOrder : loadStoredNavOrder());
-            state.navOrder = order;
-            storeNavOrder(order);
-            const html = order.map((view) => {
-                const item = navByView.get(view);
-                if (!item) {
-                    return "";
-                }
+            const generalItems = visibleGeneralNavItems();
+            const adminItems = visibleAdminNavItems();
+
+            // General nav
+            const generalByView = new Map(generalItems.map((item) => [item.view, item]));
+            const storedOrder = state.navOrder && state.navOrder.length ? state.navOrder : loadStoredNavOrder();
+            const generalOrder = sanitizeNavOrder(storedOrder).filter((view) => generalByView.has(view));
+            // Ensure all general items are present in order
+            generalItems.forEach((item) => {
+                if (!generalOrder.includes(item.view)) generalOrder.push(item.view);
+            });
+            state.navOrder = sanitizeNavOrder(storedOrder);
+            storeNavOrder(state.navOrder);
+            const generalHtml = generalOrder.map((view) => {
+                const item = generalByView.get(view);
+                if (!item) return "";
                 const active = view === state.currentView ? " active" : "";
                 return "<button type=\"button\" data-view=\"" + item.view + "\" class=\"" + active.trim() + "\" draggable=\"true\">" +
                     "<span class=\"nav-icon\">" + item.icon + "</span><span>" + escapeHTML(item.label) + "</span></button>";
             }).join("");
-            setInnerHTMLIfChanged(els.mainNav, html);
+            setInnerHTMLIfChanged(els.mainNav, generalHtml);
+
+            // Admin nav
+            const adminNavEl = document.getElementById("admin-nav");
+            const adminSection = document.querySelector(".nav-admin-section");
+            if (adminSection) {
+                adminSection.style.display = adminItems.length ? "" : "none";
+            }
+            if (adminNavEl) {
+                const adminHtml = adminItems.map((item) => {
+                    const active = item.view === state.currentView ? " active" : "";
+                    return "<button type=\"button\" data-view=\"" + item.view + "\" class=\"" + active.trim() + "\" draggable=\"true\">" +
+                        "<span class=\"nav-icon\">" + item.icon + "</span><span>" + escapeHTML(item.label) + "</span></button>";
+                }).join("");
+                setInnerHTMLIfChanged(adminNavEl, adminHtml);
+            }
         }
 
         function storeSelectedView(viewName) {
@@ -1340,6 +1377,16 @@
                 }
                 switchView(button.dataset.view);
             });
+            const adminNavEl = document.getElementById("admin-nav");
+            if (adminNavEl) {
+                adminNavEl.addEventListener("click", (event) => {
+                    const button = event.target.closest("button[data-view]");
+                    if (!button) {
+                        return;
+                    }
+                    switchView(button.dataset.view);
+                });
+            }
             els.mainNav.addEventListener("dragstart", (event) => {
                 const button = event.target.closest("button[data-view]");
                 if (!button) {
@@ -1409,7 +1456,7 @@
             if (settings.persist !== false) {
                 storeSelectedView(viewName);
             }
-            els.mainNav.querySelectorAll("button[data-view]").forEach((button) => {
+            document.querySelectorAll("#main-nav button[data-view], #admin-nav button[data-view]").forEach((button) => {
                 button.classList.toggle("active", button.dataset.view === viewName);
             });
             document.querySelectorAll(".view").forEach((view) => {
@@ -1856,6 +1903,9 @@
                     state.selectedTeamID = state.teams.length ? state.teams[0].id : null;
                 }
                 state.selectedTeamDraft = getCurrentTeam() ? structuredClone(getCurrentTeam()) : emptyTeam();
+                if (state.selectedTeamID) {
+                    await fetchTeamMembers(state.selectedTeamID);
+                }
             } catch (error) {
                 state.teams = [];
             }
@@ -1901,7 +1951,7 @@
 
         async function refreshAll() {
             await loadStatus();
-            await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans(), loadPasskeys()]);
+            await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans(), loadPasskeys(), fetchUsers()]);
             await loadConfigSettings();
             renderProjectMenu();
             populateWorkflowSelects();
@@ -2031,6 +2081,8 @@
             renderRoles();
             renderAgents();
             renderTeams();
+            renderUsers();
+            renderTeamMembers();
             renderTicketBoard();
             renderInterventions();
             renderEditors();
@@ -3099,6 +3151,72 @@
                     "<p>" + escapeHTML(parent ? ("Parent: " + parent.name) : "Top-level team") + "</p>" +
                     "</div>";
             }).join("");
+        }
+
+        function renderUsers() {
+            if (!els.userList) return;
+            if (!state.users || !state.users.length) {
+                els.userList.innerHTML = "<div class=\"empty\">No users.</div>";
+                return;
+            }
+            els.userList.innerHTML = state.users.map((u) => {
+                const roleChip = "<span class=\"chip\">" + escapeHTML(u.role || "user") + "</span>";
+                const statusChip = u.enabled === false
+                    ? "<span class=\"chip chip-danger\">disabled</span>"
+                    : "<span class=\"chip chip-success\">active</span>";
+                return "<div class=\"entity-card\" data-user-id=\"" + escapeHTML(String(u.id || u.username)) + "\">" +
+                    "<h4>" + escapeHTML(u.username) + "</h4>" +
+                    "<p>" + escapeHTML(u.email || "") + "</p>" +
+                    "<div class=\"tag-row\">" + roleChip + statusChip + "</div>" +
+                    "</div>";
+            }).join("");
+        }
+
+        async function fetchUsers() {
+            if (!isAdmin()) return;
+            try {
+                state.users = await apiClient.listUsers();
+                renderUsers();
+            } catch (e) {
+                console.error("fetchUsers:", e);
+            }
+        }
+
+        function renderTeamMembers() {
+            if (!els.teamMemberList) return;
+            if (!state.teamMembers || !state.teamMembers.length) {
+                els.teamMemberList.innerHTML = "<div class=\"empty\">No members yet.</div>";
+                return;
+            }
+            els.teamMemberList.innerHTML = state.teamMembers.map((m) => {
+                return "<div class=\"entity-card\" data-team-member-id=\"" + escapeHTML(String(m.user_id)) + "\">" +
+                    "<div style=\"display:flex;align-items:center;justify-content:space-between\">" +
+                    "<div><h4>" + escapeHTML(m.username || String(m.user_id)) + "</h4>" +
+                    "<p>" + escapeHTML(m.job_title || "") + "</p></div>" +
+                    "<div class=\"tag-row\"><span class=\"chip\">" + escapeHTML(m.role) + "</span>" +
+                    "<button class=\"btn btn-danger btn-sm\" type=\"button\" data-remove-team-member=\"" + escapeHTML(String(m.user_id)) + "\">Remove</button>" +
+                    "</div></div>" +
+                    "</div>";
+            }).join("");
+        }
+
+        async function fetchTeamMembers(teamID) {
+            try {
+                state.teamMembers = await apiClient.getTeamMembers(teamID);
+                renderTeamMembers();
+                populateTeamInviteUsers();
+            } catch (e) {
+                console.error("fetchTeamMembers:", e);
+            }
+        }
+
+        function populateTeamInviteUsers() {
+            if (!els.teamInviteUserSelect) return;
+            const existing = new Set((state.teamMembers || []).map((m) => String(m.user_id)));
+            const available = (state.users || []).filter((u) => !existing.has(String(u.id || u.username)));
+            els.teamInviteUserSelect.innerHTML = available.length
+                ? available.map((u) => "<option value=\"" + escapeHTML(String(u.id || u.username)) + "\">" + escapeHTML(u.username) + "</option>").join("")
+                : "<option value=\"\">No users available</option>";
         }
 
         function renderTicketBoard() {
@@ -5503,6 +5621,9 @@
                 state.selectedTeamID = Number(card.dataset.teamId);
                 state.selectedTeamDraft = getCurrentTeam() ? structuredClone(getCurrentTeam()) : emptyTeam();
                 renderAll();
+                if (state.selectedTeamID) {
+                    fetchTeamMembers(state.selectedTeamID);
+                }
             });
 
             document.getElementById("new-team-button").addEventListener("click", () => {
@@ -5556,6 +5677,34 @@
                     setNotice(error.message, true);
                 }
             });
+
+            if (els.teamInviteButton) {
+                els.teamInviteButton.addEventListener("click", async () => {
+                    const userID = els.teamInviteUserSelect && els.teamInviteUserSelect.value;
+                    const role = (els.teamInviteRole && els.teamInviteRole.value) || "member";
+                    if (!userID || !state.selectedTeamID) return;
+                    try {
+                        await apiClient.addTeamMember(state.selectedTeamID, userID, role);
+                        await fetchTeamMembers(state.selectedTeamID);
+                    } catch (e) {
+                        setNotice(e.message, true);
+                    }
+                });
+            }
+
+            if (els.teamMemberList) {
+                els.teamMemberList.addEventListener("click", async (e) => {
+                    const btn = e.target.closest("[data-remove-team-member]");
+                    if (!btn || !state.selectedTeamID) return;
+                    const userID = btn.dataset.removeTeamMember;
+                    try {
+                        await apiClient.removeTeamMember(state.selectedTeamID, userID);
+                        await fetchTeamMembers(state.selectedTeamID);
+                    } catch (e) {
+                        setNotice(e.message, true);
+                    }
+                });
+            }
         }
 
         function bindTicketsHandlers() {
