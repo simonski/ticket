@@ -4,6 +4,12 @@
 (function () {
   'use strict';
 
+  // Skip animation if user already has a valid session
+  try {
+    var _r = sessionStorage.getItem('site2.auth');
+    if (_r) { var _a = JSON.parse(_r); if (_a && _a.token) { document.documentElement.classList.remove('landing-active'); return; } }
+  } catch(e) {}
+
   // ── Perlin noise (classic 2D) ──────────────────────────────────────
   var perm = new Uint8Array(512);
   var grad3 = [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];

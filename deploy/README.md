@@ -50,3 +50,13 @@ Follow logs:
 ```bash
 docker compose --env-file ./.env -f ./compose.yaml logs -f
 ```
+
+## Upgrading the database
+
+The `tk` binary (deployed to `~/tk`) can run database migrations directly on the host:
+
+```bash
+~/tk migrate
+```
+
+Run this before restarting the container after an upgrade that includes schema changes.

@@ -38,6 +38,15 @@ func ticketSortKey(t store.Ticket) int {
 	return s
 }
 
+// ticketIDSeq returns the numeric sequence suffix from a ticket ID like "PRJ-42".
+func ticketIDSeq(id string) int {
+	if i := strings.LastIndex(id, "-"); i >= 0 {
+		n, _ := strconv.Atoi(id[i+1:])
+		return n
+	}
+	return 0
+}
+
 func effectiveTicketUpdatedAt(tickets []store.Ticket) map[string]string {
 	byID := make(map[string]store.Ticket, len(tickets))
 	children := make(map[string][]string, len(tickets))
@@ -903,7 +912,29 @@ func runGet(args []string) error {
 	}
 	ticketRef := strings.TrimSpace(*id)
 	if ticketRef == "" {
-		return errors.New("usage: " + usage)
+		// No ID: fall back to the most recently updated ticket in the project.
+		if cfg.ProjectID == "" {
+			return errors.New("usage: " + usage)
+		}
+		project, err := svc.GetProject(context.Background(), cfg.ProjectID)
+		if err != nil {
+			return err
+		}
+		tickets, err := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, false)
+		if err != nil {
+			return err
+		}
+		if len(tickets) == 0 {
+			return errors.New("no tickets in project")
+		}
+		latest := tickets[0]
+		for _, t := range tickets[1:] {
+			if t.UpdatedAt > latest.UpdatedAt ||
+				(t.UpdatedAt == latest.UpdatedAt && ticketIDSeq(t.ID) > ticketIDSeq(latest.ID)) {
+				latest = t
+			}
+		}
+		ticketRef = latest.ID
 	}
 	ticketRef = normalizeBareTicketRef(cfg, svc, ticketRef)
 	ticket, err := svc.GetTicket(context.Background(), ticketRef)

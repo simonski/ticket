@@ -1,4 +1,4 @@
-.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-js test-api-cli test-browser test-browser-smoke test-browser-full test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint vulncheck ci-bootstrap ci-bootstrap-verify ci-bootstrap-browser ci-bootstrap-publish ci ci-verify ci-browser ci-publish clean release release-prepare release-build release-checksums release-formula homebrew release-sbom release-publish release-clean docker docker-push publish docker-up docker-down deploy
+.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-cli test-browser test-browser-smoke test-browser-full test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint vulncheck ci-bootstrap ci-bootstrap-verify ci-bootstrap-browser ci-bootstrap-publish ci ci-verify ci-browser ci-publish clean release release-prepare release-build release-checksums release-formula homebrew release-sbom release-publish release-clean docker docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -40,9 +40,8 @@ help:
 	@printf "  make test-cli        Run CLI package tests.\n"
 	@printf "  make test-contract   Run libticket contract tests.\n"
 	@printf "  make test-store      Run store package tests.\n"
-	@printf "  make test-api-js     Run JavaScript API client-library tests.\n"
 	@printf "  make test-api-cli    Run CLI/API interface tests (cmd + client + server + contract).\n"
-	@printf "  make test-api        Run both API interface suites (js + cli).\n"
+	@printf "  make test-api        Alias for test-api-cli.\n"
 	@printf "  make test-browser    Run the fast browser smoke suite.\n"
 	@printf "  make test-browser-full Run the full browser end-to-end suite.\n"
 	@printf "  make test-browser-smoke Alias for make test-browser.\n"
@@ -159,9 +158,9 @@ PLAYWRIGHT_SMOKE_SPECS := tests/playwright/auth.spec.js tests/playwright/home.sp
 
 test: test-unit
 
-test-fast: test-unit test-api-js test-api-smoke
+test-fast: test-unit test-api-smoke
 
-test-all: test-unit test-api test-browser-full build-bin test-quickstart-bin test-final-shell-bin
+test-all: test-unit test-api-cli test-browser-full build-bin test-quickstart-bin test-final-shell-bin
 
 test-go:
 	TICKET_FAST_HASH=1 go test ./...
@@ -193,10 +192,7 @@ test-api-cli:
 	@$(MAKE) test-cli
 	@$(MAKE) test-contract
 
-test-api-js:
-	node --test web/site2/api.test.js
-
-test-api: test-api-js test-api-cli
+test-api: test-api-cli
 
 ci-bootstrap: ci-bootstrap-verify ci-bootstrap-browser
 
@@ -206,7 +202,7 @@ ci-bootstrap-browser: setup-node setup-playwright
 
 ci-bootstrap-publish: setup-go
 
-ci-verify: validate-openapi test-go-cover test-api-js build-dev lint vulncheck
+ci-verify: validate-openapi test-go-cover build-dev lint vulncheck
 
 ci-browser: test-browser-full
 
@@ -432,15 +428,16 @@ dev:
 	@echo "\nAnd you are now in a position to extend ticket itself.\n"
 
 
-deploy:
+deploy: build-linux
 	@echo "Deploying assets to exe.dev..."
 	@if [ -z "$(EXE_DEV_URL)" ]; then \
 		echo "Error: EXE_DEV_URL environment variable not set"; \
 		echo "Usage: EXE_DEV_URL=user@host make deploy"; \
 		exit 1; \
 	fi
-	@echo "compose.yaml, env.template, and README.md to $(EXE_DEV_URL):~/"
+	@echo "Copying compose.yaml, env.template, README.md, and tk binary to $(EXE_DEV_URL):~/"
 	@scp deploy/compose.yaml deploy/env.template deploy/README.md $(EXE_DEV_URL):~/
+	@scp bin/tk-linux $(EXE_DEV_URL):~/tk
 	@echo ""
 	@echo "✓ Deployed to $(EXE_DEV_URL):~/"
 	@echo ""

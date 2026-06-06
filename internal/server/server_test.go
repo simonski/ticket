@@ -17,6 +17,7 @@ import (
 
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/internal/testutil"
+	"github.com/simonski/ticket/web"
 )
 
 type hijackableResponseWriter struct {
@@ -381,11 +382,11 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFrom() error = %v", err)
 	}
-	if !strings.Contains(string(body), "<title>ticket board</title>") {
+	if !strings.Contains(string(body), "<title>ticket</title>") {
 		t.Fatalf("root response missing embedded frontend")
 	}
-	if !strings.Contains(string(body), "<style nonce=\"") || !strings.Contains(string(body), "<script nonce=\"") {
-		t.Fatalf("root response missing CSP nonce injection")
+	if !strings.Contains(string(body), "<script nonce=\"") {
+		t.Fatalf("root response missing CSP nonce injection on script tag")
 	}
 }
 
@@ -399,7 +400,7 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 	}
 	defer db.Close()
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "", "site2")
+	srv, err := New(":0", db, "1.2.3", false, nil, "", web.DefaultSite)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -427,8 +428,8 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 	if !strings.Contains(string(body), `id="version-overlay"`) {
 		t.Fatalf("root response missing version overlay")
 	}
-	if !strings.Contains(string(body), `href="/site2.css"`) {
-		t.Fatalf("root response missing absolute site2 stylesheet path")
+	if !strings.Contains(string(body), `href="/site.css"`) {
+		t.Fatalf("root response missing absolute site.css stylesheet path")
 	}
 	if !strings.Contains(string(body), `src="/api.js"`) {
 		t.Fatalf("root response missing absolute api.js path")
@@ -437,17 +438,17 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 		t.Fatalf("root response missing absolute app.js path")
 	}
 
-	assetReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/site2.css", http.NoBody)
+	assetReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/site.css", http.NoBody)
 	if err != nil {
-		t.Fatalf("NewRequestWithContext(/site2.css) error = %v", err)
+		t.Fatalf("NewRequestWithContext(/site.css) error = %v", err)
 	}
 	assetResp, err := http.DefaultClient.Do(assetReq)
 	if err != nil {
-		t.Fatalf("GET /site2.css error = %v", err)
+		t.Fatalf("GET /site.css error = %v", err)
 	}
 	defer assetResp.Body.Close()
 	if assetResp.StatusCode != http.StatusOK {
-		t.Fatalf("GET /site2.css status = %d, want 200", assetResp.StatusCode)
+		t.Fatalf("GET /site.css status = %d, want 200", assetResp.StatusCode)
 	}
 }
 

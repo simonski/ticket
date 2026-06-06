@@ -444,7 +444,7 @@ func spaHandler(next http.Handler, staticFS fs.FS) http.Handler {
 			indexHTML := string(data)
 			if nonce != "" {
 				indexHTML = strings.Replace(indexHTML, "<style>", fmt.Sprintf(`<style nonce=%q>`, nonce), 1)
-				indexHTML = strings.Replace(indexHTML, "<script>", fmt.Sprintf(`<script nonce=%q>`, nonce), 1)
+				indexHTML = strings.ReplaceAll(indexHTML, "<script>", fmt.Sprintf(`<script nonce=%q>`, nonce))
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache")

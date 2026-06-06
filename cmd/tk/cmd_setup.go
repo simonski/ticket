@@ -684,7 +684,7 @@ func runServer(args []string) error {
 	port := fs.Int("p", 0, "HTTP listen port (shorthand for -addr :<port>)")
 	verbose := fs.Bool("v", false, "print verbose request/response logs to stdout")
 	staticPath := fs.String("path", "", "serve static files from this filesystem path instead of embedded assets")
-	siteName := fs.String("site", web.Site2, "embedded site bundle to serve (default or site2)")
+	siteName := fs.String("site", web.DefaultSite, "embedded site bundle to serve")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -727,7 +727,7 @@ func runServer(args []string) error {
 
 	selectedSite := strings.TrimSpace(*siteName)
 	if selectedSite == "" {
-		selectedSite = web.Site2
+		selectedSite = web.DefaultSite
 	}
 
 	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout, *staticPath, selectedSite)
