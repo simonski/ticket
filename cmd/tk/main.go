@@ -122,6 +122,8 @@ func run(args []string) error {
 		return runSkill(trimmedArgs[1:])
 	case "docker-compose":
 		return runDockerCompose(trimmedArgs[1:])
+	case "init":
+		return runInitProject(trimmedArgs[1:])
 	case "initdb":
 		return runInitDB(trimmedArgs[1:])
 	case "server":
@@ -322,7 +324,7 @@ func shouldRouteToActionNamespace(args []string) bool {
 	}
 	switch command {
 	case "help", "version", "upgrade", "upgrade-database", "status", "whoami",
-		"login", "logout", "register", "initdb", "server",
+		"login", "logout", "register", "init", "initdb", "server",
 		"config", "project", "workflow", "team", "user", "role", "idea", "decision",
 		"story", "goal", "document", "label", "dep", "time", "doctor", "summary",
 		"agent", "work-item", "onboard", "skill", "docker-compose":

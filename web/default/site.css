@@ -797,7 +797,7 @@ select {
     display: none;
 }
 .dropdown.open { display: block; }
-.project-dropdown { min-width: 220px; }
+.project-dropdown { min-width: 220px; left: 0; right: auto; }
 
 .dropdown-label {
     padding: 10px 12px 7px;

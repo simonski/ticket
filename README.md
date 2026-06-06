@@ -1,21 +1,10 @@
 # ticket
 
-`ticket` is an issue tracking toolkit for agentic software engineering.  It is "batteries included" - providing a CLI, server, terminal UI, an agent SKILL and a REST API — backed by SQLite.
+The ticket system `tk` is an issue tracking toolkit for agentic software engineering.  It is "batteries included" - providing a CLI, server, terminal UI, an agent SKILL and a REST API — backed by SQLite.
 
 ---
 
 ## Introduction
-
-`tk` tracks engineering work through a lightweight lifecycle:
-
-| Concept | Example |
-|---------|---------|
-| Project | `CUS` — Customer Portal |
-| Ticket key | `CUS-42` |
-| Ticket types | `epic`, `task`, `bug`, `story`, `spike`, `chore`, `note`, `question`, `requirement`, `decision` |
-| Lifecycle | `stage/state` — e.g. `develop/active` |
-| Stages | `design → develop → test → done` |
-| States | `idle`, `active`, `success`, `fail` |
 
 It operates as a client/server system:
 

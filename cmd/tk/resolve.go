@@ -37,17 +37,16 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 	if err != nil {
 		return config.Config{}, nil, store.Project{}, err
 	}
-	projectID := resolveConfiguredProjectReference(cfg)
-	if projectID != "" {
-		cfg.ProjectID = projectID
+	explicitRef := resolveConfiguredProjectReference(cfg)
+	if explicitRef != "" {
+		cfg.ProjectID = explicitRef
 	}
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return config.Config{}, nil, store.Project{}, err
 	}
 
-	projectID = strings.TrimSpace(cfg.ProjectID)
-	project, projectRef, err := resolveProjectContext(context.Background(), cfg, svc, projectID)
+	project, projectRef, err := resolveProjectContext(context.Background(), cfg, svc, explicitRef)
 	if err != nil {
 		return config.Config{}, nil, store.Project{}, err
 	}
@@ -55,6 +54,12 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 	return cfg, svc, project, nil
 }
 
+// resolveProjectContext determines which project a CLI command targets.
+//
+// Resolution order:
+//  1. Explicit ref from -project_id flag or TICKET_PROJECT env.
+//  2. Nearest git remote (walking up to home dir) matched against registered repositories.
+//  3. The caller's configured default project.
 func resolveProjectContext(ctx context.Context, cfg config.Config, svc libticket.Service, configuredRef string) (store.Project, string, error) {
 	if ref := strings.TrimSpace(configuredRef); ref != "" {
 		project, err := svc.GetProject(ctx, ref)
@@ -72,15 +77,7 @@ func resolveProjectContext(ctx context.Context, cfg config.Config, svc libticket
 			return store.Project{}, "", err
 		}
 	}
-	if project, err := svc.GetMyDefaultProject(ctx); err == nil {
-		return project, project.Prefix, nil
-	} else if !errors.Is(err, store.ErrProjectNotFound) {
-		return store.Project{}, "", err
-	}
-	if project, err := svc.GetProject(ctx, "private"); err == nil {
-		return project, project.Prefix, nil
-	}
-	project, err := mostRecentProject(svc)
+	project, err := svc.GetMyDefaultProject(ctx)
 	if err != nil {
 		return store.Project{}, "", err
 	}

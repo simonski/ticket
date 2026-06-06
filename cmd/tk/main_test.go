@@ -2169,39 +2169,27 @@ func TestRunInitRequiresGitRepository(t *testing.T) {
 
 	err := run([]string{"init"})
 	if err == nil {
-		t.Fatal("run(init) error = nil, want unknown command")
+		t.Fatal("run(init) error = nil, want git-repository error")
 	}
-	if !strings.Contains(err.Error(), `no such command "init"`) {
-		t.Fatalf("run(init) error = %v, want unknown command", err)
+	if !strings.Contains(err.Error(), "git repository") {
+		t.Fatalf("run(init) error = %v, want message about git repository", err)
 	}
 }
 
-func TestRunInitDoesNotTreatAncestorTicketHomeAsProjectRoot(t *testing.T) {
+func TestRunInitFailsWithoutGitRemote(t *testing.T) {
 	baseDir := t.TempDir()
-	homeDir := filepath.Join(baseDir, "home")
-	repoDir := filepath.Join(homeDir, "code", "repo")
-	t.Setenv("TICKET_HOME", filepath.Join(homeDir, ".ticket"))
-	if err := os.MkdirAll(filepath.Join(homeDir, ".ticket"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(home .ticket) error = %v", err)
-	}
+	repoDir := filepath.Join(baseDir, "repo")
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
 		t.Fatalf("MkdirAll(repo .git) error = %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(repoDir, ".ticket"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(repo .ticket) error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: "CUS"}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
 	setTestWorkingDir(t, repoDir)
 
-	output := captureStdout(t, func() {
-		if err := run([]string{"init"}); err == nil || !strings.Contains(err.Error(), `no such command "init"`) {
-			t.Fatalf("run(init) error = %v", err)
-		}
-	})
-	if strings.Contains(output, "project is already initialised") {
-		t.Fatalf("run(init) output = %q, want no init output", output)
+	err := run([]string{"init"})
+	if err == nil {
+		t.Fatal("run(init) error = nil, want git-repository error")
+	}
+	if !strings.Contains(err.Error(), "git repository") {
+		t.Fatalf("run(init) error = %v, want message about git repository", err)
 	}
 }
 
@@ -2253,13 +2241,7 @@ func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 	if summaryProjectID == 0 {
 		t.Fatalf("summary project not found in %+v", projects)
 	}
-	repoDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: fmt.Sprintf("%d", summaryProjectID)}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_PROJECT", fmt.Sprintf("%d", summaryProjectID))
 	createLocalTask(t, []string{"add", "Summary task one"})
 
 	statusOut := captureStdout(t, func() {
@@ -3346,18 +3328,8 @@ func TestRunListRepoResolvedProjectHeader(t *testing.T) {
 		t.Fatalf("GetProject(REP) error = %v", err)
 	}
 
-	repoDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: strconv.FormatInt(project.ID, 10)}); err != nil {
-		t.Fatalf("SaveProjectConfigAt(project) error = %v", err)
-	}
-	createLocalTask(t, []string{"add", "Repo resolved task"})
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
-		t.Fatalf("SaveProjectConfigAt(blank) error = %v", err)
-	}
 	setTestGitOrigin(t, "https://github.com/example/repo-list.git")
+	createLocalTask(t, []string{"add", "Repo resolved task"})
 
 	output := captureStdout(t, func() {
 		if err := run([]string{"ls", "-nocolor"}); err != nil {
@@ -3386,13 +3358,7 @@ func TestRunListEmptyStateIncludesProjectContext(t *testing.T) {
 		t.Fatalf("GetProject(EMP) error = %v", err)
 	}
 
-	repoDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: strconv.FormatInt(project.ID, 10)}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_PROJECT", strconv.FormatInt(project.ID, 10))
 
 	output := captureStdout(t, func() {
 		if err := run([]string{"ls", "-t", "bug"}); err != nil {
@@ -5988,24 +5954,23 @@ func TestRunProjectSetDraftSupportsPrivateAlias(t *testing.T) {
 	}
 }
 
-func TestResolveGUIProjectSupportsPrivateAlias(t *testing.T) {
+func TestResolveGUIProjectUsesDefaultProject(t *testing.T) {
 	setupLocalCLI(t)
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	cfg.ProjectID = "private"
 	svc := localCLIService(t)
 
 	resolvedCfg, project, err := resolveGUIProject(context.Background(), cfg, svc)
 	if err != nil {
-		t.Fatalf("resolveGUIProject(private) error = %v", err)
+		t.Fatalf("resolveGUIProject() error = %v", err)
 	}
 	if project.ID == 0 || project.Prefix != "PRIV" {
-		t.Fatalf("resolveGUIProject(private) project = %#v", project)
+		t.Fatalf("resolveGUIProject() project = %#v", project)
 	}
-	if resolvedCfg.ProjectID == "" || resolvedCfg.ProjectID == "private" {
-		t.Fatalf("resolved cfg.ProjectID = %q, want numeric project id", resolvedCfg.ProjectID)
+	if resolvedCfg.ProjectID == "" {
+		t.Fatalf("resolved cfg.ProjectID is empty, want a numeric project id")
 	}
 }
 
@@ -6343,11 +6308,18 @@ func setupLocalCLI(t *testing.T) {
 	}
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
+	// Set the admin user's default project so resolveProjectContext can find it
+	// via GetMyDefaultProject (step 3 of the resolution chain). Do this directly
+	// on the DB before the HTTP server starts to avoid env-variable races.
+	adminUser, err := store.GetUserByUsername(context.Background(), db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+	if err := store.SetUserDefaultProject(context.Background(), db, adminUser.ID, 1); err != nil {
+		t.Fatalf("SetUserDefaultProject(1) error = %v", err)
+	}
 	t.Setenv("TICKET_URL", ts.URL)
 	setTestLocation(t, ts.URL)
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: "1"}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
 }
 
 func createLegacyDatabaseForCLI(t *testing.T) (string, string) {
@@ -6800,6 +6772,188 @@ func TestResolveCurrentProjectClientMatchesCanonicalGitOriginAcrossProjectReposi
 	}
 	if cfg.ProjectID != project.Prefix {
 		t.Fatalf("resolved cfg.ProjectID = %q, want %q", cfg.ProjectID, project.Prefix)
+	}
+}
+
+// TestResolveProjectContextUsesGitRemoteOverDefault verifies that when the
+// current directory's git origin is registered to a project, that project is
+// returned instead of the user's default project.
+func TestResolveProjectContextUsesGitRemoteOverDefault(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+
+	// Create a second project with a registered git repository.
+	repoURL := "https://example.com/git-detection-test.git"
+	gitProject, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix:        "GIT",
+		Title:         "Git Detection Project",
+		GitRepository: repoURL,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	// Simulate being in a directory whose git origin matches the registered URL.
+	gitOriginByRoot.Store(repoDir, repoURL)
+	t.Cleanup(func() { gitOriginByRoot.Delete(repoDir) })
+
+	_, _, resolvedProject, err := resolveCurrentProjectClient()
+	if err != nil {
+		t.Fatalf("resolveCurrentProjectClient() error = %v", err)
+	}
+	if resolvedProject.Prefix != gitProject.Prefix {
+		t.Fatalf("resolveCurrentProjectClient().Prefix = %q, want %q (git-detected project)", resolvedProject.Prefix, gitProject.Prefix)
+	}
+}
+
+// TestResolveProjectContextFallsBackToDefaultWhenNoGitMatch verifies that when
+// no git remote matches a registered project, the user's default project is used.
+func TestResolveProjectContextFallsBackToDefaultWhenNoGitMatch(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+
+	// Simulate a git origin that is NOT registered to any project.
+	gitOriginByRoot.Store(repoDir, "https://example.com/unregistered-repo.git")
+	t.Cleanup(func() { gitOriginByRoot.Delete(repoDir) })
+
+	defaultProject, err := svc.GetMyDefaultProject(context.Background())
+	if err != nil {
+		t.Fatalf("GetMyDefaultProject() error = %v", err)
+	}
+
+	_, _, resolvedProject, err := resolveCurrentProjectClient()
+	if err != nil {
+		t.Fatalf("resolveCurrentProjectClient() error = %v", err)
+	}
+	if resolvedProject.ID != defaultProject.ID {
+		t.Fatalf("resolveCurrentProjectClient().ID = %d, want %d (default project)", resolvedProject.ID, defaultProject.ID)
+	}
+}
+
+// TestResolveProjectContextExplicitFlagOverridesGit verifies that an explicit
+// -project_id flag takes precedence over git-based detection.
+func TestResolveProjectContextExplicitFlagOverridesGit(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+
+	// Create a second project with a registered git repository.
+	repoURL := "https://example.com/explicit-override-test.git"
+	_, err = svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix:        "OVR",
+		Title:         "Override Test Project",
+		GitRepository: repoURL,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	// Simulate git origin matching OVR project.
+	gitOriginByRoot.Store(repoDir, repoURL)
+	t.Cleanup(func() { gitOriginByRoot.Delete(repoDir) })
+
+	// Explicit -project_id PRIV should override the git-detected OVR project.
+	setProjectOverride("PRIV")
+	t.Cleanup(clearProjectOverride)
+
+	_, _, resolvedProject, err := resolveCurrentProjectClient()
+	if err != nil {
+		t.Fatalf("resolveCurrentProjectClient() error = %v", err)
+	}
+	if resolvedProject.Prefix != "PRIV" {
+		t.Fatalf("resolveCurrentProjectClient().Prefix = %q, want %q (explicit flag)", resolvedProject.Prefix, "PRIV")
+	}
+}
+
+// TestRunInitProjectCreatesProjectForGitRepo verifies that tk init creates a
+// new project and registers the current git repository to it.
+func TestRunInitProjectCreatesProjectForGitRepo(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+
+	repoURL := "https://example.com/new-init-project.git"
+	gitOriginByRoot.Store(repoDir, repoURL)
+	t.Cleanup(func() { gitOriginByRoot.Delete(repoDir) })
+
+	output := captureStdout(t, func() {
+		if runErr := runInitProject([]string{"-name", "Init Test Project", "-prefix", "INI"}); runErr != nil {
+			t.Fatalf("runInitProject() error = %v", runErr)
+		}
+	})
+
+	if !strings.Contains(output, "INI") {
+		t.Fatalf("runInitProject() output missing project prefix INI:\n%s", output)
+	}
+
+	project, err := svc.FindProjectByGitRepository(context.Background(), repoURL)
+	if err != nil {
+		t.Fatalf("FindProjectByGitRepository() after init error = %v", err)
+	}
+	if project.Prefix != "INI" {
+		t.Fatalf("FindProjectByGitRepository().Prefix = %q, want INI", project.Prefix)
+	}
+}
+
+// TestRunInitProjectFailsWhenRepoAlreadyRegistered verifies that tk init
+// fails with an informative error when the git repository is already assigned.
+func TestRunInitProjectFailsWhenRepoAlreadyRegistered(t *testing.T) {
+	setupLocalCLI(t)
+
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+
+	repoURL := "https://example.com/already-registered.git"
+	gitOriginByRoot.Store(repoDir, repoURL)
+	t.Cleanup(func() { gitOriginByRoot.Delete(repoDir) })
+
+	// First init succeeds.
+	if err := runInitProject([]string{"-name", "First Project", "-prefix", "FST"}); err != nil {
+		t.Fatalf("first runInitProject() error = %v", err)
+	}
+
+	// Second init must fail with an explanation.
+	err = runInitProject([]string{"-name", "Second Project", "-prefix", "SND"})
+	if err == nil {
+		t.Fatal("second runInitProject() want error for already-registered repo, got nil")
+	}
+	if !strings.Contains(err.Error(), "already assigned") {
+		t.Fatalf("second runInitProject() error = %q, want it to mention 'already assigned'", err.Error())
+	}
+}
+
+// TestRunInitProjectFailsWithNoGitRemote verifies that tk init fails when the
+// current directory is not inside a git repository with a remote origin.
+func TestRunInitProjectFailsWithNoGitRemote(t *testing.T) {
+	setupLocalCLI(t)
+	// repoDir from setupLocalCLI has a .git directory but no remote configured.
+	// gitOriginByRoot has no entry for it, so detectGitOriginAt returns "".
+	err := runInitProject(nil)
+	if err == nil {
+		t.Fatal("runInitProject() with no git remote want error, got nil")
+	}
+	if !strings.Contains(err.Error(), "git repository") {
+		t.Fatalf("runInitProject() error = %q, want it to mention 'git repository'", err.Error())
 	}
 }
 
@@ -9524,13 +9678,7 @@ func TestRunSummaryLocalMode(t *testing.T) {
 	if summaryProjectID == 0 {
 		t.Fatalf("summary project not found in %+v", projects)
 	}
-	repoDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: fmt.Sprintf("%d", summaryProjectID)}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_PROJECT", fmt.Sprintf("%d", summaryProjectID))
 
 	// Create a ticket so summary has data
 	createLocalTask(t, []string{"add", "Summary task one"})

@@ -31,7 +31,7 @@ Be kind, be constructive, assume good faith. See
 git clone https://github.com/simonski/ticket.git
 cd ticket
 make setup       # Go modules + Node + Playwright + dev tools
-make test        # All tests must pass before you start
+make test-all    # All tests must pass before you start
 ```
 
 > `make build` auto-increments the patch version in `cmd/tk/VERSION` on
@@ -47,7 +47,7 @@ See [docs/ONBOARDING.md](docs/ONBOARDING.md) for a full onboarding walkthrough.
 | Branch type | Pattern | Example |
 |-------------|---------|---------|
 | Feature | `feature/TK-XXX-short-description` | `feature/TK-42-add-labels` |
-| Bug fix | `fix/TK-XXX-short-description` | `fix/TK-99-session-expiry` |
+| Bug fix | `bug/TK-XXX-short-description` | `bug/TK-99-session-expiry` |
 | Documentation | `docs/short-description` | `docs/update-onboarding` |
 | Chore / refactor | `chore/short-description` | `chore/split-api-handlers` |
 
@@ -88,26 +88,11 @@ Rules:
 ### PR checklist (copy into your PR description)
 
 ```
-- [ ] Tests pass (`make test-go-cover`)
+- [ ] Tests pass (`make test-all`)
 - [ ] Lint passes (`make lint`)
 - [ ] Ticket ID in PR title
 - [ ] Documentation updated if behaviour changed
 - [ ] Coverage thresholds still met
-```
-
-### High-risk change checklist
-
-Use this for release-sensitive or high-blast-radius work such as auth/session
-changes, websocket/runtime changes, deploy/release changes, schema changes, or
-public contract updates.
-
-```
-- [ ] Added or updated focused tests for the changed risk area (not just broad regression runs)
-- [ ] Ran `make test-go-cover` after the change
-- [ ] Ran `go test ./internal/server -run <target>` or equivalent targeted package tests for server-facing changes
-- [ ] Ran `go test -race ./...` when touching concurrency, websocket, goroutines, or shared state
-- [ ] Ran `make validate-openapi` and updated `SPEC.md` / `USER_GUIDE.md` when changing public contracts
-- [ ] Updated operator docs (`docs/RUNBOOKS.md`, quickstarts, deploy docs) when deploy/runtime behavior changed
 ```
 
 ---
@@ -155,15 +140,3 @@ Coverage thresholds (enforced in CI):
   `Service` monolith. New feature sets should define their own sub-interface.
 - **SQL**: always use parameterised queries (`?` placeholders). Never
   interpolate user input into SQL strings.
-
----
-
-## Architecture decisions
-
-Significant design decisions are recorded as **decision tickets** in the
-tracker (`tk decision new "..."`) and summarised in
-[docs/DESIGN.md](docs/DESIGN.md).
-
-If you're proposing a change that affects the public `Service` interface,
-the OpenAPI spec, or the database schema, open a decision ticket first and
-discuss before implementing.

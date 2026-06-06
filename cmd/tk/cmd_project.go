@@ -881,3 +881,74 @@ func guardProjectClose(svc libticket.Service, projectID int64) error {
 	}
 	return nil
 }
+
+// runInitProject creates a new project for the nearest git repository and
+// registers that repository URL with the project. It fails if the repository
+// is already assigned to an existing project.
+func runInitProject(args []string) error {
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	nameFlag := fs.String("name", "", "project name (default: derived from repository URL)")
+	prefixFlag := fs.String("prefix", "", "project prefix, e.g. TK (default: derived from name)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	repo := nearestGitRemoteFromCLI()
+	if repo == "" {
+		return errors.New("tk init: not inside a git repository with a configured origin remote\nhint: run 'git remote add origin <url>' first")
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Reject if this repository is already registered.
+	if existing, findErr := svc.FindProjectByGitRepository(context.Background(), repo); findErr == nil {
+		return fmt.Errorf("repository %s is already assigned to project %q (%s)\nhint: use -project_id %s to target that project", repo, existing.Title, existing.Prefix, existing.Prefix)
+	} else if !errors.Is(findErr, store.ErrProjectNotFound) {
+		return findErr
+	}
+
+	projectName := strings.TrimSpace(*nameFlag)
+	if projectName == "" {
+		projectName = repoNameFromURL(repo)
+	}
+
+	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix:        strings.TrimSpace(*prefixFlag),
+		Title:         projectName,
+		GitRepository: repo,
+	})
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("created project %q (%s)\n", project.Title, project.Prefix)
+	fmt.Printf("registered repository %s\n", repo)
+	return nil
+}
+
+// repoNameFromURL extracts a human-readable name from a git remote URL.
+// "https://github.com/foo/myrepo.git" → "myrepo"
+func repoNameFromURL(url string) string {
+	url = strings.TrimSuffix(strings.TrimSpace(url), ".git")
+	if i := strings.LastIndex(url, "/"); i >= 0 {
+		name := url[i+1:]
+		if name != "" {
+			return name
+		}
+	}
+	if i := strings.LastIndex(url, ":"); i >= 0 {
+		name := url[i+1:]
+		if name != "" {
+			return name
+		}
+	}
+	return url
+}
