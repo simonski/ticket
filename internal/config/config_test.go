@@ -68,42 +68,22 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 }
 
-func TestLoadMigratesLegacyEpicID(t *testing.T) {
+func TestLoadMigratesLegacyConfig(t *testing.T) {
 	tempDir := setupConfigTestHome(t)
 
-	// Write config with numeric current_epic_id (legacy format)
 	configPath := filepath.Join(tempDir, "config.json")
-	if err := os.WriteFile(configPath, []byte(`{"current_epic_id": 42}`), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte(`{"tui_theme":"night"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.CurrentEpicID != "" {
-		t.Fatalf("Load().CurrentEpicID = %q, want empty because legacy active epic state is discarded", cfg.CurrentEpicID)
+	if cfg.TUITheme != "night" {
+		t.Fatalf("Load().TUITheme = %q, want night", cfg.TUITheme)
 	}
 	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
-		t.Fatalf("legacy config.json should be removed, err = %v", err)
-	}
-}
-
-func TestLoadMigratesLegacyEpicIDZero(t *testing.T) {
-	tempDir := setupConfigTestHome(t)
-
-	configPath := filepath.Join(tempDir, "config.json")
-	if err := os.WriteFile(configPath, []byte(`{"current_epic_id": 0}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.CurrentEpicID != "" {
-		t.Fatalf("Load().CurrentEpicID = %q, want empty for legacy 0", cfg.CurrentEpicID)
-	}
-	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
-		t.Fatalf("legacy config.json should be removed, err = %v", err)
+		t.Fatalf("legacy config.json should be removed after migration, err = %v", err)
 	}
 }
 
@@ -276,33 +256,6 @@ func TestLoadUsesDefaultRemoteAndStoredCredentials(t *testing.T) {
 	}
 }
 
-func TestLoadUsesProjectRemoteBinding(t *testing.T) {
-	tempDir := setupConfigTestHome(t)
-	repoDir := filepath.Join(tempDir, "repo")
-	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(.git) error = %v", err)
-	}
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatalf("Chdir(repoDir) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-	if err := SaveProjectConfigAt(repoDir, Config{Location: "https://tickets.example.com", ProjectID: "CUS"}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.Location != "https://tickets.example.com" {
-		t.Fatalf("Load().Location = %q, want project remote URL", cfg.Location)
-	}
-	if cfg.ProjectID != "CUS" {
-		t.Fatalf("Load().ProjectID = %q, want CUS", cfg.ProjectID)
-	}
-}
-
 func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
 	t.Setenv("TICKET_HOME", "")
 
@@ -383,87 +336,6 @@ func TestCredentialsStoredSeparately(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tempDir, "credentials.json")); !os.IsNotExist(err) {
 		t.Fatalf("credentials.json should be removed, err = %v", err)
-	}
-}
-
-func TestSaveProjectConfigAtStripsAuthFields(t *testing.T) {
-	setupConfigTestHome(t)
-
-	repoDir := filepath.Join(t.TempDir(), "repo")
-	if err := os.MkdirAll(repoDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(repoDir) error = %v", err)
-	}
-	if err := SaveProjectConfigAt(repoDir, Config{
-		Location:  "https://tickets.example.com",
-		Username:  "alice",
-		Token:     "secret-token",
-		ProjectID: "1",
-	}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
-
-	data, err := os.ReadFile(ProjectPathAtRoot(repoDir))
-	if err != nil {
-		t.Fatalf("ReadFile(project config) error = %v", err)
-	}
-	got := string(data)
-	for _, unwanted := range []string{"username", "alice", "token", "secret-token"} {
-		if strings.Contains(got, unwanted) {
-			t.Fatalf("project config should not contain %q:\n%s", unwanted, got)
-		}
-	}
-	for _, want := range []string{"https://tickets.example.com", "\"project_id\": \"1\""} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("project config missing %q:\n%s", want, got)
-		}
-	}
-}
-
-func TestLoadStripsLegacyProjectAuthFields(t *testing.T) {
-	setupConfigTestHome(t)
-
-	repoDir := filepath.Join(t.TempDir(), "repo")
-	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(.git) error = %v", err)
-	}
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatalf("Chdir(repoDir) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-
-	projectPath := ProjectPathAtRoot(repoDir)
-	if err := os.MkdirAll(filepath.Dir(projectPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(project config dir) error = %v", err)
-	}
-	raw := `{"version":1,"backend":"remote","location":"https://tickets.example.com","username":"alice","token":"secret-token","project_id":"1"}`
-	if err := os.WriteFile(projectPath, []byte(raw), 0o600); err != nil {
-		t.Fatalf("WriteFile(project config) error = %v", err)
-	}
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.Location != "https://tickets.example.com" {
-		t.Fatalf("Load().Location = %q, want remote location", cfg.Location)
-	}
-	if cfg.Username != "" {
-		t.Fatalf("Load().Username = %q, want empty because project config auth should be ignored", cfg.Username)
-	}
-	if cfg.Token != "" {
-		t.Fatalf("Load().Token = %q, want empty because project config auth should be ignored", cfg.Token)
-	}
-
-	data, err := os.ReadFile(projectPath)
-	if err != nil {
-		t.Fatalf("ReadFile(project config) error = %v", err)
-	}
-	got := string(data)
-	for _, unwanted := range []string{"username", "alice", "token", "secret-token"} {
-		if strings.Contains(got, unwanted) {
-			t.Fatalf("healed project config should not contain %q:\n%s", unwanted, got)
-		}
 	}
 }
 
@@ -697,32 +569,16 @@ func TestSaveAndClearRemoteCredentials(t *testing.T) {
 	}
 }
 
-func TestSaveWithProjectConfigSplitsGlobalAndProjectFields(t *testing.T) {
+func TestSavePreferencesDoesNotPersistServerOrProjectFields(t *testing.T) {
 	tempDir := setupConfigTestHome(t)
-	projectRoot := filepath.Join(tempDir, "repo")
-	if err := os.MkdirAll(filepath.Join(projectRoot, ".ticket"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(.ticket) error = %v", err)
-	}
-	if err := SaveProjectConfigAt(projectRoot, Config{}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(projectRoot); err != nil {
-		t.Fatalf("Chdir(projectRoot) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	if err := Save(Config{
-		TUITheme:             "night",
-		TUIMode:              "summary",
-		Location:             "https://tickets.example.com",
-		ProjectID:            "CUS",
-		CurrentEpicID:        "T-1",
-		DeleteConfirmToken:   "token",
-		DeleteConfirmProject: "CUS",
-		DeleteConfirmTicket:  "CUS-1",
-		Username:             "alice",
-		Token:                "secret",
+		TUITheme:  "night",
+		TUIMode:   "summary",
+		Location:  "https://tickets.example.com",
+		ProjectID: "CUS",
+		Username:  "alice",
+		Token:     "secret",
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -731,19 +587,15 @@ func TestSaveWithProjectConfigSplitsGlobalAndProjectFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(preferences) error = %v", err)
 	}
-	if strings.Contains(string(globalData), "secret") || strings.Contains(string(globalData), `"project_id": "CUS"`) || strings.Contains(string(globalData), "tickets.example.com") {
-		t.Fatalf("preferences leaked project/auth/server fields: %s", string(globalData))
+	for _, unwanted := range []string{"secret", `"project_id"`, "tickets.example.com", "alice"} {
+		if strings.Contains(string(globalData), unwanted) {
+			t.Fatalf("preferences leaked field %q: %s", unwanted, string(globalData))
+		}
 	}
-
-	projectData, err := os.ReadFile(filepath.Join(projectRoot, ".ticket", "config.json"))
-	if err != nil {
-		t.Fatalf("ReadFile(project config) error = %v", err)
-	}
-	if strings.Contains(string(projectData), `"current_epic_id": "T-1"`) || strings.Contains(string(projectData), `"delete_confirm_project": "CUS"`) {
-		t.Fatalf("project config should not be updated by Save(): %s", string(projectData))
-	}
-	if strings.Contains(string(projectData), "secret") {
-		t.Fatalf("project config leaked token: %s", string(projectData))
+	for _, want := range []string{"night", "summary"} {
+		if !strings.Contains(string(globalData), want) {
+			t.Fatalf("preferences missing %q: %s", want, string(globalData))
+		}
 	}
 }
 
@@ -790,18 +642,6 @@ func TestFindGitRootWalksUp(t *testing.T) {
 
 func TestPathsResolveUnderTicketHome(t *testing.T) {
 	tempDir := setupConfigTestHome(t)
-	repoDir := filepath.Join(tempDir, "repo")
-	if err := os.MkdirAll(filepath.Join(repoDir, ".ticket"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(.ticket) error = %v", err)
-	}
-	if err := SaveProjectConfigAt(repoDir, Config{}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatalf("Chdir(repoDir) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	if got, err := Path(); err != nil || got != filepath.Join(tempDir, "preferences.json") {
 		t.Fatalf("Path() = (%q, %v), want %q", got, err, filepath.Join(tempDir, "preferences.json"))
@@ -811,9 +651,6 @@ func TestPathsResolveUnderTicketHome(t *testing.T) {
 	}
 	if got, err := LocalDBPath(); err != nil || got != filepath.Join(tempDir, "ticket.db") {
 		t.Fatalf("LocalDBPath() = (%q, %v), want %q", got, err, filepath.Join(tempDir, "ticket.db"))
-	}
-	if got, ok, err := ProjectPath(); err != nil || !ok || !strings.HasSuffix(got, filepath.Join("repo", ".ticket", "config.json")) {
-		t.Fatalf("ProjectPath() = (%q, %v, %v), want repo-local .ticket config path", got, ok, err)
 	}
 }
 
@@ -888,44 +725,3 @@ func TestRemoteHelpersAndValidationBranches(t *testing.T) {
 	}
 }
 
-func TestProjectPathReturnsFalseWithoutTicketDir(t *testing.T) {
-	tempDir := setupConfigTestHome(t)
-	repoDir := filepath.Join(tempDir, "repo")
-	if err := os.MkdirAll(repoDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(repoDir) error = %v", err)
-	}
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatalf("Chdir(repoDir) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-
-	if got, ok, err := ProjectPath(); err != nil || ok || got != "" {
-		t.Fatalf("ProjectPath() = (%q, %v, %v), want empty false nil", got, ok, err)
-	}
-}
-
-func TestProjectPathIgnoresAncestorTicketHomeWithoutProjectConfig(t *testing.T) {
-	tempDir := t.TempDir()
-	homeDir := filepath.Join(tempDir, "home")
-	repoDir := filepath.Join(homeDir, "code", "repo")
-	if err := os.MkdirAll(filepath.Join(homeDir, ".ticket"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(home .ticket) error = %v", err)
-	}
-	t.Setenv("TICKET_HOME", filepath.Join(homeDir, ".ticket"))
-	if err := os.WriteFile(filepath.Join(homeDir, ".ticket", "config.json"), []byte(`{"default_remote":"local"}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(global config) error = %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(repo .git) error = %v", err)
-	}
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatalf("Chdir(repoDir) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-
-	if got, ok, err := ProjectPath(); err != nil || ok || got != "" {
-		t.Fatalf("ProjectPath() with ancestor home .ticket = (%q, %v, %v), want empty false nil", got, ok, err)
-	}
-}

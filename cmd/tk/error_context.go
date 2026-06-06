@@ -80,7 +80,6 @@ func shouldExplainSetup(err error) bool {
 
 func currentSetupDetails(err error) (string, error) {
 	globalPath, _ := config.Path()
-	projectPath, hasProject, _ := config.ProjectPath()
 	if serverURL, source, resolveErr := currentConfiguredRemoteServer(); resolveErr == nil && strings.TrimSpace(serverURL) != "" {
 		lines := []string{
 			"setup:",
@@ -98,7 +97,7 @@ func currentSetupDetails(err error) (string, error) {
 	lines := []string{
 		"setup:",
 		fmt.Sprintf("  mode             : %s", valueOrDefault(strings.TrimSpace(resolved.Mode), "local")),
-		fmt.Sprintf("  configured via   : %s", locationSource(globalPath, projectPath, hasProject)),
+		fmt.Sprintf("  configured via   : %s", locationSource(globalPath)),
 	}
 	if strings.TrimSpace(resolved.DBPath) != "" {
 		lines = append(lines, fmt.Sprintf("  database         : %s", resolved.DBPath))
@@ -107,17 +106,12 @@ func currentSetupDetails(err error) (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
-func locationSource(globalPath, projectPath string, hasProject bool) string {
+func locationSource(globalPath string) string {
 	if config.HasLocationOverride() {
 		return "-f command-line override"
 	}
 	if strings.TrimSpace(os.Getenv("TICKET_URL")) != "" {
 		return "TICKET_URL"
-	}
-	if hasProject {
-		if projectCfg, ok := loadSetupConfig(projectPath); ok && (strings.TrimSpace(projectCfg.Remote) != "" || strings.TrimSpace(projectCfg.Location) != "") {
-			return projectPath
-		}
 	}
 	if globalCfg, ok := loadSetupConfig(globalPath); ok && (strings.TrimSpace(globalCfg.Location) != "" || strings.TrimSpace(globalCfg.DefaultRemote) != "" || len(globalCfg.Remotes) > 0) {
 		return globalPath
@@ -145,8 +139,7 @@ func currentRemoteResolution() (config.Resolved, error) {
 
 func currentConfiguredRemoteServer() (serverURL, source string, err error) {
 	globalPath, _ := config.Path()
-	projectPath, hasProject, _ := config.ProjectPath()
-	source = locationSource(globalPath, projectPath, hasProject)
+	source = locationSource(globalPath)
 	if config.HasLocationOverride() {
 		var resolved config.Resolved
 		resolved, err = config.ResolveURL()
@@ -243,9 +236,6 @@ func localIssueExplanation(err error) string {
 func remoteConfigSubject() string {
 	if config.HasLocationOverride() {
 		return "this command"
-	}
-	if projectPath, ok, _ := config.ProjectPath(); ok && strings.TrimSpace(projectPath) != "" {
-		return "this repository"
 	}
 	return "your ticket CLI"
 }

@@ -12,7 +12,7 @@ It operates as a client/server system:
 - **Client** — CLI/TUI talk to the configured server using environment
   credentials or a stored session token.
 
-Full user-facing documentation is in [USER_GUIDE.md](./USER_GUIDE.md). Architecture and design notes are in [docs/DESIGN.md](./docs/DESIGN.md).
+Architecture and design notes are in [docs/DESIGN.md](./docs/DESIGN.md).
 
 ## Start here
 
@@ -20,9 +20,8 @@ If you're new to the repo, read these first:
 
 1. [QUICKSTART.md](./QUICKSTART.md) - quick setup and daily workflow
 2. [TUTORIAL.md](./TUTORIAL.md) - executable end-to-end walkthrough
-3. [USER_GUIDE.md](./USER_GUIDE.md) - practical CLI, server, web, and TUI reference
-4. [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) - contributor and agent implementation context
-5. [CLAUDE.md](./CLAUDE.md) - execution-focused build/test guidance
+3. [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) - contributor and agent implementation context
+4. [CLAUDE.md](./CLAUDE.md) - execution-focused build/test guidance
 
 Historical and superseded documents are archived under [docs/archive/](./docs/archive/).
 

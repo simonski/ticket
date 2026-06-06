@@ -71,7 +71,6 @@ tk server
 export TICKET_URL=http://localhost:8080
 export TICKET_USERNAME=admin
 export TICKET_PASSWORD=password
-export TICKET_PROJECT=private
 tk ls
 
 tk register -username alice -email alice@example.com -password secret12
@@ -95,11 +94,36 @@ Setting state to `success` auto-advances to the next stage.
 
 ---
 
+## Project resolution
+
+`tk` determines the active project in this order:
+
+1. **Explicit** — `-project_id <prefix>` flag or `TICKET_PROJECT` environment variable.
+2. **Git remote** — if the current directory (or a parent, up to your home folder) is a git repo and its `origin` remote is registered to a project, that project is used automatically.
+3. **Default project** — the project set as your account default (via `tk project set-default`).
+
+Register a git repository to a project:
+
+```bash
+# from inside the git repo
+tk init                  # creates a new project and registers this repo's origin remote
+# or register an existing project
+tk project repo add github.com/acme/widget.git -project_id CUS
+```
+
+Override for a single command:
+
+```bash
+tk ls -project_id CUS
+# or set for a shell session
+export TICKET_PROJECT=CUS
+```
+
 ## Daily workflow
 
 ```bash
 tk project create -prefix CUS -title "Customer Portal"
-export TICKET_PROJECT=CUS
+# from inside the repo, git detection picks up CUS automatically
 tk summary                            # daily overview
 tk ls                                 # list open tickets
 TASK_ID=$(tk add -printid "Fix login timeout")   # create a task
@@ -154,9 +178,12 @@ reading live ticket state, logging time, creating bugs, and recording decisions.
 | `TICKET_URL` | Base URL for the running Ticket server (defaults to `https://ticket.simonski.com` when unset) |
 | `TICKET_USERNAME` | Username for API authentication |
 | `TICKET_PASSWORD` | Password for API authentication |
+| `TICKET_PROJECT` | Force a specific project prefix (overrides git detection and default project) |
 | `TICKET_TIMEOUT` | Remote HTTP timeout in seconds for CLI API calls (default `5`, clamped to `1..30`) |
 | `AGENT_ID` | Agent UUID for `tk agent run` |
 | `AGENT_PASSWORD` | Agent password for `tk agent run` |
 | `TICKET_AGENT_LLM` | Override default LLM command (default: `claude`) |
 
 Set `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` to connect the CLI to a server.
+
+Global client configuration lives in `~/.ticket/` (or `$TICKET_HOME/`): `preferences.json` for TUI settings and `credentials.json` for stored tokens. There is no per-repository config file.

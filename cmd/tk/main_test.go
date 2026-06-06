@@ -260,22 +260,14 @@ func TestFormatRuntimeErrorCannotConnectUsesEnvTicketURL(t *testing.T) {
 }
 
 func TestFormatRuntimeErrorRemote503FromProjectConfigOmitsServerURL(t *testing.T) {
-	homeDir := t.TempDir()
-	repoDir := filepath.Join(t.TempDir(), "repo")
-	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(.git) error = %v", err)
-	}
-	setTestWorkingDir(t, repoDir)
-	t.Setenv("TICKET_HOME", homeDir)
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{Location: "https://ticket.example", ProjectID: "1"}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_HOME", t.TempDir())
+	t.Setenv("TICKET_URL", "https://ticket.example")
 
 	err := formatRuntimeError(&client.HTTPStatusError{StatusCode: http.StatusServiceUnavailable, Status: "503 Service Unavailable"})
 	got := err.Error()
 
 	for _, want := range []string{
-		"this repository is configured for https://ticket.example, but that server is currently unavailable (503 Service Unavailable).",
+		"your ticket CLI is configured for https://ticket.example, but that server is currently unavailable (503 Service Unavailable).",
 		"Check whether the server, proxy, or tunnel is up.",
 	} {
 		if !strings.Contains(got, want) {
@@ -290,21 +282,14 @@ func TestFormatRuntimeErrorRemote503FromProjectConfigOmitsServerURL(t *testing.T
 }
 
 func TestFormatRuntimeErrorRemote401ExplainsCredentials(t *testing.T) {
-	repoDir := filepath.Join(t.TempDir(), "repo")
-	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(.git) error = %v", err)
-	}
-	setTestWorkingDir(t, repoDir)
 	t.Setenv("TICKET_HOME", t.TempDir())
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{Location: "https://ticket.example", ProjectID: "1"}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_URL", "https://ticket.example")
 
 	err := formatRuntimeError(&client.HTTPStatusError{StatusCode: http.StatusUnauthorized, Status: "401 Unauthorized", APIError: "unauthorized"})
 	got := err.Error()
 
 	for _, want := range []string{
-		"this repository is configured for https://ticket.example, but the server rejected the saved credentials (401 Unauthorized).",
+		"your ticket CLI is configured for https://ticket.example, but the server rejected the saved credentials (401 Unauthorized).",
 		"Run `tk login` for that server",
 	} {
 		if !strings.Contains(got, want) {
@@ -314,15 +299,8 @@ func TestFormatRuntimeErrorRemote401ExplainsCredentials(t *testing.T) {
 }
 
 func TestFormatRuntimeErrorRemote401PreservesHelpfulAPIMessage(t *testing.T) {
-	repoDir := filepath.Join(t.TempDir(), "repo")
-	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(.git) error = %v", err)
-	}
-	setTestWorkingDir(t, repoDir)
 	t.Setenv("TICKET_HOME", t.TempDir())
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{Location: "https://ticket.example", ProjectID: "1"}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_URL", "https://ticket.example")
 
 	err := &client.HTTPStatusError{
 		StatusCode: http.StatusUnauthorized,
@@ -335,21 +313,14 @@ func TestFormatRuntimeErrorRemote401PreservesHelpfulAPIMessage(t *testing.T) {
 }
 
 func TestFormatRuntimeErrorRemote404GenericExplainsWrongServer(t *testing.T) {
-	repoDir := filepath.Join(t.TempDir(), "repo")
-	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(.git) error = %v", err)
-	}
-	setTestWorkingDir(t, repoDir)
 	t.Setenv("TICKET_HOME", t.TempDir())
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{Location: "https://ticket.example", ProjectID: "1"}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_URL", "https://ticket.example")
 
 	err := formatRuntimeError(&client.HTTPStatusError{StatusCode: http.StatusNotFound, Status: "404 Not Found"})
 	got := err.Error()
 
 	for _, want := range []string{
-		"this repository is configured for https://ticket.example, but that server does not expose the expected Ticket API (404 Not Found).",
+		"your ticket CLI is configured for https://ticket.example, but that server does not expose the expected Ticket API (404 Not Found).",
 		"Check that the remote URL points to the Ticket server",
 	} {
 		if !strings.Contains(got, want) {
@@ -366,16 +337,7 @@ func TestFormatRuntimeErrorLeavesDomain404Unchanged(t *testing.T) {
 }
 
 func TestFormatRuntimeErrorLocalDBIssueIncludesSetup(t *testing.T) {
-	homeDir := t.TempDir()
-	repoDir := filepath.Join(t.TempDir(), "repo")
-	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(.git) error = %v", err)
-	}
-	setTestWorkingDir(t, repoDir)
-	t.Setenv("TICKET_HOME", homeDir)
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: "1"}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_HOME", t.TempDir())
 
 	err := formatRuntimeError(errors.New("unable to open database file"))
 	got := err.Error()
@@ -2688,13 +2650,6 @@ func TestRunProjectListMarksRepoResolvedCurrentProject(t *testing.T) {
 		t.Fatalf("GetProject(REP) error = %v", err)
 	}
 
-	repoDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
-		t.Fatalf("SaveProjectConfigAt(blank) error = %v", err)
-	}
 	setTestGitOrigin(t, "https://github.com/example/repo.git")
 
 	listOutput := captureStdout(t, func() {
@@ -2797,13 +2752,7 @@ func TestRunProjectGetUsesCurrentProjectWhenIDOmitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	repoDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: project.Prefix}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_PROJECT", project.Prefix)
 
 	output := captureStdout(t, func() {
 		if err := run([]string{"project", "get"}); err != nil {
@@ -2817,38 +2766,20 @@ func TestRunProjectGetUsesCurrentProjectWhenIDOmitted(t *testing.T) {
 	}
 }
 
-func TestRunProjectGetFallsBackToMostRecentProjectWhenCurrentUnset(t *testing.T) {
+func TestRunProjectGetUsesDefaultProjectWhenNoContextSet(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
 
-	if _, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
-		Prefix: "OLD",
-		Title:  "Older Project",
-	}); err != nil {
-		t.Fatalf("CreateProject(older) error = %v", err)
-	}
 	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
-		Prefix: "NEW",
-		Title:  "Newest Project",
+		Prefix: "DEF",
+		Title:  "Default Project",
 	})
 	if err != nil {
-		t.Fatalf("CreateProject(newest) error = %v", err)
+		t.Fatalf("CreateProject(default) error = %v", err)
 	}
 
-	repoDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	cfg.ProjectID = ""
-	if err := config.Save(cfg); err != nil {
-		t.Fatalf("config.Save() error = %v", err)
+	if err := run([]string{"project", "set-default", project.Prefix}); err != nil {
+		t.Fatalf("project set-default error = %v", err)
 	}
 
 	output := captureStdout(t, func() {
@@ -2856,7 +2787,7 @@ func TestRunProjectGetFallsBackToMostRecentProjectWhenCurrentUnset(t *testing.T)
 			t.Fatalf("project get error = %v", err)
 		}
 	})
-	for _, want := range []string{"TITLE", "Newest Project", "PROJECT_ID", fmt.Sprintf("%d", project.ID), "PREFIX", "NEW"} {
+	for _, want := range []string{"TITLE", "Default Project", "PROJECT_ID", fmt.Sprintf("%d", project.ID), "PREFIX", "DEF"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("project get output missing %q:\n%s", want, output)
 		}
@@ -3122,24 +3053,6 @@ func TestRunProjectRepo(t *testing.T) {
 	}
 }
 
-func TestBindRootToRemoteProjectRequiresNamedRemote(t *testing.T) {
-	setupLocalCLI(t)
-	svc := localCLIService(t)
-
-	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
-		Prefix: "INI",
-		Title:  "Init Test",
-	})
-	if err != nil {
-		t.Fatalf("CreateProject() error = %v", err)
-	}
-
-	root := t.TempDir()
-	if bindErr := bindRootToRemoteProject(root, "test", project.Prefix); bindErr == nil || !strings.Contains(bindErr.Error(), `remote "test" not found`) {
-		t.Fatalf("bindRootToRemoteProject() error = %v", bindErr)
-	}
-	_ = svc
-}
 
 func TestRunProjectRemoteBeforeInit(t *testing.T) {
 	homeDir := t.TempDir()
@@ -4203,23 +4116,13 @@ func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 	if defaultProjectID == 0 || secondProjectID == 0 {
 		t.Fatalf("expected default and second project, got %+v", projects)
 	}
-	repoDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: fmt.Sprintf("%d", defaultProjectID)}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
 
+	t.Setenv("TICKET_PROJECT", "TK")
 	matchingID := createLocalTask(t, []string{"add", "-d", "Detailed note for customer portal", "-ac", "free form acceptance", "Free form entry"})
 	otherID := createLocalTask(t, []string{"add", "-d", "Detailed note for customer portal", "Free form other"})
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: fmt.Sprintf("%d", secondProjectID)}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_PROJECT", "SEP")
 	crossProjectID := createLocalTask(t, []string{"add", "-d", "Detailed note for customer portal", "Free form entry elsewhere"})
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: fmt.Sprintf("%d", defaultProjectID)}); err != nil {
-		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
+	t.Setenv("TICKET_PROJECT", "TK")
 
 	// Advance to develop/idle so claim and active produce develop/active
 	if err := run([]string{"success", "-id", matchingID}); err != nil {
@@ -4854,22 +4757,10 @@ func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
 		t.Fatalf("mkdir .git: %v", err)
 	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
-		t.Fatalf("SaveProjectConfigAt(repo) error = %v", err)
-	}
 	if err := os.Chdir(repoDir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(orig) })
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	cfg.ProjectID = ""
-	if saveErr := config.Save(cfg); saveErr != nil {
-		t.Fatalf("config.Save() error = %v", saveErr)
-	}
 
 	taskID := createLocalTask(t, []string{"create", "-t", "epic", "-title", "foo"})
 	output := captureStdout(t, func() {
@@ -5199,7 +5090,7 @@ func TestRunRemoteModeStatusFailure(t *testing.T) {
 func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 	epicID := createLocalTask(t, []string{"epic", "Parent Epic"})
-	clearCurrentEpicID(t)
+
 	taskID := createLocalTask(t, []string{"add", "-parent", epicID, "Child Task"})
 	orphanID := createLocalTask(t, []string{"add", "Orphan Task"})
 
@@ -5329,7 +5220,7 @@ func TestRunHistoryShowsProjectAccessRequestAuditEvents(t *testing.T) {
 func TestRunOrphansExcludesEpicRoots(t *testing.T) {
 	setupLocalCLI(t)
 	epicID := createLocalTask(t, []string{"epic", "Orphan Epic"})
-	clearCurrentEpicID(t)
+
 	orphanID := createLocalTask(t, []string{"add", "Task with no parent"})
 
 	orphansOutput := captureStdout(t, func() {
@@ -5350,7 +5241,7 @@ func TestRunOrphansExcludesEpicRoots(t *testing.T) {
 func TestRunSetParentAllowsLineageIndependentOfType(t *testing.T) {
 	setupLocalCLI(t)
 	childID := createLocalTask(t, []string{"epic", "Standalone Epic"})
-	clearCurrentEpicID(t)
+
 	taskID := createLocalTask(t, []string{"add", "Task Parent"})
 
 	if err := run([]string{"set-parent", "-id", childID, taskID}); err != nil {
@@ -6020,22 +5911,6 @@ func TestRunProjectWorkflowSetsAndClearsCurrentProjectWorkflow(t *testing.T) {
 func TestRunProjectUseAndWorkflowHelpPaths(t *testing.T) {
 	setupLocalCLI(t)
 
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	cfg.ProjectID = ""
-	if err := config.Save(cfg); err != nil {
-		t.Fatalf("config.Save() error = %v", err)
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(cwd, config.Config{}); err != nil {
-		t.Fatalf("SaveProjectConfigAt(clear) error = %v", err)
-	}
-
 	noProjectOutput := captureStdout(t, func() {
 		if err := run([]string{"project", "use"}); err != nil {
 			t.Fatalf("project use with no current project error = %v", err)
@@ -6082,14 +5957,6 @@ func TestRunProjectSetDefaultAffectsFallbackResolution(t *testing.T) {
 
 	if err := run([]string{"project", "set-default", "DEF"}); err != nil {
 		t.Fatalf("project set-default error = %v", err)
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := config.SaveProjectConfigAt(cwd, config.Config{}); err != nil {
-		t.Fatalf("SaveProjectConfigAt(clear) error = %v", err)
 	}
 
 	listOutput := captureStdout(t, func() {
@@ -6756,9 +6623,6 @@ func TestResolveCurrentProjectClientMatchesCanonicalGitOriginAcrossProjectReposi
 	if err := svc.AddProjectGitRepository(context.Background(), project.Prefix, "file://"+target); err != nil {
 		t.Fatalf("AddProjectGitRepository() error = %v", err)
 	}
-	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
-		t.Fatalf("SaveProjectConfigAt(clear) error = %v", err)
-	}
 
 	gitOriginByRoot.Store(repoDir, link)
 	t.Cleanup(func() { gitOriginByRoot.Delete(repoDir) })
@@ -7019,10 +6883,6 @@ func ticketLabelByID(t *testing.T, id string) string {
 		t.Fatalf("svc.GetTicket(context.Background(), %s) error = %v", id, err)
 	}
 	return task.ID
-}
-
-func clearCurrentEpicID(t *testing.T) {
-	t.Helper()
 }
 
 func svcGetTicket(t *testing.T, ref string) (store.Ticket, error) {

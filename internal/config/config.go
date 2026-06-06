@@ -38,7 +38,6 @@ type Config struct {
 	DefaultRemote string   `json:"default_remote,omitempty"`
 	Remotes       []Remote `json:"remotes,omitempty"`
 	ProjectID     string   `json:"project_id"`
-	CurrentEpicID string   `json:"current_epic_id"`
 
 	// TUI state — persisted between sessions by default.
 	// Set TUIDisablePersist=true to skip save/restore.
@@ -47,11 +46,6 @@ type Config struct {
 	TUIMode           string   `json:"tui_mode,omitempty"` // "summary" | "projects" | "ideas" | "list" | "settings"
 	TUICursor         int      `json:"tui_cursor,omitempty"`
 	TUIExpandedEpics  []string `json:"tui_expanded_epics,omitempty"`
-
-	// Temporary delete confirmation state
-	DeleteConfirmToken   string `json:"delete_confirm_token,omitempty"`
-	DeleteConfirmProject string `json:"delete_confirm_project,omitempty"`
-	DeleteConfirmTicket  string `json:"delete_confirm_ticket,omitempty"`
 }
 
 type preferencesDiskConfig struct {
@@ -75,23 +69,9 @@ type Credentials struct {
 	Remotes map[string]RemoteCredentials `json:"remotes,omitempty"`
 }
 
-type projectDiskConfig struct {
-	Version              int    `json:"version,omitempty"`
-	Remote               string `json:"remote,omitempty"`
-	Location             string `json:"location,omitempty"` // legacy fallback only
-	ProjectID            string `json:"project_id,omitempty"`
-	CurrentEpicID        string `json:"current_epic_id,omitempty"`
-	DeleteConfirmToken   string `json:"delete_confirm_token,omitempty"`
-	DeleteConfirmProject string `json:"delete_confirm_project,omitempty"`
-	DeleteConfirmTicket  string `json:"delete_confirm_ticket,omitempty"`
-}
-
 var locationOverride string
 
-var (
-	gitRootCache    sync.Map
-	ticketRootCache sync.Map
-)
+var gitRootCache sync.Map
 
 func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
@@ -164,37 +144,6 @@ func Load() (Config, error) {
 	}
 
 	cfg := globalCfg
-	projectPath, hasProject, err := ProjectPath()
-	if err != nil {
-		return Config{}, err
-	}
-	if hasProject {
-		projectCfg, loadErr := loadConfigFile(projectPath)
-		if loadErr != nil {
-			return Config{}, loadErr
-		}
-		if strings.TrimSpace(projectCfg.Username) != "" || strings.TrimSpace(projectCfg.Token) != "" {
-			projectCfg.Username = ""
-			projectCfg.Token = ""
-			saveErr := saveProjectConfig(projectPath, projectCfg)
-			if saveErr != nil {
-				return Config{}, saveErr
-			}
-		}
-		if strings.TrimSpace(projectCfg.Remote) != "" {
-			cfg.Remote = projectCfg.Remote
-		}
-		if strings.TrimSpace(projectCfg.Location) != "" {
-			cfg.Location = projectCfg.Location
-		}
-		if strings.TrimSpace(projectCfg.ProjectID) != "" {
-			cfg.ProjectID = projectCfg.ProjectID
-		}
-		cfg.CurrentEpicID = projectCfg.CurrentEpicID
-		cfg.DeleteConfirmToken = projectCfg.DeleteConfirmToken
-		cfg.DeleteConfirmProject = projectCfg.DeleteConfirmProject
-		cfg.DeleteConfirmTicket = projectCfg.DeleteConfirmTicket
-	}
 	creds, err := LoadCredentials()
 	if err != nil {
 		return Config{}, err
@@ -377,31 +326,6 @@ func Home() (string, error) {
 		return "", err
 	}
 	return filepath.Join(userHome, ".ticket"), nil
-}
-
-// ProjectPath returns the nearest project-local .ticket/config.json path.
-func ProjectPath() (path string, ok bool, err error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", false, err
-	}
-	return ProjectPathFrom(cwd)
-}
-
-func ProjectPathFrom(startDir string) (path string, ok bool, err error) {
-	root, ok := FindTicketRoot(startDir)
-	if !ok {
-		return "", false, nil
-	}
-	return ProjectPathAtRoot(root), true, nil
-}
-
-func ProjectPathAtRoot(root string) string {
-	return filepath.Join(root, ".ticket", "config.json")
-}
-
-func SaveProjectConfigAt(root string, cfg Config) error {
-	return saveProjectConfig(ProjectPathAtRoot(root), cfg)
 }
 
 func (cfg Config) RemoteByName(name string) (Remote, bool) {
@@ -639,41 +563,6 @@ func sortUniqueRemotes(remotes []Remote) []Remote {
 	return filtered
 }
 
-// FindTicketRoot walks up the directory tree from startDir looking for a
-// project-local .ticket/config.json. Returns the parent of .ticket/.
-func FindTicketRoot(startDir string) (string, bool) {
-	startDir = filepath.Clean(strings.TrimSpace(startDir))
-	if startDir == "" {
-		return "", false
-	}
-	if cached, ok := ticketRootCache.Load(startDir); ok {
-		return cached.(string), true
-	}
-	globalHome, err := Home()
-	if err != nil {
-		globalHome = ""
-	}
-	dir := startDir
-	visited := make([]string, 0, 8)
-	for {
-		visited = append(visited, dir)
-		ticketDir := filepath.Join(dir, ".ticket")
-		candidate := filepath.Join(ticketDir, "config.json")
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && !samePath(ticketDir, globalHome) {
-			for _, path := range visited {
-				ticketRootCache.Store(path, dir)
-			}
-			return dir, true
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return "", false
-}
-
 func samePath(a, b string) bool {
 	a = filepath.Clean(strings.TrimSpace(a))
 	b = filepath.Clean(strings.TrimSpace(b))
@@ -738,16 +627,6 @@ func loadConfigFile(path string) (Config, error) {
 		fmt.Fprintf(os.Stderr, "warning: config at %s is not valid JSON (%v); using defaults\n", path, err)
 		return Config{}, nil
 	}
-	if v, ok := raw["current_epic_id"]; ok {
-		s := strings.TrimSpace(string(v))
-		if s != "" && s[0] != '"' {
-			if s == "0" {
-				raw["current_epic_id"] = json.RawMessage(`""`)
-			} else {
-				raw["current_epic_id"] = json.RawMessage(`"` + s + `"`)
-			}
-		}
-	}
 	if v, ok := raw["tui_expanded_epics"]; ok {
 		s := strings.TrimSpace(string(v))
 		if s != "" && s[0] == '[' {
@@ -793,32 +672,6 @@ func loadConfigFile(path string) (Config, error) {
 		}
 	}
 	return cfg, nil
-}
-
-func saveProjectConfig(path string, cfg Config) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
-	}
-	disk := projectDiskConfig{
-		Version:              1,
-		Remote:               strings.TrimSpace(cfg.Remote),
-		Location:             "",
-		ProjectID:            cfg.ProjectID,
-		CurrentEpicID:        cfg.CurrentEpicID,
-		DeleteConfirmToken:   cfg.DeleteConfirmToken,
-		DeleteConfirmProject: cfg.DeleteConfirmProject,
-		DeleteConfirmTicket:  cfg.DeleteConfirmTicket,
-	}
-	if disk.Remote == "" {
-		if resolved, err := ResolveLocation(cfg.Location); err == nil && resolved.Mode == ModeRemote {
-			disk.Location = strings.TrimSpace(cfg.Location)
-		}
-	}
-	data, err := json.MarshalIndent(disk, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o600)
 }
 
 func loadPreferences() (Config, error) {

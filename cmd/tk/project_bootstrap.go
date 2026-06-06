@@ -1,14 +1,9 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/simonski/ticket/internal/config"
 )
 
 var gitOriginByRoot sync.Map
@@ -26,31 +21,4 @@ func detectGitOriginAt(root string) string {
 		gitOriginByRoot.Store(root, remote)
 	}
 	return remote
-}
-
-func bindRootToRemoteProject(root, remoteName, projectID string) error {
-	if strings.TrimSpace(remoteName) == "" {
-		return fmt.Errorf("remote name is required")
-	}
-	if strings.TrimSpace(projectID) == "" {
-		return fmt.Errorf("remote project id is required")
-	}
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	if _, ok := cfg.RemoteByName(remoteName); !ok {
-		return fmt.Errorf("remote %q not found", remoteName)
-	}
-	if err := os.MkdirAll(filepath.Join(root, ".ticket"), 0o750); err != nil {
-		return err
-	}
-	if err := config.SaveProjectConfigAt(root, config.Config{
-		Remote:    strings.TrimSpace(remoteName),
-		ProjectID: strings.TrimSpace(projectID),
-	}); err != nil {
-		return err
-	}
-	cfg.ProjectID = strings.TrimSpace(projectID)
-	return config.Save(cfg)
 }
