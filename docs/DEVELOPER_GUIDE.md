@@ -27,7 +27,7 @@ make test-all
 
 The repository keeps user-facing and developer-facing docs intentionally compact:
 
-- User-facing docs: `README.md`, `QUICKSTART.md`, `TUTORIAL.md`, `USER_GUIDE.md`
+- User-facing docs: `README.md`, `docs/QUICKSTART.md`, `docs/TUTORIAL.md`, `USER_GUIDE.md`
 - Developer-facing docs: this file + architecture/process/instructions listed above
 
 Historical plans, old quickstarts, and superseded guidance are archived under `docs/archive/`.

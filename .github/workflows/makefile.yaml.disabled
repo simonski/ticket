@@ -88,7 +88,7 @@ jobs:
       - name: Commit and push release version
         run: |
           VERSION=$(tr -d '[:space:]' < cmd/tk/VERSION)
-          git add cmd/tk/VERSION openapi.yaml
+          git add cmd/tk/VERSION docs/api/openapi.yaml
           git commit -m "chore: prepare release v${VERSION} [skip ci]"
           git push
 

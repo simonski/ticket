@@ -54,7 +54,7 @@ Playwright browser tests are in `tests/playwright/` (12 spec files). Run with `m
 ### Staged test policy
 
 - Default inner loop: `make test` + `make test-fast` + targeted package tests.
-- If API contract/surface changes (`openapi.yaml`, `internal/server`, `internal/client`, `cmd/tk` handlers), run `make test-api`.
+- If API contract/surface changes (`docs/api/openapi.yaml`, `internal/server`, `internal/client`, `cmd/tk` handlers), run `make test-api`.
 - If web/site2 UX changes, run `make test-browser` while iterating, then `make test-browser-full`.
 - Before finishing a feature or opening a PR, run `make test-all` and `make lint`.
 
@@ -110,7 +110,7 @@ Contract tests in `libticket/contract_test.go` define a `Factory` pattern and ve
 - Unit tests, integration tests, and Playwright tests required for all code.
 - Keep documentation in sync: update DESIGN.md and USER_GUIDE.md when code changes.
 - Externalise strings to `constants.go` where possible.
-- The authoritative specification is `SPEC.md`; the OpenAPI spec is `openapi.yaml`.
+- The authoritative specification is `docs/SPEC.md`; the OpenAPI spec is `docs/api/openapi.yaml`.
 
 ## Special Commands
 

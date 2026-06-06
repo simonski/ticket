@@ -98,7 +98,7 @@ build-linux:
 	@chmod +x ./bin/tk-linux
 
 caddy:
-	caddy run --config ./Caddyfile
+	caddy run --config ./deploy/Caddyfile
 
 
 setup: setup-go setup-node setup-playwright
@@ -137,14 +137,14 @@ bump-version:
 	fi
 
 sync-openapi-version:
-	@perl -0pi -e 's/^(  version: ).*/$${1}$(VERSION)/m' openapi.yaml
+	@perl -0pi -e 's/^(  version: ).*/$${1}$(VERSION)/m' docs/api/openapi.yaml
 
 release-prepare:
 	@$(MAKE) bump-version
 	@$(MAKE) sync-openapi-version
 
 validate-openapi:
-	@ruby -e 'require "yaml"; doc = YAML.safe_load(File.read("openapi.yaml"), permitted_classes: [], aliases: true); abort("openapi.yaml missing openapi version") unless doc.is_a?(Hash) && !doc["openapi"].to_s.empty?; info = doc["info"].is_a?(Hash) ? doc["info"] : {}; abort("openapi.yaml missing info.title") if info["title"].to_s.empty?; abort("openapi.yaml missing info.version") if info["version"].to_s.empty?'
+	@ruby -e 'require "yaml"; doc = YAML.safe_load(File.read("docs/api/openapi.yaml"), permitted_classes: [], aliases: true); abort("docs/api/openapi.yaml missing openapi version") unless doc.is_a?(Hash) && !doc["openapi"].to_s.empty?; info = doc["info"].is_a?(Hash) ? doc["info"] : {}; abort("docs/api/openapi.yaml missing info.title") if info["title"].to_s.empty?; abort("docs/api/openapi.yaml missing info.version") if info["version"].to_s.empty?'
 
 backup-db:
 	./scripts/backup_ticket_db.sh
@@ -246,11 +246,11 @@ playwright-ready:
 
 test-playwright: playwright-ready
 	@PLAYWRIGHT_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
-	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test
+	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test -c tests/playwright.config.js
 
 test-browser-smoke: playwright-ready
 	@PLAYWRIGHT_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
-	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test $(PLAYWRIGHT_SMOKE_SPECS)
+	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test -c tests/playwright.config.js $(PLAYWRIGHT_SMOKE_SPECS)
 
 test-browser-full: test-playwright
 
@@ -260,7 +260,7 @@ test-quickstart: build-bin
 	@$(MAKE) test-quickstart-bin
 
 test-quickstart-bin:
-	TICKET_FAST_HASH=1 go run ./cmd/tk-test QUICKSTART.md TUTORIAL.md
+	TICKET_FAST_HASH=1 go run ./cmd/tk-test docs/QUICKSTART.md docs/TUTORIAL.md
 
 test-tk-test: test-quickstart
 

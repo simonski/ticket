@@ -6,7 +6,7 @@
 This document is the authoritative specification for the `ticket` system. It is
 designed so that an agent or team can rebuild the codebase, documentation, and
 design from scratch using only this document and the OpenAPI specification in
-[`openapi.yaml`](./openapi.yaml).
+[`openapi.yaml`](./api/openapi.yaml).
 
 For the phase 1 entity-model pass, `docs/ENTITY_MODEL.md` is the authoritative
 definition of PROJECT, Workflow, STAGE, ROLE, and TICKET where older sections of
@@ -862,7 +862,7 @@ The binary is named `ticket` with the alias `tk`.
 All endpoints are under `/api/`. Request and response bodies are JSON.
 Error responses use `{"error": "message"}` with appropriate HTTP status codes.
 
-See [`openapi.yaml`](./openapi.yaml) for the full OpenAPI 3.1 specification.
+See [`openapi.yaml`](./api/openapi.yaml) for the full OpenAPI 3.1 specification.
 
 ### 13.1 Middleware
 

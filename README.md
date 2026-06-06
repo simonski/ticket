@@ -18,16 +18,16 @@ Architecture and design notes are in [docs/DESIGN.md](./docs/DESIGN.md).
 
 If you're new to the repo, read these first:
 
-1. [QUICKSTART.md](./QUICKSTART.md) - quick setup and daily workflow
-2. [TUTORIAL.md](./TUTORIAL.md) - executable end-to-end walkthrough
-3. [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) - contributor and agent implementation context
+1. [QUICKSTART.md](./docs/QUICKSTART.md) - quick setup and daily workflow
+2. [TUTORIAL.md](./docs/TUTORIAL.md) - executable end-to-end walkthrough
+3. [DEVELOPER_GUIDE.md](./docs/DEVELOPER_GUIDE.md) - contributor and agent implementation context
 4. [CLAUDE.md](./CLAUDE.md) - execution-focused build/test guidance
 
 Historical and superseded documents are archived under [docs/archive/](./docs/archive/).
 
 ## Community
 
-- [CONTRIBUTING.md](./CONTRIBUTING.md)
-- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
-- [SECURITY.md](./SECURITY.md)
-- [SUPPORT.md](./SUPPORT.md)
+- [CONTRIBUTING.md](./.github/CONTRIBUTING.md)
+- [CODE_OF_CONDUCT.md](./.github/CODE_OF_CONDUCT.md)
+- [SECURITY.md](./.github/SECURITY.md)
+- [SUPPORT.md](./.github/SUPPORT.md)

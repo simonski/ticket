@@ -2,8 +2,8 @@ services:
   ticket:
     image: ticket:${VERSION:-latest}
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: ../Dockerfile
     environment:
       TICKET_DATA_DIR: /data
       TICKET_DB_PATH: /data/ticket.db

@@ -68,10 +68,10 @@ verifying each block exits 0.
 make test-quickstart
 
 # Run directly with verbose output
-go run ./cmd/tk-test -v QUICKSTART.md TUTORIAL.md
+go run ./cmd/tk-test -v docs/QUICKSTART.md docs/TUTORIAL.md
 
 # Point at a different binary
-go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART.md
+go run ./cmd/tk-test -ticket ./bin/tk docs/QUICKSTART.md
 ```
 
 ### What gets skipped
@@ -98,7 +98,7 @@ When a block contains `tk server`, tk-test:
 
 ### Remote binding in docs
 
-The executable docs are `QUICKSTART.md` and `TUTORIAL.md`. `cmd/tk-test`
+The executable docs are `docs/QUICKSTART.md` and `docs/TUTORIAL.md`. `cmd/tk-test`
 rewrites `localhost:8080` references to the dynamic test server port so those
 blocks stay executable.
 

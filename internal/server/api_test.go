@@ -631,7 +631,7 @@ func TestOpenAPIVersionMatchesBinaryVersion(t *testing.T) {
 	}
 	want := strings.TrimSpace(string(versionBytes))
 
-	specBytes, err := os.ReadFile(filepath.Join("..", "..", "openapi.yaml"))
+	specBytes, err := os.ReadFile(filepath.Join("..", "..", "docs", "api", "openapi.yaml"))
 	if err != nil {
 		t.Fatalf("ReadFile(openapi.yaml) error = %v", err)
 	}
