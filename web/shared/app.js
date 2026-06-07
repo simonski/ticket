@@ -3918,8 +3918,10 @@
 
         function renderAgentEditor() {
             const agent = getCurrentAgent();
-            document.getElementById("agent-editor-title").textContent = agent ? "Agent: " + agent.id : "Agent editor";
+            document.getElementById("agent-editor-title").textContent = agent ? "Agent: " + (agent.username || agent.id) : "Agent editor";
             document.getElementById("agent-id").value = agent ? agent.id : "";
+            document.getElementById("agent-username").value = agent ? (agent.username || "") : "";
+            document.getElementById("agent-username").disabled = !agent;
             document.getElementById("agent-enabled").value = agent ? String(Boolean(agent.enabled)) : "";
             document.getElementById("agent-role").value = agent ? (agent.agent_role || "") : "";
             document.getElementById("agent-new-password").value = "";
@@ -5334,9 +5336,11 @@
                 try {
                     const roleValue = document.getElementById("agent-role").value;
                     const passwordValue = document.getElementById("agent-new-password").value;
+                    const usernameValue = String(document.getElementById("agent-username").value || "").trim();
                     const body = {};
                     if (passwordValue) body.password = passwordValue;
                     if (roleValue !== undefined) body.agent_role = roleValue;
+                    if (usernameValue && usernameValue !== agent.username) body.username = usernameValue;
                     await api("/api/agents/" + agent.id, {
                         method: "PUT",
                         body: JSON.stringify(body),

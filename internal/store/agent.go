@@ -19,6 +19,7 @@ type Agent = User
 type AgentUpdateParams struct {
 	Password  *string
 	AgentRole *string
+	Username  *string
 }
 
 func CreateAgent(ctx context.Context, db *sql.DB, plainPassword string) (agent Agent, generatedPassword string, err error) {
@@ -103,11 +104,14 @@ func ListAgentsPage(ctx context.Context, db *sql.DB, limit, offset int) ([]Agent
 }
 
 func UpdateAgent(ctx context.Context, db *sql.DB, id string, params AgentUpdateParams) (Agent, error) {
-	switch {
-	case params.Password == nil && params.AgentRole == nil:
-		return Agent{}, errors.New("agent update requires password or role")
-	case params.Password != nil && params.AgentRole != nil:
-		// Update both password and role in one statement.
+	if params.Password == nil && params.AgentRole == nil && params.Username == nil {
+		return Agent{}, errors.New("agent update requires password, role, or username")
+	}
+
+	setClauses := make([]string, 0, 4)
+	args := make([]any, 0, 4)
+
+	if params.Password != nil {
 		if strings.TrimSpace(*params.Password) == "" {
 			return Agent{}, errors.New("agent password cannot be empty")
 		}
@@ -115,37 +119,27 @@ func UpdateAgent(ctx context.Context, db *sql.DB, id string, params AgentUpdateP
 		if err != nil {
 			return Agent{}, err
 		}
-		if _, err = db.ExecContext(ctx, `
-			UPDATE users
-			SET password_hash = ?, agent_role = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE user_id = ? AND user_type = 'agent'
-		`, hash, strings.TrimSpace(*params.AgentRole), id); err != nil {
-			return Agent{}, err
+		setClauses = append(setClauses, "password_hash = ?")
+		args = append(args, hash)
+	}
+	if params.AgentRole != nil {
+		setClauses = append(setClauses, "agent_role = ?")
+		args = append(args, strings.TrimSpace(*params.AgentRole))
+	}
+	if params.Username != nil {
+		username := strings.TrimSpace(*params.Username)
+		if username == "" {
+			return Agent{}, errors.New("agent username cannot be empty")
 		}
-	case params.Password != nil:
-		if strings.TrimSpace(*params.Password) == "" {
-			return Agent{}, errors.New("agent password cannot be empty")
-		}
-		hash, err := password.Hash(strings.TrimSpace(*params.Password))
-		if err != nil {
-			return Agent{}, err
-		}
-		if _, err = db.ExecContext(ctx, `
-			UPDATE users
-			SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE user_id = ? AND user_type = 'agent'
-		`, hash, id); err != nil {
-			return Agent{}, err
-		}
-	default:
-		// AgentRole only.
-		if _, err := db.ExecContext(ctx, `
-			UPDATE users
-			SET agent_role = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE user_id = ? AND user_type = 'agent'
-		`, strings.TrimSpace(*params.AgentRole), id); err != nil {
-			return Agent{}, err
-		}
+		setClauses = append(setClauses, "username = ?")
+		args = append(args, username)
+	}
+	setClauses = append(setClauses, "updated_at = CURRENT_TIMESTAMP")
+
+	args = append(args, id)
+	query := "UPDATE users SET " + strings.Join(setClauses, ", ") + " WHERE user_id = ? AND user_type = 'agent'"
+	if _, err := db.ExecContext(ctx, query, args...); err != nil {
+		return Agent{}, err
 	}
 	return GetAgentByID(ctx, db, id)
 }

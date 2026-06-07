@@ -53,6 +53,7 @@ type planUpdateRequest struct {
 type agentRequest struct {
 	Password  string `json:"password,omitempty"`
 	AgentRole string `json:"agent_role,omitempty"`
+	Username  string `json:"username,omitempty"`
 }
 
 type projectRequest struct {
