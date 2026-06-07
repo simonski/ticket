@@ -819,6 +819,49 @@ select {
 .dark .dropdown-item:hover { background: hsl(22 12% 20%); }
 .dropdown-item + .dropdown-item { border-top: 1px solid var(--card-border); }
 
+/* ── Right-click context menu (board) ────────────────────────────── */
+.context-menu {
+    position: fixed; z-index: 200;
+    min-width: 200px; max-width: 280px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    font-size: 0.875rem;
+}
+.context-menu-header {
+    padding: 9px 12px;
+    font-size: 0.75rem; font-weight: 700;
+    color: var(--fg-2);
+    border-bottom: 1px solid var(--card-border);
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.context-menu-role {
+    font-weight: 600; color: var(--accent-fg);
+    background: var(--accent); border-radius: 999px;
+    padding: 1px 8px; font-size: 0.6875rem;
+}
+.context-menu-list { max-height: 320px; overflow-y: auto; }
+.context-menu-item {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; text-align: left;
+    padding: 8px 12px;
+    background: none; border: none; color: var(--fg); cursor: pointer;
+    transition: background 0.08s;
+}
+.context-menu-item:hover { background: hsl(38 16% 94%); }
+.dark .context-menu-item:hover { background: hsl(22 12% 20%); }
+.context-menu-check { width: 12px; flex-shrink: 0; color: var(--accent); font-weight: 700; }
+.context-menu-item.is-match { font-weight: 600; }
+.context-menu-label { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.context-menu-label small { color: var(--fg-3); font-size: 0.6875rem; font-weight: 400; }
+.context-menu-empty { padding: 10px 12px; color: var(--fg-3); font-size: 0.8125rem; }
+.context-menu-unassign {
+    border-top: 1px solid var(--card-border);
+    color: var(--red);
+}
+
 /* ── Segmented control ──────────────────────────────────────────── */
 .segmented {
     display: inline-flex;

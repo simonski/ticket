@@ -3603,6 +3603,154 @@
             }).join("");
         }
 
+        // ── Board right-click context menu: assign an idle story to an agent ──
+        let boardContextMenuEl = null;
+
+        function onBoardContextMenuKey(event) {
+            if (event.key === "Escape") {
+                dismissBoardContextMenu();
+            }
+        }
+
+        function dismissBoardContextMenu() {
+            if (boardContextMenuEl) {
+                boardContextMenuEl.remove();
+                boardContextMenuEl = null;
+            }
+            document.removeEventListener("click", dismissBoardContextMenu);
+            document.removeEventListener("keydown", onBoardContextMenuKey);
+            document.removeEventListener("scroll", dismissBoardContextMenu, true);
+            window.removeEventListener("blur", dismissBoardContextMenu);
+            window.removeEventListener("resize", dismissBoardContextMenu);
+        }
+
+        // ticketCurrentRoleName resolves a ticket's current role_id to its title.
+        function ticketCurrentRoleName(ticket) {
+            if (!ticket || !ticket.role_id) return "";
+            const role = (state.roles || []).find((r) => Number(r.id) === Number(ticket.role_id));
+            return role ? String(role.title || "") : "";
+        }
+
+        function agentPerformsRole(agent, roleName) {
+            if (!roleName) return false;
+            const target = roleName.toLowerCase();
+            return splitAgentRoles(agent.agent_role).some((r) => r.toLowerCase() === target);
+        }
+
+        function openBoardContextMenu(event, ticket) {
+            dismissBoardContextMenu();
+            const roleName = ticketCurrentRoleName(ticket);
+
+            // Distinct enabled agents available on this project (includes globals).
+            const seen = new Set();
+            const agents = [];
+            (state.projectAgents || []).map((s) => s.agent || s).forEach((a) => {
+                if (!a || !a.username) return;
+                const key = String(a.username).toLowerCase();
+                if (seen.has(key) || a.enabled === false) return;
+                seen.add(key);
+                agents.push(a);
+            });
+            // Agents whose role matches the ticket's current role come first.
+            agents.sort((a, b) => {
+                const ma = agentPerformsRole(a, roleName) ? 0 : 1;
+                const mb = agentPerformsRole(b, roleName) ? 0 : 1;
+                if (ma !== mb) return ma - mb;
+                return String(a.username).localeCompare(String(b.username));
+            });
+
+            const header = "<div class=\"context-menu-header\">Assign " + escapeHTML(ticket.key || ticket.id) +
+                (roleName ? " <span class=\"context-menu-role\">" + escapeHTML(roleName) + "</span>" : "") + "</div>";
+            let items;
+            if (!agents.length) {
+                items = "<div class=\"context-menu-empty\">No agents available</div>";
+            } else {
+                items = agents.map((a) => {
+                    const isMatch = agentPerformsRole(a, roleName);
+                    const roles = splitAgentRoles(a.agent_role);
+                    const sub = roles.length ? roles.join(", ") : "any role";
+                    return "<button type=\"button\" class=\"context-menu-item" + (isMatch ? " is-match" : "") + "\" data-assign-agent=\"" + escapeHTML(a.username) + "\">" +
+                        "<span class=\"context-menu-check\">" + (isMatch ? "✓" : "") + "</span>" +
+                        "<span class=\"context-menu-label\">" + escapeHTML(a.username) + "<small>" + escapeHTML(sub) + "</small></span>" +
+                        "</button>";
+                }).join("");
+            }
+            const footer = ticket.assignee
+                ? "<button type=\"button\" class=\"context-menu-item context-menu-unassign\" data-assign-agent=\"\">Unassign (" + escapeHTML(ticket.assignee) + ")</button>"
+                : "";
+
+            const menu = document.createElement("div");
+            menu.className = "context-menu";
+            menu.setAttribute("role", "menu");
+            menu.innerHTML = header + "<div class=\"context-menu-list\">" + items + "</div>" + footer;
+            document.body.appendChild(menu);
+            boardContextMenuEl = menu;
+
+            // Keep the menu within the viewport.
+            let x = event.clientX;
+            let y = event.clientY;
+            if (x + menu.offsetWidth > window.innerWidth - 8) {
+                x = window.innerWidth - menu.offsetWidth - 8;
+            }
+            if (y + menu.offsetHeight > window.innerHeight - 8) {
+                y = window.innerHeight - menu.offsetHeight - 8;
+            }
+            menu.style.left = Math.max(8, x) + "px";
+            menu.style.top = Math.max(8, y) + "px";
+
+            menu.addEventListener("click", (clickEvent) => {
+                const btn = clickEvent.target.closest("[data-assign-agent]");
+                if (!btn) return;
+                clickEvent.stopPropagation();
+                const username = btn.dataset.assignAgent || "";
+                dismissBoardContextMenu();
+                assignTicketToAgent(ticket, username);
+            });
+
+            // Defer the outside-click listener so this right-click doesn't instantly close it.
+            setTimeout(() => {
+                document.addEventListener("click", dismissBoardContextMenu);
+                document.addEventListener("keydown", onBoardContextMenuKey);
+                document.addEventListener("scroll", dismissBoardContextMenu, true);
+                window.addEventListener("blur", dismissBoardContextMenu);
+                window.addEventListener("resize", dismissBoardContextMenu);
+            }, 0);
+        }
+
+        // assignTicketToAgent assigns (username set) or unassigns (empty) an idle
+        // ticket. Assigning sets state=active so the agent resumes it on next poll;
+        // unassigning returns it to idle so it re-enters the claim pool.
+        async function assignTicketToAgent(ticket, agentUsername) {
+            const assigning = Boolean(agentUsername);
+            const payload = {
+                project_id: ticket.project_id,
+                type: ticket.type,
+                title: ticket.title,
+                description: ticket.description || "",
+                acceptance_criteria: ticket.acceptance_criteria || "",
+                parent_id: ticket.parent_id || null,
+                stage: ticket.stage,
+                state: assigning ? "active" : "idle",
+                assignee: agentUsername,
+                priority: Number(ticket.priority || 0),
+                order: Number(ticket.order || 0),
+                estimate_effort: Number(ticket.estimate_effort || 0),
+                health: Number(ticket.health || 0),
+            };
+            try {
+                await api("/api/tickets/" + ticket.id, { method: "PUT", body: JSON.stringify(payload) });
+                await loadTickets();
+                renderTicketBoard();
+                renderTicketListView();
+                renderTicketPlanView();
+                setNotice(assigning
+                    ? "Assigned " + (ticket.key || ticket.id) + " to " + agentUsername + "."
+                    : "Unassigned " + (ticket.key || ticket.id) + ".");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
         function ticketAgentDot(ticket) {
             if (!ticket.assignee) return "";
             const agents = state.projectAgents || [];
@@ -5915,6 +6063,19 @@
                 if (ticket) {
                     openTicketModal(ticket);
                 }
+            });
+            els.ticketBoard.addEventListener("contextmenu", (event) => {
+                const card = event.target.closest("[data-ticket-id]");
+                if (!card) {
+                    return;
+                }
+                const ticket = state.tickets.find((item) => String(item.id) === card.dataset.ticketId);
+                // Only idle stories can be hand-assigned to an agent.
+                if (!ticket || String(ticket.state || "").toLowerCase() !== "idle") {
+                    return;
+                }
+                event.preventDefault();
+                openBoardContextMenu(event, ticket);
             });
             els.interventionList.addEventListener("click", (event) => {
                 const button = event.target.closest("[data-open-intervention-ticket]");
