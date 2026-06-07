@@ -749,9 +749,7 @@ func runDemo(args []string) error {
 					case 0, 1:
 						stage, state = store.StageReady, store.StateIdle
 					case 2, 3, 4:
-						// develop/idle tickets are left unassigned so agents can claim them
 						stage, state = store.StageDevelop, store.StateIdle
-						assignee = ""
 					case 5, 6:
 						stage, state = store.StageDevelop, store.StateActive
 					case 7, 8:
@@ -772,6 +770,11 @@ func runDemo(args []string) error {
 				default:
 					stage, state = store.StageReject, store.StateSuccess
 				}
+			}
+			// Ready-stage tickets and unstarted develop tickets have no assignee
+			// so agents (and users) can pick them up naturally.
+			if stage == store.StageReady || (stage == store.StageDevelop && state == store.StateIdle) {
+				assignee = ""
 			}
 
 			t, err := store.CreateTicket(ctx, db, store.TicketCreateParams{

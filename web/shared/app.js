@@ -3490,7 +3490,8 @@
             const ordered = allSprints.slice().sort((a, b) => b.number - a.number);
 
             const sprintOption = (s) => {
-                const label = "Sprint " + s.number + (s.title ? ": " + s.title : "");
+                const stateLabel = s.stage === "active" ? " (active)" : s.stage === "closed" ? " (closed)" : " (planning)";
+                const label = "Sprint " + s.number + stateLabel + (s.title ? ": " + s.title : "");
                 const selected = String(s.id) === String(sel) ? " selected" : "";
                 return "<option value=\"" + s.id + "\"" + selected + ">" + escapeHTML(label) + "</option>";
             };
