@@ -4556,7 +4556,7 @@
                     const requestID = Number(button.dataset.projectAccessRequestId || 0);
                     const action = String(button.dataset.projectAccessRequestAction || "");
                     const status = action === "reject" ? "rejected" : "approved";
-                    const decisionMessage = prompt("Optional decision message", "") || "";
+                    const decisionMessage = (await uiPrompt("Optional decision message", "", "Submit")) || "";
                     if (!requestID) {
                         return;
                     }
@@ -6051,7 +6051,7 @@
             });
 
             document.getElementById("new-agent-button").addEventListener("click", async () => {
-                const password = prompt("Optional password for the new agent", "");
+                const password = await uiPrompt("Optional password for the new agent (leave blank to auto-generate)", "", "Create");
                 if (password === null) {
                     return;
                 }
