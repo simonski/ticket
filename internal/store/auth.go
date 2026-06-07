@@ -196,8 +196,8 @@ func AuthenticateUser(ctx context.Context, db *sql.DB, username, plainPassword s
 		       COALESCE(failed_login_attempts, 0),
 		       COALESCE(locked_until, '')
 		FROM users
-		WHERE username = ?
-	`, username)
+		WHERE username = ? OR LOWER(email) = LOWER(?)
+	`, username, username)
 
 	var user User
 	var hash string
