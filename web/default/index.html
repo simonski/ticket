@@ -12,8 +12,9 @@
             document.documentElement.classList.add('dark');
         }
         try {
+            var _authed = localStorage.getItem('tk-authed') === '1';
             var _sa = JSON.parse(sessionStorage.getItem('site2.auth') || 'null');
-            if (!_sa || !_sa.token) { document.documentElement.classList.add('landing-active'); }
+            if (!_authed && (!_sa || !_sa.token)) { document.documentElement.classList.add('landing-active'); }
         } catch(e) { document.documentElement.classList.add('landing-active'); }
         document.addEventListener('DOMContentLoaded', function () {
             function toggle() {

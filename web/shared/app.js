@@ -756,10 +756,12 @@
         function storeAuth(auth) {
             sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
             apiClient.setToken(auth && auth.token ? auth.token : "");
+            localStorage.setItem("tk-authed", "1");
         }
 
         function clearStoredAuth() {
             sessionStorage.removeItem(AUTH_STORAGE_KEY);
+            localStorage.removeItem("tk-authed");
             apiClient.setToken("");
         }
 
@@ -7826,6 +7828,7 @@
                         token: "",
                     };
                     apiClient.setToken("");
+                    localStorage.setItem("tk-authed", "1");
                     document.getElementById("login-username").value = state.auth.username;
                     showAuthenticatedShell();
                     try {

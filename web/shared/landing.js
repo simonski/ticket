@@ -6,6 +6,7 @@
 
   // Skip animation if user already has a valid session
   try {
+    if (localStorage.getItem('tk-authed') === '1') { document.documentElement.classList.remove('landing-active'); return; }
     var _r = sessionStorage.getItem('site2.auth');
     if (_r) { var _a = JSON.parse(_r); if (_a && _a.token) { document.documentElement.classList.remove('landing-active'); return; } }
   } catch(e) {}
