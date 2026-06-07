@@ -1349,18 +1349,20 @@
                 primaryNames = getStageOptions();
             }
 
-            // Safety net: any stage present in currently-visible tickets gets a column,
-            // even if it was not in the primary list. Merge everything by workflow order
-            // so no ticket is invisible and the column sequence always matches the workflow.
+            // Safety net: any stage present in currently-visible tickets gets a column.
+            // Merge everything and sort by workflow sort_order so the sequence always
+            // matches the workflow definition regardless of load timing.
             const visibleTickets = sel === "backlog" || !sel || sel === ""
                 ? state.tickets
                 : sprintFilterTickets(state.tickets);
             const presentStages = new Set(visibleTickets.map((t) => t.stage).filter(Boolean));
 
-            // Build a unified ordered set: start from all workflow stages in order,
-            // keep those that are either in primaryNames or have visible tickets.
-            const primarySet = new Set(primaryNames);
-            const workflowOrderMap = new Map(allStages.map((s, i) => [s.name, i]));
+            // Use sort_order from the stage object itself (not array index) for stability.
+            const workflowOrderMap = new Map(allStages.map((s) => [
+                s.name,
+                typeof s.sort_order === "number" ? s.sort_order : 9999,
+            ]));
+
             const allNeeded = new Set([...primaryNames, ...presentStages]);
             const orderedNames = [...allNeeded].sort((a, b) => {
                 const ia = workflowOrderMap.has(a) ? workflowOrderMap.get(a) : 9999;
