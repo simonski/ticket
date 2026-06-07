@@ -129,10 +129,19 @@
                         <div class="view-actions">
                             <input id="board-search" type="search" placeholder="Filter tickets" class="input-sm">
                             <label class="checkbox-label"><input id="board-hide-done" type="checkbox"> hide done</label>
+                            <select id="board-sprint-select" class="select-sm"></select>
+                            <button id="new-sprint-button" class="btn" type="button">+ Sprint</button>
+                            <button class="btn icon-btn" type="button" data-perspective="board" title="Board view">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="5" height="18"/><rect x="10" y="3" width="5" height="18"/><rect x="17" y="3" width="4" height="18"/></svg>
+                            </button>
+                            <button class="btn icon-btn" type="button" data-perspective="list" title="List view">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>
+                            </button>
                             <button id="new-ticket-button" class="btn btn-primary" type="button">New ticket</button>
                         </div>
                     </div>
                     <div id="ticket-board" class="board"></div>
+                    <div id="ticket-list-view" class="ticket-list-view hidden"></div>
                 </section>
 
                 <!-- Goals -->
@@ -1011,6 +1020,10 @@
                     <div class="field">
                         <label for="ticket-workflow">Workflow</label>
                         <select id="ticket-workflow"></select>
+                    </div>
+                    <div class="field">
+                        <label for="ticket-sprint">Sprint</label>
+                        <select id="ticket-sprint"><option value="">None</option></select>
                     </div>
                 </div>
                 <div class="field-row">

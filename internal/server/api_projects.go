@@ -119,6 +119,11 @@ func (r *router) registerProjectHandlers() {
 
 		trimmed := strings.TrimPrefix(r.URL.Path, "/api/projects/")
 		parts := strings.Split(trimmed, "/")
+		if len(parts) == 2 && parts[1] == "sprints" {
+			if handled := handleProjectSprintsRoute(w, r, db, parts[0]); handled {
+				return
+			}
+		}
 		if len(parts) == 2 && parts[1] == "goals" {
 			if handled := handleProjectGoals(w, r, db, parts[0]); handled {
 				return

@@ -1,8 +1,14 @@
 # Quickstart
 
-Makefile
+## install
 
-## assemble the binary into ~/go/bin
+```shell
+brew install simonski/tap/ticket
+or
+go install github.com/simonski/ticket/cmd/tk
+```
+
+## build (binary)
 
 ```shell
 make install
@@ -14,7 +20,7 @@ make install
 make docker
 ```
 
-## publish to ghcr.io
+## publish image ghcr.io/simonski/ticket
 
 > Note: this will (should) then be picked up by the watchtower on exe.dev
 
@@ -25,7 +31,7 @@ make publish
 ## publish to homebrew (simonski/tap)
 
 ```shell
-make homebrew
+make release
 ```
 
 ## deploy to .exe.xyz 
@@ -36,26 +42,9 @@ Note: only ecessary first time to get the assets there, then compose will
 make deploy
 ```
 
-## Install
-
-```bash
-brew install simonski/tap/ticket
-```
-
-Installs the binary as `tk`.
-
-Or, download a binary for your platform from the [releases page](https://github.com/simonski/ticket/releases).
-
 ---
 
-## Start server mode
-
-`tk` runs as a client/server system.
-
 ### Server setup
-
-Run an HTTP server with multi-user auth, a web Kanban board, WebSocket live
-updates, and AI agent support. Best for teams, shared backlogs, and CI/CD.
 
 ```bash
 # create the database once (server-side)
@@ -68,7 +57,7 @@ tk server
 ### Configure client access
 
 ```bash
-export TICKET_URL=http://localhost:8080
+export TICKET_URL=https://localhost:8080
 export TICKET_USERNAME=admin
 export TICKET_PASSWORD=password
 tk ls

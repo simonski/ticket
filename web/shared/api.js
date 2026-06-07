@@ -367,6 +367,26 @@
             return del("/api/teams/" + encodeURIComponent(teamID) + "/users/" + encodeURIComponent(userID));
         }
 
+        function listSprints(projectID) {
+            return get("/api/projects/" + encodeURIComponent(projectID) + "/sprints");
+        }
+
+        function createSprint(projectID, title) {
+            return post("/api/projects/" + encodeURIComponent(projectID) + "/sprints", { title: title || "" });
+        }
+
+        function updateSprint(id, title, stage) {
+            return put("/api/sprints/" + encodeURIComponent(id), { title, stage });
+        }
+
+        function deleteSprint(id) {
+            return del("/api/sprints/" + encodeURIComponent(id));
+        }
+
+        function setTicketSprint(ticketID, sprintID) {
+            return put("/api/tickets/" + encodeURIComponent(ticketID) + "/sprint", { sprint_id: sprintID });
+        }
+
         return {
             setToken: setToken,
             getToken: getToken,
@@ -410,6 +430,11 @@
             getTeamMembers: getTeamMembers,
             addTeamMember: addTeamMember,
             removeTeamMember: removeTeamMember,
+            listSprints: listSprints,
+            createSprint: createSprint,
+            updateSprint: updateSprint,
+            deleteSprint: deleteSprint,
+            setTicketSprint: setTicketSprint,
         };
     }
 

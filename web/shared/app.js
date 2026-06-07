@@ -103,6 +103,9 @@
             navOrder: [],
             users: [],
             teamMembers: [],
+            sprints: [],
+            selectedSprintID: "",
+            boardPerspective: localStorage.getItem("site2.board-view") || "board",
         };
 
         const TICKET_TYPES = ["epic", "task", "bug", "spike", "chore", "story", "note", "question", "requirement", "decision"];
@@ -232,8 +235,11 @@
             agentList: document.getElementById("agent-list"),
             teamList: document.getElementById("team-list"),
             ticketBoard: document.getElementById("ticket-board"),
+            ticketListView: document.getElementById("ticket-list-view"),
             boardSearch: document.getElementById("board-search"),
             boardHideDone: document.getElementById("board-hide-done"),
+            boardSprintSelect: document.getElementById("board-sprint-select"),
+            newSprintButton: document.getElementById("new-sprint-button"),
             interventionList: document.getElementById("intervention-list"),
             interventionFilter: document.getElementById("intervention-filter"),
             interventionSort: document.getElementById("intervention-sort"),
@@ -1501,7 +1507,7 @@
             state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
             populateTicketTypeAndStageSelects();
             await loadProjectAgentModelConfig();
-            await Promise.all([loadTickets(), loadGoals(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
+            await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
             renderAll();
         }
 
@@ -1754,6 +1760,25 @@
             state.interventionComments = Object.fromEntries(interventionDetailEntries.map(([ticketID, detail]) => [ticketID, detail.comments]));
         }
 
+        async function loadSprints() {
+            if (!state.selectedProjectID) {
+                state.sprints = [];
+                return;
+            }
+            try {
+                state.sprints = await apiClient.listSprints(state.selectedProjectID);
+            } catch (e) {
+                state.sprints = [];
+            }
+            // Restore selected sprint from localStorage
+            const saved = localStorage.getItem("site2.sprint." + state.selectedProjectID);
+            if (saved !== null) {
+                state.selectedSprintID = saved;
+            } else {
+                state.selectedSprintID = "";
+            }
+        }
+
         async function loadGoals() {
             if (!state.selectedProjectID) {
                 state.goals = [];
@@ -1971,7 +1996,7 @@
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
-            await Promise.all([loadTickets(), loadGoals(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
+            await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
             renderAll();
         }
 
@@ -2097,7 +2122,9 @@
             renderTeams();
             renderUsers();
             renderTeamMembers();
+            renderSprintSelect();
             renderTicketBoard();
+            renderTicketListView();
             renderInterventions();
             renderEditors();
             renderPlans();
@@ -3233,12 +3260,60 @@
                 : "<option value=\"\">No users available</option>";
         }
 
+        function sprintFilterTickets(tickets) {
+            const sel = state.selectedSprintID;
+            if (sel === "" || sel === null || sel === undefined) {
+                return tickets; // All
+            }
+            if (sel === "backlog") {
+                return tickets.filter((t) => t.sprint_id === null || t.sprint_id === undefined);
+            }
+            const numID = Number(sel);
+            return tickets.filter((t) => t.sprint_id === numID);
+        }
+
+        function renderSprintSelect() {
+            if (!els.boardSprintSelect) {
+                return;
+            }
+            const sprints = state.sprints || [];
+            const sel = state.selectedSprintID;
+            const options = [
+                "<option value=\"\">All</option>",
+                "<option value=\"backlog\">Backlog</option>",
+            ].concat(sprints.map((s) => {
+                const label = "Sprint " + s.number + (s.title ? ": " + s.title : "") + " (" + s.stage + ")";
+                const selected = String(s.id) === String(sel) ? " selected" : "";
+                return "<option value=\"" + s.id + "\"" + selected + ">" + escapeHTML(label) + "</option>";
+            }));
+            if (sel === "") {
+                options[0] = "<option value=\"\" selected>All</option>";
+            } else if (sel === "backlog") {
+                options[1] = "<option value=\"backlog\" selected>Backlog</option>";
+            }
+            els.boardSprintSelect.innerHTML = options.join("");
+        }
+
         function renderTicketBoard() {
             const lanes = getBoardLaneDescriptors();
             const searchText = (els.boardSearch && els.boardSearch.value ? els.boardSearch.value : "").trim().toLowerCase();
             const hideDone = Boolean(els.boardHideDone && els.boardHideDone.checked);
+            const perspective = state.boardPerspective || "board";
+
+            // Toggle board/list visibility
+            if (els.ticketBoard) {
+                els.ticketBoard.classList.toggle("hidden", perspective !== "board");
+            }
+            if (els.ticketListView) {
+                els.ticketListView.classList.toggle("hidden", perspective !== "list");
+            }
+
+            if (perspective !== "board") {
+                return;
+            }
+
             els.ticketBoard.innerHTML = lanes.map((lane) => {
-                const cards = state.tickets
+                const cards = sprintFilterTickets(state.tickets)
                     .filter((ticket) => (ticket.stage || lanes[0].name) === lane.name)
                     .filter((ticket) => !hideDone || String(ticket.stage || "").toLowerCase() !== "done")
                     .filter((ticket) => !searchText || String(ticket.title || "").toLowerCase().includes(searchText) || String(ticket.key || ticket.id || "").toLowerCase().includes(searchText))
@@ -3252,6 +3327,78 @@
                     (cards || "<div class=\"empty\">No tickets</div>") +
                     "</div>";
             }).join("");
+        }
+
+        function renderTicketListView() {
+            if (!els.ticketListView) {
+                return;
+            }
+            const perspective = state.boardPerspective || "board";
+            if (perspective !== "list") {
+                return;
+            }
+            const sprints = state.sprints || [];
+            const tickets = sprintFilterTickets(state.tickets);
+
+            // Group tickets by sprint_id
+            const groups = {};
+            const backlog = [];
+            tickets.forEach((t) => {
+                if (t.sprint_id) {
+                    if (!groups[t.sprint_id]) {
+                        groups[t.sprint_id] = [];
+                    }
+                    groups[t.sprint_id].push(t);
+                } else {
+                    backlog.push(t);
+                }
+            });
+
+            // Build sorted sprint list (by number)
+            const sorted = sprints.slice().sort((a, b) => a.number - b.number);
+            const selectedSprintNumID = state.selectedSprintID && state.selectedSprintID !== "backlog" ? Number(state.selectedSprintID) : null;
+
+            let html = "";
+            sorted.forEach((sprint) => {
+                const sprintTickets = groups[sprint.id] || [];
+                const label = "Sprint " + sprint.number + (sprint.title ? ": " + sprint.title : "");
+                const isSelected = selectedSprintNumID === sprint.id;
+                const openAttr = isSelected ? " open" : "";
+                html += "<details class=\"sprint-group\"" + openAttr + ">" +
+                    "<summary><strong>" + escapeHTML(label) + "</strong> <span class=\"chip\">" + escapeHTML(sprint.stage) + "</span> <span class=\"chip\">" + sprintTickets.length + "</span></summary>" +
+                    renderTicketListRows(sprintTickets) +
+                    "</details>";
+            });
+
+            // Backlog group (always last)
+            if (backlog.length > 0 || state.selectedSprintID === "backlog" || state.selectedSprintID === "") {
+                const isSelected = state.selectedSprintID === "backlog";
+                const openAttr = isSelected || state.selectedSprintID === "" ? " open" : "";
+                html += "<details class=\"sprint-group\"" + openAttr + ">" +
+                    "<summary><strong>Backlog</strong> <span class=\"chip\">" + backlog.length + "</span></summary>" +
+                    renderTicketListRows(backlog) +
+                    "</details>";
+            }
+
+            if (!html) {
+                html = "<div class=\"empty\">No tickets.</div>";
+            }
+            els.ticketListView.innerHTML = html;
+        }
+
+        function renderTicketListRows(tickets) {
+            if (!tickets.length) {
+                return "<div class=\"empty\">No tickets.</div>";
+            }
+            return "<table class=\"ticket-list-table\"><thead><tr><th>ID</th><th>Title</th><th>Stage</th><th>Priority</th><th>Type</th></tr></thead><tbody>" +
+                tickets.map((t) => "<tr class=\"ticket-list-row\" data-ticket-id=\"" + escapeHTML(t.id) + "\">" +
+                    "<td>" + escapeHTML(t.key || t.id || "") + "</td>" +
+                    "<td>" + escapeHTML(t.title || "(untitled)") + "</td>" +
+                    "<td>" + escapeHTML(t.stage || "") + "</td>" +
+                    "<td>" + escapeHTML(String(t.priority || "")) + "</td>" +
+                    "<td>" + escapeHTML(t.type || "") + "</td>" +
+                    "</tr>").join("") +
+                "</tbody></table>";
         }
 
         function renderPredictedNextWork() {
@@ -3938,7 +4085,7 @@
                 state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
                 renderProjectMenu();
                 populateTicketTypeAndStageSelects();
-                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadGoals(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]).then(renderAll).catch((error) => setNotice(error.message, true));
+                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]).then(renderAll).catch((error) => setNotice(error.message, true));
             });
 
             document.getElementById("new-project-button").addEventListener("click", () => {
@@ -3987,7 +4134,7 @@
                     state.selectedProjectID = project.id;
                     storeSelectedProjectID(state.selectedProjectID);
                     await Promise.all([loadProjects(), loadWorkflows()]);
-                    await Promise.all([loadTickets(), loadGoals(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
+                    await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
                     renderAll();
                     setNotice("Project saved.");
                 } catch (error) {
@@ -4015,7 +4162,7 @@
                     state.goalAgentModelConfig = emptyAgentModelConfig();
                     state.resolvedGoalAgentModelConfig = null;
                     await loadProjects();
-                    await Promise.all([loadTickets(), loadGoals(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
+                    await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
                     renderAll();
                     setNotice("Project deleted.");
                 } catch (error) {
@@ -5825,10 +5972,62 @@
         function bindTicketsHandlers() {
             document.getElementById("new-ticket-button").addEventListener("click", () => openTicketModal(emptyTicket()));
             if (els.boardSearch) {
-                els.boardSearch.addEventListener("input", () => renderTicketBoard());
+                els.boardSearch.addEventListener("input", () => { renderTicketBoard(); renderTicketListView(); });
             }
             if (els.boardHideDone) {
-                els.boardHideDone.addEventListener("change", () => renderTicketBoard());
+                els.boardHideDone.addEventListener("change", () => { renderTicketBoard(); renderTicketListView(); });
+            }
+            if (els.boardSprintSelect) {
+                els.boardSprintSelect.addEventListener("change", () => {
+                    state.selectedSprintID = els.boardSprintSelect.value;
+                    if (state.selectedProjectID) {
+                        localStorage.setItem("site2.sprint." + state.selectedProjectID, state.selectedSprintID);
+                    }
+                    renderTicketBoard();
+                    renderTicketListView();
+                });
+            }
+            if (els.newSprintButton) {
+                els.newSprintButton.addEventListener("click", async () => {
+                    if (!state.selectedProjectID) {
+                        return;
+                    }
+                    try {
+                        await apiClient.createSprint(state.selectedProjectID, "");
+                        await loadSprints();
+                        renderSprintSelect();
+                        renderTicketBoard();
+                        renderTicketListView();
+                    } catch (e) {
+                        setNotice(e.message, true);
+                    }
+                });
+            }
+            // Board perspective toggle buttons
+            document.querySelectorAll("[data-perspective]").forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    state.boardPerspective = btn.dataset.perspective;
+                    localStorage.setItem("site2.board-view", state.boardPerspective);
+                    renderTicketBoard();
+                    renderTicketListView();
+                });
+            });
+            // Ticket list view row click
+            if (els.ticketListView) {
+                els.ticketListView.addEventListener("click", (e) => {
+                    const row = e.target.closest(".ticket-list-row");
+                    if (!row) {
+                        return;
+                    }
+                    const ticketID = row.dataset.ticketId;
+                    if (!ticketID) {
+                        return;
+                    }
+                    const ticket = state.tickets.find((t) => t.id === ticketID);
+                    if (ticket) {
+                        openTicketModal(ticket);
+                    }
+                });
             }
             document.getElementById("close-ticket-modal").addEventListener("click", closeTicketModal);
             els.ticketModal.addEventListener("click", (event) => {
@@ -6035,6 +6234,21 @@
             document.getElementById("ticket-ac").value = ticket.acceptance_criteria || "";
             document.getElementById("ticket-parent").value = ticket.parent_id || "";
             document.getElementById("ticket-workflow").value = ticket.workflow_id || "";
+            // Populate sprint select
+            const ticketSprintEl = document.getElementById("ticket-sprint");
+            if (ticketSprintEl) {
+                const sprintOptions = ["<option value=\"\">None</option>"].concat(
+                    (state.sprints || []).map((s) => {
+                        const label = "Sprint " + s.number + (s.title ? ": " + s.title : "");
+                        const selected = ticket.sprint_id === s.id ? " selected" : "";
+                        return "<option value=\"" + s.id + "\"" + selected + ">" + escapeHTML(label) + "</option>";
+                    })
+                );
+                ticketSprintEl.innerHTML = sprintOptions.join("");
+                if (!ticket.sprint_id) {
+                    ticketSprintEl.value = "";
+                }
+            }
             document.getElementById("ticket-draft").value = String(Boolean(ticket.draft));
             document.getElementById("ticket-priority").value = ticket.priority || 0;
             document.getElementById("ticket-order").value = ticket.order || 0;
@@ -6370,9 +6584,21 @@
                     await api("/api/tickets/" + ticket.id + "/workflow", { method: "DELETE" });
                 }
 
+                // Handle sprint assignment
+                const ticketSprintEl = document.getElementById("ticket-sprint");
+                if (ticketSprintEl) {
+                    const sprintVal = ticketSprintEl.value;
+                    const newSprintID = sprintVal ? Number(sprintVal) : null;
+                    const currentSprintID = ticket.sprint_id || null;
+                    if (newSprintID !== currentSprintID) {
+                        await apiClient.setTicketSprint(ticket.id, newSprintID);
+                    }
+                }
+
                 closeTicketModal();
                 await loadTickets();
                 renderTicketBoard();
+                renderTicketListView();
                 setNotice("Ticket saved.");
             } catch (error) {
                 setNotice(error.message, true);

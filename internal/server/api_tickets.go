@@ -1388,6 +1388,35 @@ func (r *router) registerTicketHandlers() {
 				}
 				return
 			}
+			if len(parts) == 2 && parts[1] == "sprint" {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				if r.Method != http.MethodPut {
+					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+					return
+				}
+				var payload struct {
+					SprintID *int `json:"sprint_id"`
+				}
+				if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				if err := store.SetTicketSprint(r.Context(), db, id, payload.SprintID); err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				ticket, err := store.GetTicket(r.Context(), db, id)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
 			if len(parts) == 2 && parts[1] == "analyse" && r.Method == http.MethodPost {
 				if !canWriteProject(role) {
 					writeAuthError(w, store.ErrForbidden)
