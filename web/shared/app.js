@@ -3459,11 +3459,8 @@
             const allSprints = state.sprints || [];
             const sel = state.selectedSprintID;
 
-            // Order: active first, then closed descending by number, then design/future
-            const active = allSprints.filter((s) => s.stage === "active");
-            const closed = allSprints.filter((s) => s.stage === "closed").slice().sort((a, b) => b.number - a.number);
-            const future = allSprints.filter((s) => s.stage !== "active" && s.stage !== "closed");
-            const ordered = [...active, ...closed, ...future];
+            // Order: descending by sprint number (most recent first)
+            const ordered = allSprints.slice().sort((a, b) => b.number - a.number);
 
             const sprintOption = (s) => {
                 const label = "Sprint " + s.number + (s.title ? ": " + s.title : "");

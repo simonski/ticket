@@ -733,16 +733,8 @@ func runDemo(args []string) error {
 				}
 				sprint5AssignCount++
 			} else if targetSprintGlobalIdx > activeSprintIdx {
-				// Future sprint: put tickets in backlog (idea/refine/ready)
-				isBacklog = true
-				switch localIdx % 3 {
-				case 0:
-					stage, state = store.StageIdea, store.StateIdle
-				case 1:
-					stage, state = store.StageRefine, store.StateIdle
-				default:
-					stage, state = store.StageReady, store.StateIdle
-				}
+				// Future sprint: assign to sprint with ready stage (planned work)
+				stage, state = store.StageReady, store.StateIdle
 			} else {
 				// Past (closed) sprint: 80% complete, 20% rejected
 				switch localIdx % 10 {
