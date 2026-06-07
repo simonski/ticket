@@ -120,7 +120,7 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 	} else {
 		workflow, sErr := CreateWorkflow(ctx, db, "default", "Minimal bootstrap Workflow")
 		if sErr == nil {
-			for i, name := range []string{StageDevelop, StageDone} {
+			for i, name := range []string{StageIdea, StageRefine, StageReady, StageDevelop, StageComplete} {
 				if _, stageErr := AddWorkflowStage(ctx, db, workflow.ID, name, "", "", i); stageErr != nil {
 					return stageErr
 				}
@@ -1750,6 +1750,27 @@ CREATE TABLE user_notifications (
 	// Add programme_id column to projects if it doesn't exist yet.
 	if !columnExists(ctx, db, "projects", "programme_id") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN programme_id INTEGER REFERENCES programmes(id)`); err != nil {
+			return err
+		}
+	}
+
+	// Add recommended_ready to tickets (refiner agent signals readiness).
+	if !columnExists(ctx, db, "tickets", "recommended_ready") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN recommended_ready INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+
+	// Add pr_url to tickets (developer agent stores PR link after completing).
+	if !columnExists(ctx, db, "tickets", "pr_url") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN pr_url TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+
+	// Add agent_role to users (refiner, developer, tester etc.).
+	if !columnExists(ctx, db, "users", "agent_role") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN agent_role TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}

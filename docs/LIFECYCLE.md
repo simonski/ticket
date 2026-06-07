@@ -52,13 +52,21 @@ tk project workflow <workflow_id>
 A stage represents a phase of work within an workflow.  Visually they would be rendered as swimlanes or columns in a kanban board.
 
 - The **default** stage (the one which tickets are created in) is the first stage.
-- Has a **name** (e.g. `design`, `develop`, `test`, `done`).
+- Has a **name** (e.g. `idea`, `refine`, `ready`, `develop`, `complete`).
 - Has an optional **description** 
 - Has an optional **acceptance criteria** explaining the purpose and expected outcome.
 - Has an **order** within its workflow.
 - Can have one or more **roles** assigned to it, which are ordered within the stage
 
-Example stages: `design` -> `develop` -> `test` -> `done`.
+Example stages: `idea` -> `refine` -> `ready` -> `develop` -> `complete`.
+
+### Backlog stages
+
+The first three stages (`idea`, `refine`, `ready`) are **backlog stages**. A ticket in a backlog stage:
+- Starts at `idea` when created.
+- Progresses `idea` → `refine` → `ready` via `tk next` (requires `state=success` at each step).
+- **Cannot** advance past `ready` until the ticket is assigned to an open sprint.
+- Once in a sprint, `tk next` advances from `ready` to the first sprint workflow stage (e.g. `develop`).
 
 ```bash
 tk workflow stage-list -id <workflow_id>
@@ -71,13 +79,18 @@ tk workflow stage-rm -stage-id <stage_id>
 tk workflow stage-order -id <workflow_id> <stage_id1,stage_id2,stage_id3>
 ```
 
-As a minimum in any Workflow there are TWO stages - "develop" and "done".   
+The default bootstrap workflow has five stages: `idea`, `refine`, `ready`, `develop`, `complete`.
 
-Develop: represents the stage where work is carried out.
-Done: represents the final stage of any work where it is completely finished.
-    - Done is the final place a story goes when it is closed.
-    - Done does not have any roles as no work is carried out there.
-    - Done cannot have any roles assigned to it - it is the final place a ticket goes when it is closed.
+`develop`: represents the stage where sprint work is carried out.
+`complete`: the terminal stage for accepted work — ticket is shipped and done.
+`reject`: an optional terminal stage for rejected sprint tickets. Not in the default linear chain; tickets are moved here manually when a sprint ticket will not be completed.
+
+The **backlog board** shows only the three backlog stages: `idea`, `refine`, `ready`.
+The **sprint board** shows: `ready`, `develop`, `complete`, `reject` (in that order).
+
+Sprint assignment rules:
+- A ticket must be in `ready` stage before it can be added to a sprint (`SetTicketSprint`).
+- A sprint cannot be activated if any of its tickets are in `idea` or `refine` stage.
 
 ---
 

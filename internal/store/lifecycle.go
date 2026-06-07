@@ -9,10 +9,17 @@ import (
 )
 
 const (
-	StageDesign  = "design"
-	StageDevelop = "develop"
-	StageTest    = "test"
-	StageDone    = "done"
+	// Backlog stages: tickets move through these before entering a sprint.
+	StageIdea   = "idea"
+	StageRefine = "refine"
+	StageReady  = "ready"
+
+	StageDesign   = "design"
+	StageDevelop  = "develop"
+	StageTest     = "test"
+	StageDone     = "done"
+	StageComplete = "complete"
+	StageReject   = "reject"
 )
 
 const (
@@ -24,10 +31,28 @@ const (
 )
 
 var validStages = map[string]bool{
-	StageDesign:  true,
-	StageDevelop: true,
-	StageTest:    true,
-	StageDone:    true,
+	StageIdea:     true,
+	StageRefine:   true,
+	StageReady:    true,
+	StageDesign:   true,
+	StageDevelop:  true,
+	StageTest:     true,
+	StageDone:     true,
+	StageComplete: true,
+	StageReject:   true,
+}
+
+var backlogStages = map[string]bool{
+	StageIdea:   true,
+	StageRefine: true,
+	StageReady:  true,
+}
+
+// IsBacklogStage returns true if stage is one of the pre-sprint backlog stages
+// (idea, refine, ready). Tickets in these stages cannot progress to sprint
+// workflow stages until assigned to a sprint.
+func IsBacklogStage(stage string) bool {
+	return backlogStages[stage]
 }
 
 var validStates = map[string]bool{
@@ -63,7 +88,7 @@ func ValidLifecycle(stage, state string) bool {
 	if !ValidStage(stage) || !ValidState(state) {
 		return false
 	}
-	if stage == StageDone {
+	if stage == StageDone || stage == StageComplete || stage == StageReject {
 		return state == StateSuccess || state == StateFail
 	}
 	return true

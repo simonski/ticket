@@ -43,7 +43,7 @@ func TestInitSeedsDefaultWorkflow(t *testing.T) {
 	}
 }
 
-func TestDefaultWorkflowHasTwoStages(t *testing.T) {
+func TestDefaultWorkflowHasBacklogAndSprintStages(t *testing.T) {
 	t.Parallel()
 	db := setupWorkflowTestDB(t)
 	workflows, _ := ListWorkflows(context.Background(), db, 0, 0)
@@ -57,14 +57,14 @@ func TestDefaultWorkflowHasTwoStages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetWorkflow() error = %v", err)
 	}
-	if len(wf.Stages) != 2 {
-		t.Fatalf("default workflow stages = %d, want 2", len(wf.Stages))
+	wantStages := []string{StageIdea, StageRefine, StageReady, StageDevelop, StageComplete}
+	if len(wf.Stages) != len(wantStages) {
+		t.Fatalf("default workflow stages = %d, want %d", len(wf.Stages), len(wantStages))
 	}
-	if wf.Stages[0].StageName != "develop" {
-		t.Errorf("stage[0] = %q, want develop", wf.Stages[0].StageName)
-	}
-	if wf.Stages[1].StageName != "done" {
-		t.Errorf("stage[1] = %q, want done", wf.Stages[1].StageName)
+	for i, want := range wantStages {
+		if wf.Stages[i].StageName != want {
+			t.Errorf("stage[%d] = %q, want %q", i, wf.Stages[i].StageName, want)
+		}
 	}
 }
 
@@ -313,8 +313,9 @@ func TestWorkflowExportImportRoundTrip(t *testing.T) {
 	if exported.Name != "default" {
 		t.Fatalf("exported.Name = %q, want %q", exported.Name, "default")
 	}
-	if len(exported.Stages) != 2 {
-		t.Fatalf("exported stages = %d, want 2", len(exported.Stages))
+	wantStageCount := 5 // idea, refine, ready, develop, complete
+	if len(exported.Stages) != wantStageCount {
+		t.Fatalf("exported stages = %d, want %d", len(exported.Stages), wantStageCount)
 	}
 
 	// Import as a new workflow with different name
@@ -329,8 +330,8 @@ func TestWorkflowExportImportRoundTrip(t *testing.T) {
 
 	// Verify stages match
 	got, _ := GetWorkflow(context.Background(), db, imported.ID)
-	if len(got.Stages) != 2 {
-		t.Fatalf("imported stages = %d, want 2", len(got.Stages))
+	if len(got.Stages) != wantStageCount {
+		t.Fatalf("imported stages = %d, want %d", len(got.Stages), wantStageCount)
 	}
 	for i, s := range got.Stages {
 		if s.StageName != exported.Stages[i].StageName {

@@ -317,9 +317,15 @@ func runDemo(args []string) error {
 		return fmt.Errorf("getting admin user: %w", err)
 	}
 
+	// Set organisation name
+	if _, err := store.UpdateOrg(ctx, db, "Acme Corp", "acme.example.com", "Acme Corporation — demo organisation", ""); err != nil {
+		return fmt.Errorf("setting org: %w", err)
+	}
+	fmt.Printf("  ✓ Organisation set to %q\n", "Acme Corp")
+
 	// Create workflow
 	wf, err := store.CreateWorkflow(ctx, db, "Product Development",
-		"Standard software development lifecycle from discovery to delivery")
+		"Standard software development lifecycle from idea to delivery")
 	if err != nil {
 		return fmt.Errorf("creating workflow: %w", err)
 	}
@@ -328,11 +334,14 @@ func runDemo(args []string) error {
 		name string
 		desc string
 	}{
-		{"discovery", "Explore the problem, write user stories, define acceptance criteria"},
+		{store.StageIdea, "Capture the initial idea, problem statement, or feature request"},
+		{store.StageRefine, "Explore, write user stories, and define acceptance criteria"},
+		{store.StageReady, "Fully refined and ready to be pulled into a sprint"},
 		{"design", "Architect the solution, create technical design documents"},
-		{"develop", "Implement the feature or fix"},
+		{store.StageDevelop, "Implement the feature or fix"},
 		{"review", "Code review, QA testing, and stakeholder sign-off"},
-		{"done", "Shipped to production"},
+		{store.StageComplete, "Shipped to production and accepted"},
+		{store.StageReject, "Rejected — will not be completed in this sprint"},
 	}
 
 	createdStages := make([]store.WorkflowStage, 0, len(stages))
@@ -344,7 +353,7 @@ func runDemo(args []string) error {
 		createdStages = append(createdStages, ws)
 	}
 
-	// Add linear transitions: discovery→design, design→develop, develop→review, review→done
+	// Add linear transitions: idea→refine→ready→design→develop→review→done
 	for i := 0; i < len(createdStages)-1; i++ {
 		if err := store.SetWorkflowStageTransitions(ctx, db, wf.ID, createdStages[i].ID, []int64{createdStages[i+1].ID}); err != nil {
 			return fmt.Errorf("setting workflow transitions: %w", err)
@@ -407,6 +416,30 @@ func runDemo(args []string) error {
 	}
 
 	fmt.Printf("  ✓ Created %d users\n", len(users))
+
+	// Create demo agents: refiner, developer, tester — each with password "password".
+	type demoAgent struct {
+		username string
+		role     string
+	}
+	demoAgents := []demoAgent{
+		{username: "refiner", role: "refiner"},
+		{username: "developer", role: "developer"},
+		{username: "tester", role: "tester"},
+	}
+	for _, da := range demoAgents {
+		// Create agent with known UUID derived from username for reproducibility.
+		agent, _, err := store.CreateAgent(ctx, db, "password")
+		if err != nil {
+			return fmt.Errorf("creating agent %s: %w", da.username, err)
+		}
+		// Rename to friendly username and set agent_role.
+		if _, sqlErr := db.ExecContext(ctx, `UPDATE users SET username = ?, display_name = ?, agent_role = ? WHERE user_id = ?`,
+			da.username, strings.Title(da.role)+" Agent", da.role, agent.ID); sqlErr != nil {
+			return fmt.Errorf("updating agent username for %s: %w", da.username, sqlErr)
+		}
+	}
+	fmt.Printf("  ✓ Created demo agents (refiner, developer, tester) — password: password\n")
 
 	// Create teams
 	engTeam, err := store.CreateTeam(ctx, db, "Engineering", nil)
@@ -490,6 +523,18 @@ func runDemo(args []string) error {
 	}
 
 	fmt.Printf("  ✓ Created %d projects\n", len(projects))
+
+	// Create programme and assign all projects to it.
+	programme, err := store.CreateProgramme(ctx, db, "TODO Application", "Core delivery programme for the TODO Application platform")
+	if err != nil {
+		return fmt.Errorf("creating programme: %w", err)
+	}
+	for _, proj := range projects {
+		if err := store.SetProjectProgramme(ctx, db, proj.ID, &programme.ID); err != nil {
+			return fmt.Errorf("assigning project %s to programme: %w", proj.Title, err)
+		}
+	}
+	fmt.Printf("  ✓ Created programme %q with %d projects\n", programme.Name, len(projects))
 
 	// Sprint timeline: 6 sprints, 2 weeks each, today = mid-sprint 5.
 	// Sprint 5 (index 4) started 7 days ago; each prior sprint is 14 days earlier.
@@ -665,7 +710,7 @@ func runDemo(args []string) error {
 					isBacklog = true
 					stage, state = "design", "idle" // not yet started but designed
 				} else {
-					// In-sprint: tickets are past discovery (ready for dev)
+					// In-sprint: tickets are past the backlog (ready for dev)
 					switch localIdx % 10 {
 					case 0, 1:
 						stage, state = "design", "idle"
@@ -699,7 +744,7 @@ func runDemo(args []string) error {
 				// Past (closed) sprint: most tickets done, some in various stages
 				switch localIdx % 20 {
 				case 0, 1, 2:
-					stage, state = "discovery", "idle"
+					stage, state = store.StageReady, "idle"
 				case 3, 4, 5:
 					stage, state = "design", "idle"
 				case 6, 7, 8, 9:
@@ -730,7 +775,7 @@ func runDemo(args []string) error {
 				return fmt.Errorf("creating ticket %d: %w", localIdx, err)
 			}
 
-			if stage != "discovery" || state != "idle" {
+			if stage != store.StageIdea || state != "idle" {
 				_, _ = store.UpdateTicket(ctx, db, t.ID, store.TicketUpdateParams{
 					Title:       t.Title,
 					Description: t.Description,
@@ -888,7 +933,7 @@ func runDemo(args []string) error {
 	// Print summary
 	fmt.Printf("\nDemo database ready: %s\n", *dbPath)
 	fmt.Printf("  Login:   admin / password\n")
-	fmt.Printf("  Server:  tk serve -f %s (then open http://localhost:8080)\n", *dbPath)
+	fmt.Printf("  Server:  tk server -f %s (then open http://localhost:8080)\n", *dbPath)
 
 	// Build user list for display
 	usernames := make([]string, 0, len(users))
@@ -903,6 +948,8 @@ func runDemo(args []string) error {
 		suffix = ", ..."
 	}
 	fmt.Printf("  Users:   %s%s (password: password)\n", strings.Join(usernames, ", "), suffix)
+	fmt.Printf("  Agents:  refiner, developer, tester (password: password)\n")
+	fmt.Printf("           Run: TICKET_URL=http://localhost:8080 AGENT_ID=<uuid> AGENT_PASSWORD=password tk agent run\n")
 
 	return nil
 }

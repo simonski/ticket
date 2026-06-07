@@ -45,8 +45,8 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	if ticket.ParentID == nil || *ticket.ParentID != epic.ID {
 		t.Fatalf("CreateTicket().ParentID = %#v, want %s", ticket.ParentID, epic.ID)
 	}
-	if ticket.Stage != StageDevelop || ticket.State != StateIdle {
-		t.Fatalf("CreateTicket().Lifecycle = %s/%s, want develop/idle", ticket.Stage, ticket.State)
+	if ticket.Stage != StageIdea || ticket.State != StateIdle {
+		t.Fatalf("CreateTicket().Lifecycle = %s/%s, want idea/idle", ticket.Stage, ticket.State)
 	}
 	if ticket.EstimateEffort != 5 || ticket.EstimateComplete != "2026-04-01T12:00:00Z" {
 		t.Fatalf("CreateTicket() estimates = %#v", ticket)
@@ -101,11 +101,11 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTicket(stage/state) error = %v", err)
 	}
-	if statusUpdated.Status != "develop/active" {
-		t.Fatalf("UpdateTicket().Status = %q, want design/active", statusUpdated.Status)
+	if statusUpdated.Status != "idea/active" {
+		t.Fatalf("UpdateTicket().Status = %q, want idea/active", statusUpdated.Status)
 	}
-	if statusUpdated.Stage != StageDevelop || statusUpdated.State != StateActive {
-		t.Fatalf("UpdateTicket().Lifecycle = %s/%s, want develop/active", statusUpdated.Stage, statusUpdated.State)
+	if statusUpdated.Stage != StageIdea || statusUpdated.State != StateActive {
+		t.Fatalf("UpdateTicket().Lifecycle = %s/%s, want idea/active", statusUpdated.Stage, statusUpdated.State)
 	}
 	workItems, err := ListWorkItemsByTicket(context.Background(), db, ticket.ID, 0, 0)
 	if err != nil {
@@ -148,10 +148,10 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		reasons = append(reasons, reason)
 	}
 	if len(transitions) != 1 {
-		t.Fatalf("ticket lifecycle transitions = %#v, want [[\"design/idle\", \"design/active\"]]", transitions)
+		t.Fatalf("ticket lifecycle transitions = %#v, want [[\"idea/idle\", \"idea/active\"]]", transitions)
 	}
-	if transitions[0] != ([2]string{"develop/idle", "develop/active"}) {
-		t.Fatalf("ticket lifecycle transition = %#v, want [\"design/idle\" \"design/active\"]", transitions[0])
+	if transitions[0] != ([2]string{"idea/idle", "idea/active"}) {
+		t.Fatalf("ticket lifecycle transition = %#v, want [\"idea/idle\" \"idea/active\"]", transitions[0])
 	}
 	if len(reasons) != 1 || reasons[0] != "manual update" {
 		t.Fatalf("ticket lifecycle reason = %#v, want [\"manual update\"]", reasons)
@@ -160,7 +160,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	filtered, err := ListTickets(context.Background(), db, TicketListParams{
 		ProjectID: project.ID,
 		Type:      "task",
-		Status:    "develop/active",
+		Status:    "idea/active",
 		Search:    "password",
 	})
 	if err != nil {
@@ -812,8 +812,14 @@ func TestRequestTicketByRef(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	// Request by TicketRef (resolved via GetTicketByRef -> GetTicket)
-	// The ticket is at develop/idle which is claimable.
+	// Advance ticket to develop stage so it is claimable.
+	if _, err := db.ExecContext(context.Background(),
+		`UPDATE tickets SET stage = 'develop', state = 'idle', status = 'develop/idle', draft = 0 WHERE ticket_id = ?`,
+		ticket.ID); err != nil {
+		t.Fatalf("advance to develop: %v", err)
+	}
+
+	// Request by TicketRef (resolved via GetTicketByRef -> GetTicket).
 	assigned, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
 		TicketRef: ticket.ID,
@@ -1001,8 +1007,8 @@ func TestUpdateTicketStatusAllowsAdminBypass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTicket(admin lifecycle bypass) error = %v", err)
 	}
-	if updated.Status != "develop/active" {
-		t.Fatalf("UpdateTicket(admin lifecycle bypass).Status = %q, want design/active", updated.Status)
+	if updated.Status != "idea/active" {
+		t.Fatalf("UpdateTicket(admin lifecycle bypass).Status = %q, want idea/active", updated.Status)
 	}
 }
 
@@ -1092,7 +1098,7 @@ func TestCloneTicketClonesSingleTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CloneTicket() error = %v", err)
 	}
-	if cloned.ID == ticket.ID || cloned.Status != "develop/idle" || cloned.Assignee != "" {
+	if cloned.ID == ticket.ID || cloned.Status != "idea/idle" || cloned.Assignee != "" {
 		t.Fatalf("CloneTicket() = %#v", cloned)
 	}
 	if cloned.CloneOf == nil || *cloned.CloneOf != ticket.ID {
@@ -1355,23 +1361,23 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 	if err != nil {
 		t.Fatalf("UpdateTicket(leaf to develop/active) error = %v", err)
 	}
-	if updatedLeaf.Status != "develop/active" {
-		t.Fatalf("leaf status = %q, want design/active", updatedLeaf.Status)
+	if updatedLeaf.Status != "idea/active" {
+		t.Fatalf("leaf status = %q, want idea/active", updatedLeaf.Status)
 	}
 
 	reloadedParent, err := GetTicket(context.Background(), db, parentTask.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(parentTask) error = %v", err)
 	}
-	if reloadedParent.Status != "develop/active" {
-		t.Fatalf("parent task status = %q, want design/active", reloadedParent.Status)
+	if reloadedParent.Status != "idea/active" {
+		t.Fatalf("parent task status = %q, want idea/active", reloadedParent.Status)
 	}
 	reloadedEpic, err := GetTicket(context.Background(), db, epic.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(epic) error = %v", err)
 	}
-	if reloadedEpic.Status != "develop/active" {
-		t.Fatalf("epic status = %q, want design/active", reloadedEpic.Status)
+	if reloadedEpic.Status != "idea/active" {
+		t.Fatalf("epic status = %q, want idea/active", reloadedEpic.Status)
 	}
 
 	// Advance leaf through all remaining stages by setting success repeatedly
@@ -1396,15 +1402,15 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 	if err != nil {
 		t.Fatalf("GetTicket(parentTask after complete) error = %v", err)
 	}
-	if reloadedParent.Status != "done/success" {
-		t.Fatalf("parent task status after complete = %q, want done/success", reloadedParent.Status)
+	if reloadedParent.Status != "complete/success" {
+		t.Fatalf("parent task status after complete = %q, want complete/success", reloadedParent.Status)
 	}
 	reloadedEpic, err = GetTicket(context.Background(), db, epic.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(epic after complete) error = %v", err)
 	}
-	if reloadedEpic.Status != "done/success" {
-		t.Fatalf("epic status after complete = %q, want done/success", reloadedEpic.Status)
+	if reloadedEpic.Status != "complete/success" {
+		t.Fatalf("epic status after complete = %q, want complete/success", reloadedEpic.Status)
 	}
 }
 

@@ -104,15 +104,18 @@
             users: [],
             teamMembers: [],
             sprints: [],
-            selectedSprintID: "",
+            selectedSprintID: "backlog",
             boardPerspective: localStorage.getItem("site2.board-view") || "board",
             org: null,
             programmes: [],
             selectedProgrammeID: null,
+            projectAgents: [],
         };
 
         const TICKET_TYPES = ["epic", "task", "bug", "spike", "chore", "story", "note", "question", "requirement", "decision"];
         const FALLBACK_STAGES = ["backlog", "todo", "doing", "done"];
+        const BACKLOG_BOARD_STAGES = ["idea", "refine", "ready"];
+        const SPRINT_BOARD_STAGES = ["ready", "develop", "complete", "reject"];
         const AUTH_STORAGE_KEY = "site2.auth";
         const SELECTED_PROJECT_STORAGE_KEY = "site2.selectedProjectID";
         const SELECTED_VIEW_STORAGE_KEY = "site2.selectedView";
@@ -243,6 +246,7 @@
             ticketBoard: document.getElementById("ticket-board"),
             ticketListView: document.getElementById("ticket-list-view"),
             ticketPlanView: document.getElementById("ticket-plan-view"),
+            projectAgentBar: document.getElementById("project-agent-bar"),
             adminSummaryContent: document.getElementById("admin-summary-content"),
             boardSearch: document.getElementById("board-search"),
             boardHideDone: document.getElementById("board-hide-done"),
@@ -1406,7 +1410,16 @@
         function getBoardLaneDescriptors() {
             const workflow = getCurrentProjectWorkflow();
             const stageMap = new Map((workflow && workflow.stages ? workflow.stages : []).map((stage) => [stage.name, stage.id]));
-            return getStageOptions().map((name) => ({
+            const sel = state.selectedSprintID;
+            let names;
+            if (sel === "backlog") {
+                names = BACKLOG_BOARD_STAGES;
+            } else if (sel && sel !== "") {
+                names = SPRINT_BOARD_STAGES;
+            } else {
+                names = getStageOptions();
+            }
+            return names.map((name) => ({
                 name,
                 workflowStageID: stageMap.get(name) || null,
             }));
@@ -1540,7 +1553,7 @@
             state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
             populateTicketTypeAndStageSelects();
             await loadProjectAgentModelConfig();
-            await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
+            await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
             renderAll();
         }
 
@@ -1808,7 +1821,16 @@
             if (saved !== null) {
                 state.selectedSprintID = saved;
             } else {
-                state.selectedSprintID = "";
+                state.selectedSprintID = "backlog";
+            }
+        }
+
+        async function loadProjectAgents() {
+            if (!state.selectedProjectID) { state.projectAgents = []; return; }
+            try {
+                state.projectAgents = await apiClient.get("/api/projects/" + state.selectedProjectID + "/agents");
+            } catch (e) {
+                state.projectAgents = [];
             }
         }
 
@@ -2029,7 +2051,7 @@
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
-            await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
+            await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
             renderAll();
         }
 
@@ -2156,6 +2178,7 @@
             renderUsers();
             renderTeamMembers();
             renderSprintSelect();
+            renderProjectAgentBar();
             renderTicketBoard();
             renderTicketListView();
             renderTicketPlanView();
@@ -3392,6 +3415,43 @@
             return tickets.filter((t) => t.sprint_id === numID);
         }
 
+        function agentStatusIcon(agent) {
+            const status = agent.status || "idle";
+            const role = agent.agent_role || "";
+            // Emoji icon by role
+            const roleIcon = role === "refiner" ? "🔍" : role === "developer" ? "💻" : role === "tester" ? "🧪" : "🤖";
+            // Badge content and class
+            let badge = "", badgeClass = "";
+            if (!agent.enabled) {
+                badge = "✕"; badgeClass = "agent-badge-offline";
+            } else if (status === "working") {
+                badge = "▶"; badgeClass = "agent-badge-working";
+            } else if (status === "disabled" || status === "offline") {
+                badge = "!"; badgeClass = "agent-badge-offline";
+            } else if (status === "idle" || status === "soliciting") {
+                badge = "z"; badgeClass = "agent-badge-idle";
+            }
+            const badgeHTML = badge ? "<span class=\"agent-icon-badge " + badgeClass + "\">" + badge + "</span>" : "";
+            const label = escapeHTML(agent.username || agent.user_id || "agent");
+            const title = label + " (" + status + ")" + (role ? " — " + role : "");
+            const ticketKey = agent.ticket_key || "";
+            return "<div class=\"agent-icon\" data-status=\"" + status + "\" data-agent-id=\"" + escapeHTML(agent.user_id || "") + "\" title=\"" + escapeHTML(title) + "\"" + (ticketKey ? " data-ticket-key=\"" + escapeHTML(ticketKey) + "\"" : "") + ">" +
+                roleIcon + badgeHTML + "</div>";
+        }
+
+        function renderProjectAgentBar() {
+            const bar = els.projectAgentBar;
+            if (!bar) return;
+            const agents = state.projectAgents || [];
+            if (!agents.length) {
+                bar.classList.add("hidden");
+                return;
+            }
+            bar.classList.remove("hidden");
+            bar.innerHTML = "<span class=\"agent-bar-label\">Agents</span>" +
+                agents.map((s) => agentStatusIcon(s.agent || s)).join("");
+        }
+
         function renderSprintSelect() {
             if (!els.boardSprintSelect) {
                 return;
@@ -3468,45 +3528,62 @@
             const backlog = [];
             tickets.forEach((t) => {
                 if (t.sprint_id) {
-                    if (!groups[t.sprint_id]) {
-                        groups[t.sprint_id] = [];
-                    }
+                    if (!groups[t.sprint_id]) { groups[t.sprint_id] = []; }
                     groups[t.sprint_id].push(t);
                 } else {
                     backlog.push(t);
                 }
             });
 
-            // Build sorted sprint list (by number)
             const sorted = sprints.slice().sort((a, b) => a.number - b.number);
+            const nextSprint  = sorted.find((s) => s.stage === "design");
+            const activeSprint = sorted.find((s) => s.stage === "active");
+            const closedSprints = sorted.filter((s) => s.stage === "closed").reverse(); // newest first
             const selectedSprintNumID = state.selectedSprintID && state.selectedSprintID !== "backlog" ? Number(state.selectedSprintID) : null;
 
-            let html = "";
-            sorted.forEach((sprint) => {
+            function sprintBlock(sprint, extraClass, dropTarget) {
                 const sprintTickets = groups[sprint.id] || [];
                 const label = "Sprint " + sprint.number + (sprint.title ? ": " + sprint.title : "");
                 const isSelected = selectedSprintNumID === sprint.id;
-                const openAttr = isSelected ? " open" : "";
-                html += "<details class=\"sprint-group\"" + openAttr + ">" +
+                const openAttr = isSelected || sprint.stage === "active" || sprint.stage === "design" ? " open" : "";
+                const dropAttr = dropTarget ? " data-list-drop-sprint=\"" + sprint.id + "\"" : "";
+                return "<details class=\"sprint-group" + (extraClass ? " " + extraClass : "") + "\"" + openAttr + dropAttr + ">" +
                     "<summary><strong>" + escapeHTML(label) + "</strong> <span class=\"chip\">" + escapeHTML(sprint.stage) + "</span> <span class=\"chip\">" + sprintTickets.length + "</span></summary>" +
-                    renderTicketListRows(sprintTickets) +
+                    renderTicketListRows(sprintTickets, false) +
                     "</details>";
-            });
+            }
 
-            // Backlog group (always last)
+            let html = "";
+
+            // 1. Next sprint (design) — drop target for backlog drags
+            if (nextSprint) {
+                html += sprintBlock(nextSprint, "sprint-group-next", true);
+            }
+
+            // 2. Backlog — tickets are draggable into next sprint
             if (backlog.length > 0 || state.selectedSprintID === "backlog" || state.selectedSprintID === "") {
                 const isSelected = state.selectedSprintID === "backlog";
                 const openAttr = isSelected || state.selectedSprintID === "" ? " open" : "";
-                html += "<details class=\"sprint-group\"" + openAttr + ">" +
+                html += "<details class=\"sprint-group sprint-group-backlog\"" + openAttr + ">" +
                     "<summary><strong>Backlog</strong> <span class=\"chip\">" + backlog.length + "</span></summary>" +
-                    renderTicketListRows(backlog) +
+                    renderTicketListRows(backlog, true) +
                     "</details>";
             }
+
+            // 3. Current (active) sprint
+            if (activeSprint) {
+                html += sprintBlock(activeSprint, "sprint-group-active", false);
+            }
+
+            // 4. Closed sprints, newest first
+            closedSprints.forEach((sprint) => {
+                html += sprintBlock(sprint, "sprint-group-closed", false);
+            });
 
             if (!html) {
                 html = "<div class=\"empty\">No tickets.</div>";
             }
-            els.ticketListView.innerHTML = html;
+            setInnerHTMLIfChanged(els.ticketListView, html);
         }
 
         function renderTicketPlanView() {
@@ -3625,14 +3702,15 @@
             setInnerHTMLIfChanged(els.adminSummaryContent, usersHtml + projectsHtml + teamsHtml);
         }
 
-        function renderTicketListRows(tickets) {
+        function renderTicketListRows(tickets, draggable) {
             if (!tickets.length) {
                 return "<div class=\"empty\">No tickets.</div>";
             }
+            const dragAttr = draggable ? " draggable=\"true\"" : "";
             return "<table class=\"ticket-list-table\"><thead><tr><th>ID</th><th>Title</th><th>Stage</th><th>State</th><th>Priority</th><th>Type</th><th>Assignee</th></tr></thead><tbody>" +
-                tickets.map((t) => "<tr class=\"ticket-list-row\" data-ticket-id=\"" + escapeHTML(t.id) + "\">" +
-                    "<td>" + escapeHTML(t.key || t.id || "") + "</td>" +
-                    "<td>" + escapeHTML(t.title || "(untitled)") + "</td>" +
+                tickets.map((t) => "<tr class=\"ticket-list-row\" data-ticket-id=\"" + escapeHTML(t.id) + "\"" + dragAttr + ">" +
+                    "<td>" + ticketAgentDot(t) + escapeHTML(t.key || t.id || "") + "</td>" +
+                    "<td>" + escapeHTML(t.title || "(untitled)") + (t.recommended_ready && t.draft ? " <span class=\"chip chip-success\" style=\"font-size:0.7em\">✓ rdy</span>" : "") + "</td>" +
                     "<td>" + escapeHTML(t.stage || "") + "</td>" +
                     "<td><span class=\"chip chip-state-" + escapeHTML(t.state || "idle") + "\">" + escapeHTML(t.state || "idle") + "</span></td>" +
                     "<td>" + escapeHTML(String(t.priority || "")) + "</td>" +
@@ -3789,13 +3867,25 @@
             }).join("");
         }
 
+        function ticketAgentDot(ticket) {
+            if (!ticket.assignee) return "";
+            const agents = state.projectAgents || [];
+            const agentStatus = agents.find((s) => (s.agent || s).username === ticket.assignee);
+            if (!agentStatus) return "";
+            const a = agentStatus.agent || agentStatus;
+            const isWorking = a.status === "working";
+            if (!isWorking && a.user_type !== "agent") return "";
+            return "<span class=\"ticket-agent-dot " + (isWorking ? "working" : "idle") + "\" title=\"" + escapeHTML(a.username) + " (" + a.status + ")\">🤖</span>";
+        }
+
         function renderTicketCard(ticket) {
+            const agentDot = ticketAgentDot(ticket);
             return "<div class=\"ticket-card\" draggable=\"true\" data-ticket-id=\"" + ticket.id + "\">" +
-                "<div class=\"panel-head panel-head-tight\"><h4>" + escapeHTML(ticket.key || ticket.id || "New") + "</h4><span class=\"chip\">" + escapeHTML(ticket.type || "task") + "</span></div>" +
+                "<div class=\"panel-head panel-head-tight\">" + agentDot + "<h4>" + escapeHTML(ticket.key || ticket.id || "New") + "</h4><span class=\"chip\">" + escapeHTML(ticket.type || "task") + "</span></div>" +
                 "<p>" + escapeHTML(ticket.title || "(untitled)") + "</p>" +
                 "<div class=\"tag-row\">" +
                 "<span class=\"chip\">p" + escapeHTML(ticket.priority || 0) + "</span>" +
-                "<span class=\"chip\">draft " + String(Boolean(ticket.draft)) + "</span>" +
+                (ticket.recommended_ready && ticket.draft ? "<span class=\"chip chip-success\">✓ ready</span>" : "") +
                 "</div>" +
                 "</div>";
         }
@@ -3970,10 +4060,17 @@
                 const action = notification.status === "read"
                     ? ""
                     : "<div class=\"entity-actions\"><button type=\"button\" data-notification-read=\"" + escapeHTML(String(notificationID)) + "\">Mark read</button></div>";
-                return "<div class=\"history-item\">" +
-                    "<div><strong>" + escapeHTML(notification.title || notification.kind || "notification") + "</strong></div>" +
+                const isPR = notification.kind === "pr_ready_for_review";
+                let payload = {};
+                try { payload = JSON.parse(notification.payload || "{}"); } catch (_) {}
+                const prLink = isPR && payload.pr_url
+                    ? "<div><a href=\"" + escapeHTML(payload.pr_url) + "\" target=\"_blank\" rel=\"noopener\">Open PR ↗</a></div>"
+                    : "";
+                return "<div class=\"history-item" + (isPR ? " notif-pr-ready" : "") + "\">" +
+                    "<div><strong>" + (isPR ? "🔀 " : "") + escapeHTML(notification.title || notification.kind || "notification") + "</strong></div>" +
                     "<div class=\"meta\">" + escapeHTML(notification.status || "unread") + " · " + escapeHTML(notification.created_at || "") + "</div>" +
                     "<div>" + escapeHTML(notification.message || "") + "</div>" +
+                    prLink +
                     action +
                     "</div>";
             }).join("");
@@ -4326,7 +4423,7 @@
                 state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
                 renderProjectMenu();
                 populateTicketTypeAndStageSelects();
-                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]).then(renderAll).catch((error) => setNotice(error.message, true));
+                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]).then(renderAll).catch((error) => setNotice(error.message, true));
             });
 
             document.getElementById("new-project-button").addEventListener("click", () => {
@@ -4375,7 +4472,7 @@
                     state.selectedProjectID = project.id;
                     storeSelectedProjectID(state.selectedProjectID);
                     await Promise.all([loadProjects(), loadWorkflows()]);
-                    await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
+                    await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
                     renderAll();
                     setNotice("Project saved.");
                 } catch (error) {
@@ -4403,7 +4500,7 @@
                     state.goalAgentModelConfig = emptyAgentModelConfig();
                     state.resolvedGoalAgentModelConfig = null;
                     await loadProjects();
-                    await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
+                    await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
                     renderAll();
                     setNotice("Project deleted.");
                 } catch (error) {
@@ -6412,6 +6509,24 @@
                     closeTicketModal();
                 }
             });
+            const markReadyBtn = document.getElementById("ticket-mark-ready-btn");
+            if (markReadyBtn) {
+                markReadyBtn.addEventListener("click", async () => {
+                    const ticket = state.activeTicket;
+                    if (!ticket || !ticket.id) return;
+                    markReadyBtn.disabled = true;
+                    try {
+                        const updated = await apiClient.post("/api/tickets-action/mark-ready/" + ticket.id, {});
+                        await Promise.all([loadTickets(), loadProjectAgents()]);
+                        renderAll();
+                        openTicketModal(updated);
+                    } catch (e) {
+                        setNotice(e.message || "Failed to mark ready", true);
+                    } finally {
+                        markReadyBtn.disabled = false;
+                    }
+                });
+            }
 
             els.projectMenuButton.addEventListener("click", (event) => {
                 event.stopPropagation();
@@ -6598,6 +6713,30 @@
 
             bindTicketBoardDragAndDrop();
             bindPlanViewHandlers();
+            bindAgentBarHandlers();
+        }
+
+        function bindAgentBarHandlers() {
+            const bar = els.projectAgentBar;
+            if (!bar) return;
+            bar.addEventListener("click", (event) => {
+                const icon = event.target.closest(".agent-icon");
+                if (!icon) return;
+                const agentID = icon.dataset.agentId;
+                const ticketKey = icon.dataset.ticketKey;
+                const statuses = state.projectAgents || [];
+                const s = statuses.find((s) => (s.agent || s).user_id === agentID);
+                if (!s) return;
+                const a = s.agent || s;
+                const lines = [
+                    "Agent: " + (a.username || a.user_id),
+                    "Role: " + (a.agent_role || "—"),
+                    "Status: " + (a.status || "unknown"),
+                    ticketKey ? "Working on: " + ticketKey : "No ticket assigned",
+                    "Last seen: " + (a.last_seen || "never"),
+                ];
+                alert(lines.join("\n"));
+            });
         }
 
         function bindPlanViewHandlers() {
@@ -6688,6 +6827,25 @@
             document.getElementById("ticket-health").value = ticket.health || 0;
             document.getElementById("delete-ticket-button").disabled = !ticket.id;
             els.ticketCommentInput.value = "";
+            // Recommend-ready banner
+            const rrBanner = document.getElementById("ticket-recommend-ready-banner");
+            if (rrBanner) {
+                if (ticket.recommended_ready && ticket.draft) {
+                    rrBanner.classList.remove("hidden");
+                } else {
+                    rrBanner.classList.add("hidden");
+                }
+            }
+            // PR URL display
+            const prUrlEl = document.getElementById("ticket-pr-url");
+            if (prUrlEl) {
+                if (ticket.pr_url) {
+                    prUrlEl.innerHTML = "PR: <a href=\"" + escapeHTML(ticket.pr_url) + "\" target=\"_blank\" rel=\"noopener\">" + escapeHTML(ticket.pr_url) + "</a>";
+                    prUrlEl.classList.remove("hidden");
+                } else {
+                    prUrlEl.classList.add("hidden");
+                }
+            }
             els.ticketModal.classList.add("open");
             loadTicketHistory(ticket.id).catch((error) => {
                 els.ticketHistory.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
