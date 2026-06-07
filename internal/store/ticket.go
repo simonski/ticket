@@ -131,6 +131,7 @@ type TicketRequestParams struct {
 	Username  string
 	UserID    string
 	DryRun    bool
+	AgentRole string
 }
 
 type queryRower interface {
@@ -1967,7 +1968,18 @@ func RequestTicket(ctx context.Context, db *sql.DB, params TicketRequestParams) 
 		return assigned, "ASSIGNED", nil
 	}
 
-	ticket, ok, err := findClaimCandidate(ctx, db, params.ProjectID)
+	var stageFilter string
+	switch params.AgentRole {
+	case "developer", "engineer":
+		stageFilter = "develop"
+	case "tester", "qa":
+		stageFilter = "test"
+	case "product-owner", "business-analyst", "designer":
+		stageFilter = "design"
+	default:
+		stageFilter = ""
+	}
+	ticket, ok, err := findClaimCandidate(ctx, db, params.ProjectID, stageFilter)
 	if err != nil {
 		return Ticket{}, "", err
 	}
@@ -2064,19 +2076,22 @@ func CurrentAssignedTicketForUser(ctx context.Context, db *sql.DB, projectID int
 	return findAssignedTicketForUser(ctx, db, projectID, strings.TrimSpace(username), StateActive)
 }
 
-func findClaimCandidate(ctx context.Context, db *sql.DB, projectID int64) (Ticket, bool, error) {
+func findClaimCandidate(ctx context.Context, db *sql.DB, projectID int64, stage string) (Ticket, bool, error) {
 	if projectID == 0 {
 		return Ticket{}, false, errors.New("project is required")
 	}
-	ticket, err := scanTicket(db.QueryRowContext(ctx, `
-		SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.dor_map, t.dod_map, t.ac_map, t.git_repository, t.git_branch, t.workflow_id, t.workflow_stage_id, t.role_id, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author, ''), t.draft, t.complete, t.archived, t.deleted, t.previous_workflow_stage_id, t.previous_role_id, t.sprint_id, COALESCE(t.created_by, ''), t.created_at, t.updated_at, COALESCE(t.recommended_ready, 0), COALESCE(t.pr_url, '')
+	query := `SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.dor_map, t.dod_map, t.ac_map, t.git_repository, t.git_branch, t.workflow_id, t.workflow_stage_id, t.role_id, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author, ''), t.draft, t.complete, t.archived, t.deleted, t.previous_workflow_stage_id, t.previous_role_id, t.sprint_id, COALESCE(t.created_by, ''), t.created_at, t.updated_at, COALESCE(t.recommended_ready, 0), COALESCE(t.pr_url, '')
 		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
 		WHERE t.project_id = ? AND p.status = 'open' AND t.complete = 0 AND t.archived = 0 AND t.deleted = 0 AND t.draft = 0 AND t.state = ? AND TRIM(COALESCE(t.assignee, '')) = ''
-		  AND NOT EXISTS (SELECT 1 FROM tickets c WHERE c.parent_id = t.ticket_id AND c.deleted = 0)
-		ORDER BY t.priority DESC, t.created_at, t.ticket_id
-		LIMIT 1
-	`, projectID, StateIdle))
+		  AND NOT EXISTS (SELECT 1 FROM tickets c WHERE c.parent_id = t.ticket_id AND c.deleted = 0)`
+	args := []any{projectID, StateIdle}
+	if stage != "" {
+		query += ` AND t.stage = ?`
+		args = append(args, stage)
+	}
+	query += ` ORDER BY t.priority DESC, t.created_at, t.ticket_id LIMIT 1`
+	ticket, err := scanTicket(db.QueryRowContext(ctx, query, args...))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Ticket{}, false, nil

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/simonski/ticket/internal/static"
 	"github.com/simonski/ticket/internal/store"
 )
 
@@ -323,57 +324,31 @@ func runDemo(args []string) error {
 	}
 	fmt.Printf("  ✓ Organisation set to %q\n", "Acme Corp")
 
-	// Create workflow
-	wf, err := store.CreateWorkflow(ctx, db, "Product Development",
-		"Standard software development lifecycle from idea to delivery")
+	// Seed built-in Agile workflow and roles
+	err = static.SeedDatabase(ctx, db)
 	if err != nil {
-		return fmt.Errorf("creating workflow: %w", err)
+		return fmt.Errorf("seeding database with Agile workflow: %w", err)
 	}
 
-	stages := []struct {
-		name string
-		desc string
-	}{
-		{store.StageIdea, "Capture the initial idea, problem statement, or feature request"},
-		{store.StageRefine, "Explore, write user stories, and define acceptance criteria"},
-		{store.StageReady, "Fully refined and ready to be pulled into a sprint"},
-		{"design", "Architect the solution, create technical design documents"},
-		{store.StageDevelop, "Implement the feature or fix"},
-		{"review", "Code review, QA testing, and stakeholder sign-off"},
-		{store.StageComplete, "Shipped to production and accepted"},
-		{store.StageReject, "Rejected — will not be completed in this sprint"},
-	}
-
-	backlogStageNames := map[string]bool{store.StageIdea: true, store.StageRefine: true, store.StageReady: true}
-	createdStages := make([]store.WorkflowStage, 0, len(stages))
-	for i, s := range stages {
-		ws, err := store.AddWorkflowStage(ctx, db, wf.ID, s.name, s.desc, "", i)
-		if err != nil {
-			return fmt.Errorf("adding workflow stage %s: %w", s.name, err)
-		}
-		if backlogStageNames[s.name] {
-			if err := store.SetWorkflowStageBacklog(ctx, db, ws.ID, true); err != nil {
-				return fmt.Errorf("setting backlog flag for stage %s: %w", s.name, err)
-			}
-			ws.IsBacklogStage = true
-		}
-		createdStages = append(createdStages, ws)
-	}
-
-	// Add linear transitions: idea→refine→ready→design→develop→review→done
-	for i := 0; i < len(createdStages)-1; i++ {
-		if err := store.SetWorkflowStageTransitions(ctx, db, wf.ID, createdStages[i].ID, []int64{createdStages[i+1].ID}); err != nil {
-			return fmt.Errorf("setting workflow transitions: %w", err)
-		}
-	}
-
-	wfFull, err := store.GetWorkflow(ctx, db, wf.ID)
+	// Look up the Agile workflow by name
+	var agileWorkflowID int64
+	err = db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows WHERE name = 'Agile' LIMIT 1`).Scan(&agileWorkflowID)
 	if err != nil {
-		return fmt.Errorf("getting workflow: %w", err)
+		return fmt.Errorf("looking up Agile workflow: %w", err)
 	}
-	_ = wfFull
 
-	fmt.Printf("  ✓ Created workflow %q (%d stages)\n", wf.Name, len(stages))
+	// Mark the design stage as the backlog stage
+	var designStageID int64
+	err = db.QueryRowContext(ctx, `SELECT workflow_stage_id FROM workflow_stages WHERE workflow_id = ? AND name = 'design' LIMIT 1`, agileWorkflowID).Scan(&designStageID)
+	if err != nil {
+		return fmt.Errorf("looking up design stage: %w", err)
+	}
+	err = store.SetWorkflowStageBacklog(ctx, db, designStageID, true)
+	if err != nil {
+		return fmt.Errorf("setting backlog flag for design stage: %w", err)
+	}
+
+	fmt.Printf("  ✓ Seeded Agile workflow (design, develop, test, done)\n")
 
 	// Create users
 	users := make([]store.User, 0, numUsers)
@@ -424,16 +399,17 @@ func runDemo(args []string) error {
 
 	fmt.Printf("  ✓ Created %d users\n", len(users))
 
-	// Create demo agents: refiner, developer, tester — each with password "password".
+	// Create 4 global demo agents — each with password "password".
 	type demoAgent struct {
 		username string
 		role     string
 		id       string
 	}
 	demoAgents := []demoAgent{
-		{username: "refiner", role: "refiner"},
-		{username: "developer", role: "developer"},
-		{username: "tester", role: "tester"},
+		{username: "po-agent", role: "product-owner"},
+		{username: "ba-agent", role: "business-analyst"},
+		{username: "eng-agent", role: "engineer"},
+		{username: "qa-agent", role: "qa"},
 	}
 	for i, da := range demoAgents {
 		agent, _, err := store.CreateAgent(ctx, db, "password")
@@ -441,13 +417,14 @@ func runDemo(args []string) error {
 			return fmt.Errorf("creating agent %s: %w", da.username, err)
 		}
 		demoAgents[i].id = agent.ID
+		displayName := da.username + " agent"
 		// Rename to friendly username and set agent_role.
 		if _, sqlErr := db.ExecContext(ctx, `UPDATE users SET username = ?, display_name = ?, agent_role = ? WHERE user_id = ?`,
-			da.username, strings.Title(da.role)+" Agent", da.role, agent.ID); sqlErr != nil {
+			da.username, displayName, da.role, agent.ID); sqlErr != nil {
 			return fmt.Errorf("updating agent username for %s: %w", da.username, sqlErr)
 		}
 	}
-	fmt.Printf("  ✓ Created demo agents (refiner, developer, tester) — password: password\n")
+	fmt.Printf("  ✓ Created global demo agents (po-agent, ba-agent, eng-agent, qa-agent) — password: password\n")
 
 	// Create teams
 	engTeam, err := store.CreateTeam(ctx, db, "Engineering", nil)
@@ -522,7 +499,7 @@ func runDemo(args []string) error {
 			Title:       def.title,
 			Description: def.description,
 			CreatedBy:   adminUser.ID,
-			WorkflowID:  &wf.ID,
+			WorkflowID:  &agileWorkflowID,
 		})
 		if err != nil {
 			return fmt.Errorf("creating project %s: %w", def.title, err)
@@ -543,32 +520,6 @@ func runDemo(args []string) error {
 		}
 	}
 	fmt.Printf("  ✓ Created programme %q with %d projects\n", programme.Name, len(projects))
-
-	// For each project, create a dedicated set of agents so the agent bar is
-	// populated on every project (agent_config project_id is a single-value key).
-	agentRoleDefs := []demoAgent{
-		{username: "refiner", role: "refiner"},
-		{username: "developer", role: "developer"},
-		{username: "tester", role: "tester"},
-	}
-	for pi, proj := range projects {
-		projIDStr := fmt.Sprintf("%d", proj.ID)
-		suffix := fmt.Sprintf("%d", pi+1)
-		for _, def := range agentRoleDefs {
-			pa, _, err := store.CreateAgent(ctx, db, "password")
-			if err != nil {
-				return fmt.Errorf("creating project agent %s/%s: %w", def.username, proj.Prefix, err)
-			}
-			uname := def.username + suffix
-			if _, sqlErr := db.ExecContext(ctx, `UPDATE users SET username = ?, display_name = ?, agent_role = ? WHERE user_id = ?`,
-				uname, strings.Title(def.role)+" Agent", def.role, pa.ID); sqlErr != nil {
-				return fmt.Errorf("updating project agent username: %w", sqlErr)
-			}
-			if err := store.SetAgentConfig(ctx, db, pa.ID, store.AgentConfigKeyProjectID, projIDStr); err != nil {
-				return fmt.Errorf("setting project agent config: %w", err)
-			}
-		}
-	}
 
 	// Sprint timeline: 6 sprints, 2 weeks each, today = mid-sprint 5.
 	// Sprint 5 (index 4) started 7 days ago; each prior sprint is 14 days earlier.
@@ -742,40 +693,33 @@ func runDemo(args []string) error {
 				// Active sprint: half go to the backlog, half into the sprint.
 				if sprint5AssignCount%2 == 1 {
 					isBacklog = true
-					switch localIdx % 3 {
-					case 0:
-						stage, state = store.StageIdea, store.StateIdle
-					case 1:
-						stage, state = store.StageRefine, store.StateIdle
-					default:
-						stage, state = store.StageReady, store.StateIdle
-					}
+					stage, state = "design", store.StateIdle
 				} else {
-					// In active sprint: ready → develop → complete/reject
+					// In active sprint: design/idle → develop → test → done
 					switch localIdx % 10 {
 					case 0, 1:
-						stage, state = store.StageReady, store.StateIdle
+						stage, state = "design", store.StateIdle
 					case 2, 3, 4:
-						stage, state = store.StageDevelop, store.StateIdle
+						stage, state = "develop", store.StateIdle
 					case 5, 6:
-						stage, state = store.StageDevelop, store.StateActive
+						stage, state = "develop", store.StateActive
 					case 7, 8:
-						stage, state = store.StageComplete, store.StateSuccess
+						stage, state = "done", store.StateSuccess
 					default:
-						stage, state = store.StageReject, store.StateSuccess
+						stage, state = "test", store.StateActive
 					}
 				}
 				sprint5AssignCount++
 			} else if targetSprintGlobalIdx > activeSprintIdx {
-				// Future sprint: assign to sprint with ready stage (planned work)
-				stage, state = store.StageReady, store.StateIdle
+				// Future sprint: assign to design/idle (planned work)
+				stage, state = "design", store.StateIdle
 			} else {
-				// Past (closed) sprint: 80% complete, 20% rejected
+				// Past (closed) sprint: 80% done, 20% test/success
 				switch localIdx % 10 {
 				case 0, 1, 2, 3, 4, 5, 6, 7:
-					stage, state = store.StageComplete, store.StateSuccess
+					stage, state = "done", store.StateSuccess
 				default:
-					stage, state = store.StageReject, store.StateSuccess
+					stage, state = "test", store.StateSuccess
 				}
 			}
 			// Idle tickets have no assignee — they are available to be picked up.
@@ -798,7 +742,7 @@ func runDemo(args []string) error {
 				return fmt.Errorf("creating ticket %d: %w", localIdx, err)
 			}
 
-			if stage != store.StageIdea || state != "idle" {
+			if stage != "design" || state != "idle" {
 				_, _ = store.UpdateTicket(ctx, db, t.ID, store.TicketUpdateParams{
 					Title:       t.Title,
 					Description: t.Description,
@@ -856,7 +800,7 @@ func runDemo(args []string) error {
 			halfDur := dur / 2
 			createOffset := time.Duration(rand.Int63n(int64(halfDur)))
 			createdAt = sqlTS(start.Add(createOffset))
-			if (tm.stage == store.StageComplete || tm.stage == store.StageReject) && si < activeSprintIdx {
+			if (tm.stage == "done" || tm.stage == "test") && si < activeSprintIdx {
 				// Completed/rejected in the second half of the sprint
 				doneOffset := halfDur + time.Duration(rand.Int63n(int64(halfDur)))
 				updatedAt = sqlTS(start.Add(doneOffset))
@@ -971,7 +915,7 @@ func runDemo(args []string) error {
 		suffix = ", ..."
 	}
 	fmt.Printf("  Users:   %s%s (password: password)\n", strings.Join(usernames, ", "), suffix)
-	fmt.Printf("  Agents:  refiner, developer, tester (password: password)\n")
+	fmt.Printf("  Agents:  po-agent, ba-agent, eng-agent, qa-agent (password: password)\n")
 	fmt.Printf("           Run: TICKET_URL=http://localhost:8080 AGENT_ID=<uuid> AGENT_PASSWORD=password tk agent run\n")
 
 	return nil

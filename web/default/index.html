@@ -964,6 +964,17 @@
                                 <label class="checkbox-label"><input id="agent-enabled" type="checkbox" disabled> Enabled</label>
                             </div>
                             <div class="field">
+                                <label for="agent-role">Role</label>
+                                <select id="agent-role">
+                                    <option value="">— no role —</option>
+                                    <option value="product-owner">Product Owner — picks up design/idle tickets</option>
+                                    <option value="business-analyst">Business Analyst — picks up design/idle tickets</option>
+                                    <option value="engineer">Engineer — picks up develop/idle tickets</option>
+                                    <option value="qa">QA — picks up test/idle tickets</option>
+                                    <option value="refiner">Refiner — refines draft tickets</option>
+                                </select>
+                            </div>
+                            <div class="field">
                                 <label for="agent-new-password">New password</label>
                                 <input id="agent-new-password" type="password" placeholder="leave blank to keep existing">
                             </div>

@@ -240,6 +240,7 @@ func (r *router) registerAgentHandlers() {
 					Username:  agent.Username,
 					UserID:    "",
 					DryRun:    payload.DryRun,
+					AgentRole: agent.AgentRole,
 				})
 			}
 			if err != nil {
@@ -344,7 +345,8 @@ func (r *router) registerAgentHandlers() {
 					return
 				}
 				updated, err := store.UpdateAgent(r.Context(), db, id, store.AgentUpdateParams{
-					Password: nullableTrimmed(payload.Password),
+					Password:  nullableTrimmed(payload.Password),
+					AgentRole: nullableTrimmed(payload.AgentRole),
 				})
 				if err != nil {
 					if errors.Is(err, sql.ErrNoRows) {

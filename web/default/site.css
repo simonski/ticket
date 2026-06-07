@@ -965,6 +965,93 @@ select {
 }
 .dark .stage-card { background: hsl(22 12% 10%); border-color: hsl(22 10% 19%); }
 
+/* Stage card header (reuses .lane-head positioning, adds its own overrides) */
+.stage-card-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 4px;
+    padding: 7px 8px 7px 10px;
+    border-bottom: 1px solid hsl(38 12% 78%);
+}
+.dark .stage-card-top { border-bottom-color: hsl(22 10% 19%); }
+
+.stage-card-heading {
+    display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1;
+}
+.stage-card-order {
+    font-size: 0.6875rem; font-weight: 700; color: var(--fg-3); flex-shrink: 0;
+}
+.stage-card-title-button {
+    background: none; border: none; padding: 0; margin: 0;
+    cursor: pointer; text-align: left; min-width: 0;
+}
+.stage-card-title-button:hover .stage-card-title { color: var(--accent); }
+.stage-card-title {
+    font-size: 0.8125rem; font-weight: 700; color: var(--fg);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px;
+}
+
+.stage-card-controls {
+    display: flex; align-items: center; gap: 3px; flex-shrink: 0;
+}
+.stage-card-move-button {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; padding: 0;
+    background: none; border: 1px solid var(--card-border);
+    border-radius: var(--radius); font-size: 0.75rem; font-weight: 700;
+    color: var(--fg-2); cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}
+.stage-card-move-button:hover:not(:disabled) { background: hsl(38 16% 86%); color: var(--fg); }
+.stage-card-move-button:disabled { opacity: 0.3; cursor: default; }
+.dark .stage-card-move-button { border-color: hsl(22 10% 30%); }
+.dark .stage-card-move-button:hover:not(:disabled) { background: hsl(22 12% 24%); }
+
+/* Stage section (details/summary blocks inside a card) */
+.stage-card-section {
+    border-top: 1px solid hsl(38 12% 78%);
+}
+.dark .stage-card-section { border-top-color: hsl(22 10% 19%); }
+.stage-card-section > summary {
+    padding: 6px 10px; list-style: none;
+    display: flex; align-items: center; gap: 5px;
+    cursor: pointer; user-select: none;
+}
+.stage-card-section > summary::marker,
+.stage-card-section > summary::-webkit-details-marker { display: none; }
+.stage-card-section > summary::before {
+    content: "▶"; font-size: 0.6rem; color: var(--fg-3); flex-shrink: 0;
+    transition: transform 0.15s;
+}
+.stage-card-section[open] > summary::before { transform: rotate(90deg); }
+.stage-card-section-title {
+    font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--fg-2);
+}
+.stage-card-section > summary:hover .stage-card-section-title { color: var(--fg); }
+
+.stage-card-section-body {
+    padding: 8px 10px 10px;
+}
+.stage-card-section-body.stack { display: flex; flex-direction: column; gap: 8px; }
+
+.stage-card-actions {
+    display: flex; justify-content: flex-end; padding: 4px 0 0;
+}
+
+/* Role list inside stage cards */
+.workflow-role-list {
+    display: flex; flex-direction: column; gap: 4px; min-height: 28px;
+    border: 1px dashed hsl(38 12% 74%); border-radius: var(--radius);
+    padding: 4px;
+}
+.dark .workflow-role-list { border-color: hsl(22 10% 28%); }
+.workflow-role-empty {
+    font-size: 0.8125rem; color: var(--fg-3); padding: 4px; text-align: center;
+}
+.stage-card-add-role {
+    display: flex; align-items: flex-end; gap: 6px; margin-top: 8px; flex-wrap: wrap;
+}
+.stage-card-add-role .field { flex: 1; min-width: 100px; margin: 0; }
+
 .workflow-settings-panel {
     border-top: 1px solid var(--card-border);
     padding: 0 16px;

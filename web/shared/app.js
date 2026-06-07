@@ -3018,7 +3018,7 @@
                     .map((candidate) => optionHTML(candidate.id, candidate.name || candidate.stage_name || ("stage " + candidate.id), (stage.next_stage_ids || []).some((nextID) => Number(nextID) === Number(candidate.id))))
                     .join("") +
                 "</select></div>" +
-                "<div class=\"entity-actions stage-card-actions\"><button type=\"button\" class=\"btn-primary\" data-save-stage=\"" + stage.id + "\">Save stage</button></div>" +
+                "<div class=\"stage-card-actions\"><button type=\"button\" class=\"btn btn-primary btn-sm\" data-save-stage=\"" + stage.id + "\">Save</button></div>" +
                 "</div>" +
                 "</details>" +
                 "<details class=\"stage-card-section\" open>" +
@@ -3027,7 +3027,7 @@
                 "<div class=\"field\"><div class=\"workflow-role-list stage-card-dropzone\" data-stage-role-row=\"" + stage.id + "\">" + (roleCardsHTML || "<div class=\"empty workflow-role-empty\">Drop roles here</div>") + "</div></div>" +
                 "<div class=\"stage-card-add-role\">" +
                 "<div class=\"field\"><label>Add role</label><div class=\"select-shell\"><select data-add-role-select=\"" + stage.id + "\">" + optionHTML("", "Choose role", true) + addRoleOptions + "</select></div></div>" +
-                "<button type=\"button\" data-add-role=\"" + stage.id + "\">Add role</button>" +
+                "<button type=\"button\" class=\"btn btn-sm\" data-add-role=\"" + stage.id + "\">Add</button>" +
                 "</div>" +
                 "</div>" +
                 "</details>";
@@ -3049,7 +3049,7 @@
                 "<div class=\"stage-card-controls\">" +
                 "<button type=\"button\" class=\"stage-card-move-button\" data-move-stage=\"" + stage.id + "\" data-move-direction=\"left\" aria-label=\"Move stage left\"" + moveLeftDisabled + ">&lt;</button>" +
                 "<button type=\"button\" class=\"stage-card-move-button\" data-move-stage=\"" + stage.id + "\" data-move-direction=\"right\" aria-label=\"Move stage right\"" + moveRightDisabled + ">&gt;</button>" +
-                "<button type=\"button\" class=\"btn-danger\" data-delete-stage=\"" + stage.id + "\">Delete</button>" +
+                "<button type=\"button\" class=\"btn btn-sm btn-danger\" data-delete-stage=\"" + stage.id + "\">Del</button>" +
                 "</div>" +
                 "</div>" +
                 renderWorkflowStageSections(stage, workflow) +
@@ -3276,10 +3276,18 @@
                 els.agentList.innerHTML = "<div class=\"empty\">No agents available.</div>";
                 return;
             }
+            const roleDescriptions = {
+                "product-owner": "picks up design/idle tickets",
+                "business-analyst": "picks up design/idle tickets",
+                "engineer": "picks up develop/idle tickets",
+                "qa": "picks up test/idle tickets",
+                "refiner": "refines draft tickets",
+            };
             els.agentList.innerHTML = state.agents.map((agent) => {
                 const active = agent.id === state.selectedAgentID ? " active" : "";
                 const role = agent.agent_role || "";
                 const roleChip = role ? "<span class=\"chip\">" + escapeHTML(role) + "</span> " : "";
+                const roleDesc = role ? (roleDescriptions[role] || "picks up any idle ticket") : "picks up any idle ticket";
                 const statusChip = agent.enabled
                     ? "<span class=\"chip chip-success\">enabled</span>"
                     : "<span class=\"chip chip-danger\">disabled</span>";
@@ -3287,6 +3295,7 @@
                 return "<div class=\"entity-card" + active + "\" data-agent-id=\"" + escapeHTML(agent.id) + "\">" +
                     "<h4>" + name + "</h4>" +
                     "<p>" + roleChip + statusChip + "</p>" +
+                    "<small>" + escapeHTML(roleDesc) + "</small>" +
                     "</div>";
             }).join("");
         }
@@ -4280,6 +4289,7 @@
             document.getElementById("agent-editor-title").textContent = agent ? "Agent: " + agent.id : "Agent editor";
             document.getElementById("agent-id").value = agent ? agent.id : "";
             document.getElementById("agent-enabled").value = agent ? String(Boolean(agent.enabled)) : "";
+            document.getElementById("agent-role").value = agent ? (agent.agent_role || "") : "";
             document.getElementById("agent-new-password").value = "";
             document.getElementById("save-agent-button").disabled = !agent;
             document.getElementById("toggle-agent-button").disabled = !agent;
@@ -6125,13 +6135,18 @@
                     return;
                 }
                 try {
+                    const roleValue = document.getElementById("agent-role").value;
+                    const passwordValue = document.getElementById("agent-new-password").value;
+                    const body = {};
+                    if (passwordValue) body.password = passwordValue;
+                    if (roleValue !== undefined) body.agent_role = roleValue;
                     await api("/api/agents/" + agent.id, {
                         method: "PUT",
-                        body: JSON.stringify({ password: document.getElementById("agent-new-password").value }),
+                        body: JSON.stringify(body),
                     });
                     await loadAgents();
                     renderAll();
-                    setNotice("Agent password rotated.");
+                    setNotice("Agent updated.");
                 } catch (error) {
                     setNotice(error.message, true);
                 }

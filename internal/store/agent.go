@@ -17,7 +17,8 @@ import (
 type Agent = User
 
 type AgentUpdateParams struct {
-	Password *string
+	Password  *string
+	AgentRole *string
 }
 
 func CreateAgent(ctx context.Context, db *sql.DB, plainPassword string) (agent Agent, generatedPassword string, err error) {
@@ -102,23 +103,49 @@ func ListAgentsPage(ctx context.Context, db *sql.DB, limit, offset int) ([]Agent
 }
 
 func UpdateAgent(ctx context.Context, db *sql.DB, id string, params AgentUpdateParams) (Agent, error) {
-	if params.Password == nil {
-		return Agent{}, errors.New("agent update requires -password")
-	}
-	if strings.TrimSpace(*params.Password) == "" {
-		return Agent{}, errors.New("agent password cannot be empty")
-	}
-	hash, err := password.Hash(strings.TrimSpace(*params.Password))
-	if err != nil {
-		return Agent{}, err
-	}
-	_, err = db.ExecContext(ctx, `
-		UPDATE users
-		SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE user_id = ? AND user_type = 'agent'
-	`, hash, id)
-	if err != nil {
-		return Agent{}, err
+	switch {
+	case params.Password == nil && params.AgentRole == nil:
+		return Agent{}, errors.New("agent update requires password or role")
+	case params.Password != nil && params.AgentRole != nil:
+		// Update both password and role in one statement.
+		if strings.TrimSpace(*params.Password) == "" {
+			return Agent{}, errors.New("agent password cannot be empty")
+		}
+		hash, err := password.Hash(strings.TrimSpace(*params.Password))
+		if err != nil {
+			return Agent{}, err
+		}
+		if _, err = db.ExecContext(ctx, `
+			UPDATE users
+			SET password_hash = ?, agent_role = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE user_id = ? AND user_type = 'agent'
+		`, hash, strings.TrimSpace(*params.AgentRole), id); err != nil {
+			return Agent{}, err
+		}
+	case params.Password != nil:
+		if strings.TrimSpace(*params.Password) == "" {
+			return Agent{}, errors.New("agent password cannot be empty")
+		}
+		hash, err := password.Hash(strings.TrimSpace(*params.Password))
+		if err != nil {
+			return Agent{}, err
+		}
+		if _, err = db.ExecContext(ctx, `
+			UPDATE users
+			SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE user_id = ? AND user_type = 'agent'
+		`, hash, id); err != nil {
+			return Agent{}, err
+		}
+	default:
+		// AgentRole only.
+		if _, err := db.ExecContext(ctx, `
+			UPDATE users
+			SET agent_role = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE user_id = ? AND user_type = 'agent'
+		`, strings.TrimSpace(*params.AgentRole), id); err != nil {
+			return Agent{}, err
+		}
 	}
 	return GetAgentByID(ctx, db, id)
 }
@@ -332,34 +359,37 @@ func ListAgentStatuses(ctx context.Context, db *sql.DB) ([]AgentStatus, error) {
 	return statuses, nil
 }
 
-// ListAgentStatusesForProject returns agents whose config project_id matches the given project.
+// ListAgentStatusesForProject returns agents whose config project_id matches the given project,
+// agents currently working on a ticket in this project, and global agents (no project_id set).
 func ListAgentStatusesForProject(ctx context.Context, db *sql.DB, projectID int64) ([]AgentStatus, error) {
 	all, err := ListAgentStatuses(ctx, db)
 	if err != nil {
 		return nil, err
 	}
 	// Filter to agents whose agent_config has project_id == projectID,
-	// or who are currently assigned to a ticket in this project.
+	// or who are currently assigned to a ticket in this project,
+	// or who are global agents (no project_id set in config).
 	var result []AgentStatus
 	projectIDStr := fmt.Sprintf("%d", projectID)
 	for _, s := range all {
-		if s.ProjectName != "" && s.TicketKey != nil {
-			// Check if the assigned ticket belongs to this project.
-			cfg, _ := GetAgentConfigMap(ctx, db, s.Agent.ID)
-			if cfg["project_id"] == projectIDStr {
-				result = append(result, s)
-				continue
-			}
-			// Also include if currently working on a ticket in this project.
+		cfg, _ := GetAgentConfigMap(ctx, db, s.Agent.ID)
+		cfgProjectID, hasCfgProject := cfg["project_id"]
+		isGlobal := !hasCfgProject || strings.TrimSpace(cfgProjectID) == ""
+		if isGlobal {
+			// Global agents appear on every project.
+			result = append(result, s)
+			continue
+		}
+		if cfgProjectID == projectIDStr {
+			result = append(result, s)
+			continue
+		}
+		// Also include if currently working on a ticket in this project.
+		if s.TicketKey != nil {
 			var ticketProjectID int64
 			if scanErr := db.QueryRowContext(ctx, `SELECT project_id FROM tickets WHERE ticket_id = ?`, *s.TicketKey).Scan(&ticketProjectID); scanErr == nil && ticketProjectID == projectID {
 				result = append(result, s)
 				continue
-			}
-		} else {
-			cfg, _ := GetAgentConfigMap(ctx, db, s.Agent.ID)
-			if cfg["project_id"] == projectIDStr {
-				result = append(result, s)
 			}
 		}
 	}
