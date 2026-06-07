@@ -2801,69 +2801,6 @@ func (c *Client) DeleteStory(ctx context.Context, id int64) error {
 	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/stories/%d", id), nil, nil)
 }
 
-func (c *Client) CreateGoal(ctx context.Context, projectID int64, request GoalRequest) (store.Goal, error) {
-	if c.mode == config.ModeLocal {
-		db, err := c.openLocalDB()
-		if err != nil {
-			return store.Goal{}, err
-		}
-		return store.CreateGoal(ctx, db, projectID, request.Title, request.Description, request.Notes, request.ETA, request.Priority)
-	}
-	var goal store.Goal
-	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%d/goals", projectID), request, &goal)
-	return goal, err
-}
-
-func (c *Client) ListGoals(ctx context.Context, projectID int64) ([]store.Goal, error) {
-	if c.mode == config.ModeLocal {
-		db, err := c.openLocalDB()
-		if err != nil {
-			return nil, err
-		}
-		return store.ListGoals(ctx, db, projectID)
-	}
-	var goals []store.Goal
-	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/projects/%d/goals", projectID), nil, &goals)
-	return goals, err
-}
-
-func (c *Client) GetGoal(ctx context.Context, id int64) (store.Goal, error) {
-	if c.mode == config.ModeLocal {
-		db, err := c.openLocalDB()
-		if err != nil {
-			return store.Goal{}, err
-		}
-		return store.GetGoal(ctx, db, id)
-	}
-	var goal store.Goal
-	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/goals/%d", id), nil, &goal)
-	return goal, err
-}
-
-func (c *Client) UpdateGoal(ctx context.Context, id int64, request GoalRequest) (store.Goal, error) {
-	if c.mode == config.ModeLocal {
-		db, err := c.openLocalDB()
-		if err != nil {
-			return store.Goal{}, err
-		}
-		return store.UpdateGoal(ctx, db, id, request.Title, request.Description, request.Notes, request.ETA, request.Priority)
-	}
-	var goal store.Goal
-	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/goals/%d", id), request, &goal)
-	return goal, err
-}
-
-func (c *Client) DeleteGoal(ctx context.Context, id int64) error {
-	if c.mode == config.ModeLocal {
-		db, err := c.openLocalDB()
-		if err != nil {
-			return err
-		}
-		return store.DeleteGoal(ctx, db, id)
-	}
-	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/goals/%d", id), nil, nil)
-}
-
 func (c *Client) CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

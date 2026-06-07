@@ -351,11 +351,6 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Manages stories within the active project.", "Stories provide a lightweight grouping layer within a project."},
 		example: "tk story create -title \"User onboarding flow\"",
 	},
-	"goal": {
-		usage:   "tk goal <create|list|get|update|delete>",
-		details: []string{"Manages goals within the active project.", "Goals support planning and refinement workflows for ticket execution."},
-		example: "tk goal create -title \"Reduce support response time\" -d \"Cut median response by 20%\"",
-	},
 	"document": {
 		usage:   "tk document <create|list|get|update|delete|label-add|label-rm|label-ls|file-add|file-ls|file-get|file-rm>",
 		details: []string{"Manages documents within the active project.", "Documents support text content, labels, and uploaded files."},
@@ -509,7 +504,6 @@ func renderRootUsage() string {
 		{"label", "Manage labels (ls, new, rm, add, remove, show)"},
 		{"time", "Log and view time entries (log, ls, total, rm)"},
 		{"story", "Manage stories (ls, new, get, update, rm)"},
-		{"goal", "Manage goals (ls, new, get, update, rm)"},
 		{"document", "Manage documents (ls, new, get, update, rm, labels, files)"},
 		{"decision", "Record and list decisions (ls, new)"},
 		{"doctor", "Interactive health review (project, ticket)"},
@@ -792,15 +786,6 @@ Commands:
   get      <id>                            Show story detail
   update   <id> -title <title> [-d <desc>] Update a story
   rm       <id>                            Delete a story`
-
-const goalUsage = `Usage: tk goal <command> [flags]
-
-Commands:
-  ls                                            List goals in active project
-  new      -title <title> [-d <desc>]          Create a goal
-  get      <id>                                 Show goal detail
-  update   <id> [-title <title>] [-d <desc>]   Update a goal
-  rm       <id>                                 Delete a goal`
 
 const documentUsage = `Usage: tk document <command> [flags]
 

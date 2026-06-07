@@ -44,7 +44,6 @@ var snapshotTableOrder = []string{
 	"workflow_stages",
 	"workflow_stage_roles",
 	"projects",
-	"goals",
 	"tickets",
 	"stories",
 	"story_ticket_links",

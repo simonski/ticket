@@ -628,26 +628,6 @@ func (s *HTTPService) DeleteStory(ctx context.Context, id int64) error {
 	return s.client.DeleteStory(ctx, id)
 }
 
-func (s *HTTPService) CreateGoal(ctx context.Context, projectID int64, request GoalRequest) (store.Goal, error) {
-	return s.client.CreateGoal(ctx, projectID, client.GoalRequest(request))
-}
-
-func (s *HTTPService) ListGoals(ctx context.Context, projectID int64) ([]store.Goal, error) {
-	return s.client.ListGoals(ctx, projectID)
-}
-
-func (s *HTTPService) GetGoal(ctx context.Context, id int64) (store.Goal, error) {
-	return s.client.GetGoal(ctx, id)
-}
-
-func (s *HTTPService) UpdateGoal(ctx context.Context, id int64, request GoalRequest) (store.Goal, error) {
-	return s.client.UpdateGoal(ctx, id, client.GoalRequest(request))
-}
-
-func (s *HTTPService) DeleteGoal(ctx context.Context, id int64) error {
-	return s.client.DeleteGoal(ctx, id)
-}
-
 func (s *HTTPService) CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error) {
 	return s.client.CreateDocument(ctx, projectID, client.DocumentRequest(request))
 }

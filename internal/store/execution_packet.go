@@ -7,7 +7,7 @@ import (
 )
 
 // ExecutionPacket captures the resolved runtime context that drives agent work
-// for a ticket: goal + role + phase + project rules, and the effective merge.
+// for a ticket: ticket + role + phase + project rules, and the effective merge.
 type ExecutionPacket struct {
 	TicketID        string                `json:"ticket_id"`
 	ProjectID       int64                 `json:"project_id"`
@@ -24,11 +24,11 @@ type ExecutionPacketLayers struct {
 	Project *ResolvedGuidance `json:"project,omitempty"`
 	Phase   *ResolvedGuidance `json:"phase,omitempty"`
 	Role    *ResolvedGuidance `json:"role,omitempty"`
-	Goal    *ResolvedGuidance `json:"goal,omitempty"`
+	Ticket  *ResolvedGuidance `json:"ticket,omitempty"`
 }
 
 // BuildExecutionPacket resolves and merges guidance with precedence:
-// project < phase < role < goal.
+// project < phase < role < ticket.
 func BuildExecutionPacket(ctx context.Context, db *sql.DB, ticketID string) (ExecutionPacket, error) {
 	ticket, err := GetTicket(ctx, db, ticketID)
 	if err != nil {
@@ -40,12 +40,12 @@ func BuildExecutionPacket(ctx context.Context, db *sql.DB, ticketID string) (Exe
 	projectLayer := guidancePtr(layerFromProject(enriched.Project, phase))
 	phaseLayer := guidancePtr(layerFromWorkflowStage(ticket, enriched.Workflow))
 	roleLayer := guidancePtr(layerFromRole(enriched.Role, phase))
-	goalLayer := guidancePtr(ticket.ResolveGuidance(phase))
+	ticketLayer := guidancePtr(ticket.ResolveGuidance(phase))
 	effective := mergeGuidanceLayers(
 		projectLayer,
 		phaseLayer,
 		roleLayer,
-		goalLayer,
+		ticketLayer,
 	)
 
 	packet := ExecutionPacket{
@@ -59,7 +59,7 @@ func BuildExecutionPacket(ctx context.Context, db *sql.DB, ticketID string) (Exe
 			Project: projectLayer,
 			Phase:   phaseLayer,
 			Role:    roleLayer,
-			Goal:    goalLayer,
+			Ticket:  ticketLayer,
 		},
 		Effective: effective,
 	}

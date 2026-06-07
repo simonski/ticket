@@ -1931,46 +1931,6 @@ func (s *LocalService) DeleteStory(ctx context.Context, id int64) error {
 	return store.DeleteStory(ctx, db, id)
 }
 
-func (s *LocalService) CreateGoal(ctx context.Context, projectID int64, request GoalRequest) (store.Goal, error) {
-	db, err := s.openDB()
-	if err != nil {
-		return store.Goal{}, err
-	}
-	return store.CreateGoal(ctx, db, projectID, request.Title, request.Description, request.Notes, request.ETA, request.Priority)
-}
-
-func (s *LocalService) ListGoals(ctx context.Context, projectID int64) ([]store.Goal, error) {
-	db, err := s.openDB()
-	if err != nil {
-		return nil, err
-	}
-	return store.ListGoals(ctx, db, projectID)
-}
-
-func (s *LocalService) GetGoal(ctx context.Context, id int64) (store.Goal, error) {
-	db, err := s.openDB()
-	if err != nil {
-		return store.Goal{}, err
-	}
-	return store.GetGoal(ctx, db, id)
-}
-
-func (s *LocalService) UpdateGoal(ctx context.Context, id int64, request GoalRequest) (store.Goal, error) {
-	db, err := s.openDB()
-	if err != nil {
-		return store.Goal{}, err
-	}
-	return store.UpdateGoal(ctx, db, id, request.Title, request.Description, request.Notes, request.ETA, request.Priority)
-}
-
-func (s *LocalService) DeleteGoal(ctx context.Context, id int64) error {
-	db, err := s.openDB()
-	if err != nil {
-		return err
-	}
-	return store.DeleteGoal(ctx, db, id)
-}
-
 func (s *LocalService) CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error) {
 	db, err := s.openDB()
 	if err != nil {

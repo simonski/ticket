@@ -129,23 +129,6 @@ function installSite2Mock(page, seed = {}) {
       defaultPlanSlug: String(mockSeed.defaultPlanSlug || "starter"),
       agents: [{ user_id: "agent-1", enabled: true }],
       teams: [{ team_id: 21, name: "Platform", parent_team_id: null }],
-      nextGoalID: Number(mockSeed.nextGoalID || 2),
-      goals: Array.isArray(mockSeed.goals)
-        ? mockSeed.goals.map((goal) => ({ ...goal }))
-        : [
-            {
-              goal_id: 1,
-              project_id: 1,
-              title: "Ship MVP",
-              description: "Initial release goal",
-              notes: "",
-              eta: "",
-              priority: 1,
-              status: "draft",
-              refined_goal: "",
-              decomposition: "",
-            },
-      ],
       myProjectAccessRequests: Array.isArray(mockSeed.myProjectAccessRequests)
         ? mockSeed.myProjectAccessRequests.map((request) => ({ ...request }))
         : [],
@@ -153,7 +136,6 @@ function installSite2Mock(page, seed = {}) {
         ? mockSeed.myNotifications.map((notification) => ({ ...notification }))
         : [],
       projectHistoryByProject: Object.assign({}, mockSeed.projectHistoryByProject || {}),
-      goalChatByGoal: {},
       nextDocumentID: 2,
       nextDocumentFileID: 2,
       documents: [
@@ -499,55 +481,6 @@ function installSite2Mock(page, seed = {}) {
         const ref = path.split("/")[3];
         return json(db.projectHistoryByProject[String(ref)] || []);
       }
-      if (path.match(/^\/api\/projects\/\d+\/goals$/) && method === "GET") {
-        const id = Number(path.split("/")[3]);
-        return json(db.goals.filter((goal) => goal.project_id === id));
-      }
-      if (path.match(/^\/api\/projects\/\d+\/goal-inbox$/) && method === "GET") {
-        const id = Number(path.split("/")[3]);
-        const statusFilter = String(url.searchParams.get("status") || "").trim();
-        const sort = String(url.searchParams.get("sort") || "updated_desc").trim();
-        let goals = db.goals.filter((goal) => goal.project_id === id);
-        if (statusFilter) {
-          goals = goals.filter((goal) => goal.status === statusFilter);
-        }
-        if (sort === "priority_asc") {
-          goals = goals.slice().sort((a, b) => Number(a.priority || 0) - Number(b.priority || 0));
-        } else if (sort === "status") {
-          const rank = { refining: 0, draft: 1, ready: 2 };
-          goals = goals.slice().sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9));
-        } else {
-          goals = goals.slice().reverse();
-        }
-        return json(goals.map((goal) => ({
-          goal_id: goal.goal_id,
-          project_id: goal.project_id,
-          title: goal.title,
-          status: goal.status,
-          priority: goal.priority,
-          updated_at: "now",
-          refinement_confirmed: Boolean(goal.refinement_confirmed),
-          decomposition_depth: String(goal.decomposition || "").split(/\r?\n/).filter((line) => String(line).trim()).length,
-          unresolved_clarifications: 0,
-        })));
-      }
-      if (path.match(/^\/api\/projects\/\d+\/goals$/) && method === "POST") {
-        const projectID = Number(path.split("/")[3]);
-        const goal = {
-          goal_id: db.nextGoalID++,
-          project_id: projectID,
-          title: body.title || "",
-          description: body.description || "",
-          notes: body.notes || "",
-          eta: body.eta || "",
-          priority: Number(body.priority || 1),
-          status: "draft",
-          refined_goal: "",
-          decomposition: "",
-        };
-        db.goals.push(goal);
-        return json(goal, 201);
-      }
       if (path.match(/^\/api\/projects\/\d+\/documents$/) && method === "GET") {
         const id = Number(path.split("/")[3]);
         return json(db.documents.filter((documentItem) => documentItem.project_id === id));
@@ -636,92 +569,6 @@ function installSite2Mock(page, seed = {}) {
         const fileID = Number(parts[5]);
         db.documentFilesByDocument[String(documentID)] = (db.documentFilesByDocument[String(documentID)] || []).filter((item) => item.file_id !== fileID);
         return new Response(null, { status: 204 });
-      }
-      if (path.match(/^\/api\/goals\/\d+$/) && method === "GET") {
-        const goalID = Number(path.split("/")[3]);
-        const goal = db.goals.find((item) => item.goal_id === goalID);
-        if (!goal) {
-          return json({ error: "not found" }, 404);
-        }
-        return json(goal);
-      }
-      if (path.match(/^\/api\/goals\/\d+$/) && method === "PUT") {
-        const goalID = Number(path.split("/")[3]);
-        const goal = db.goals.find((item) => item.goal_id === goalID);
-        if (!goal) {
-          return json({ error: "not found" }, 404);
-        }
-        Object.assign(goal, body);
-        return json(goal);
-      }
-      if (path.match(/^\/api\/goals\/\d+$/) && method === "DELETE") {
-        const goalID = Number(path.split("/")[3]);
-        db.goals = db.goals.filter((item) => item.goal_id !== goalID);
-        delete db.goalChatByGoal[String(goalID)];
-        return json({ status: "deleted" });
-      }
-      if (path.match(/^\/api\/goals\/\d+\/refine$/) && method === "POST") {
-        const goalID = Number(path.split("/")[3]);
-        const goal = db.goals.find((item) => item.goal_id === goalID);
-        if (!goal) {
-          return json({ error: "not found" }, 404);
-        }
-        goal.status = "refining";
-        return json(goal);
-      }
-      if (path.match(/^\/api\/goals\/\d+\/ready$/) && method === "POST") {
-        const goalID = Number(path.split("/")[3]);
-        const goal = db.goals.find((item) => item.goal_id === goalID);
-        if (!goal) {
-          return json({ error: "not found" }, 404);
-        }
-        if (!body.confirm_refinement) {
-          return json({ error: "confirm_refinement must be true before setting ready" }, 400);
-        }
-        if (!String(goal.refined_goal || "").trim()) {
-          return json({ error: "goal refined_goal is required before setting ready" }, 400);
-        }
-        if (!String(goal.decomposition || "").trim()) {
-          return json({ error: "goal decomposition is required before setting ready" }, 400);
-        }
-        goal.status = "ready";
-        return json(goal);
-      }
-      if (path.match(/^\/api\/goals\/\d+\/refinement$/) && method === "GET") {
-        const goalID = Number(path.split("/")[3]);
-        const goal = db.goals.find((item) => item.goal_id === goalID);
-        if (!goal) {
-          return json({ error: "not found" }, 404);
-        }
-        return json({ refined_goal: goal.refined_goal || "", decomposition: goal.decomposition || "" });
-      }
-      if (path.match(/^\/api\/goals\/\d+\/refinement$/) && method === "PUT") {
-        const goalID = Number(path.split("/")[3]);
-        const goal = db.goals.find((item) => item.goal_id === goalID);
-        if (!goal) {
-          return json({ error: "not found" }, 404);
-        }
-        goal.refined_goal = body.refined_goal || "";
-        goal.decomposition = body.decomposition || "";
-        return json(goal);
-      }
-      if (path.match(/^\/api\/goals\/\d+\/chat\/messages$/) && method === "GET") {
-        const goalID = Number(path.split("/")[3]);
-        return json((db.goalChatByGoal[String(goalID)] || []).map((message, index) => ({
-          message_id: index + 1,
-          goal_id: goalID,
-          author: message.author,
-          text: message.text,
-        })));
-      }
-      if (path.match(/^\/api\/goals\/\d+\/chat\/messages$/) && method === "POST") {
-        const goalID = Number(path.split("/")[3]);
-        const key = String(goalID);
-        if (!db.goalChatByGoal[key]) {
-          db.goalChatByGoal[key] = [];
-        }
-        db.goalChatByGoal[key].push({ author: body.author || "user", text: body.text || "" });
-        return json({ message_id: db.goalChatByGoal[key].length, goal_id: goalID, author: body.author || "user", text: body.text || "" }, 201);
       }
       if (path.match(/^\/api\/projects\/\d+\/tickets$/) && method === "GET") {
         const id = Number(path.split("/")[3]);
@@ -1230,30 +1077,6 @@ test("account settings modal manages website passkeys", async ({ page }) => {
   expect(requests.find((request) => request.path === "/api/auth/passkey/finish")).toBeTruthy();
 });
 
-test("continues to board when goals API returns null", async ({ page }) => {
-  await installSite2Mock(page);
-  await page.goto("/site2/");
-  await page.evaluate(() => {
-    const original = window.__site2MockFetch;
-    window.__site2MockFetch = async (input, init = {}) => {
-      const method = (init.method || "GET").toUpperCase();
-      const url = new URL(typeof input === "string" ? input : input.url, window.location.origin);
-      if (method === "GET" && /^\/api\/projects\/\d+\/goals$/.test(url.pathname)) {
-        return new Response("null", { status: 200, headers: { "Content-Type": "application/json" } });
-      }
-      return original(input, init);
-    };
-    sessionStorage.clear();
-    localStorage.clear();
-    window.location.reload();
-  });
-
-  await page.locator("#login-username").fill("admin");
-  await page.locator("#login-password").fill("secret");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
-});
-
 test("refresh restores the app from the server session when client auth storage is missing", async ({ page }) => {
   await installSite2Mock(page);
   await page.goto("/site2/");
@@ -1300,46 +1123,6 @@ test("refresh keeps the app shell visible when a non-auth boot request fails", a
   await expect(page.locator("#app-shell")).not.toHaveClass(/hidden/);
   await expect(page.locator("#login-screen")).toHaveClass(/hidden/);
   await expect(page.locator("#app-notice")).toContainText("plans unavailable");
-});
-
-test("goal refine -> decomposition reorder -> ready flow works in site2", async ({ page }) => {
-  await installSite2Mock(page);
-  await page.goto("/site2/");
-  await page.evaluate(() => {
-    sessionStorage.clear();
-    localStorage.clear();
-    window.location.reload();
-  });
-
-  await page.locator("#login-username").fill("admin");
-  await page.locator("#login-password").fill("secret");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
-
-  await page.getByRole("button", { name: "Goals" }).click();
-  await expect(page.getByRole("heading", { name: "Goals" })).toBeVisible();
-
-  await page.locator("#new-goal-button").click();
-  await page.locator("#goal-title").fill("Realtime todo app");
-  await page.locator("#save-goal-button").click();
-  await expect(page.locator("#goal-status")).toHaveValue("draft");
-
-  await page.locator("#refine-goal-button").click();
-  await expect(page.locator("#goal-status")).toHaveValue("refining");
-
-  await page.locator("#goal-refined-goal").fill("Build a multiplayer todo app with login.");
-  await page.locator("#goal-decomposition").fill("1. Epic: Auth\n2. Epic: Realtime sync\n3. Story: Presence");
-  await page.locator('[data-decomposition-up="1"]').click();
-  await page.locator("#save-goal-refinement-button").click();
-  await page.locator("#ready-goal-button").click();
-  await expect(page.locator("#goal-status")).toHaveValue("ready");
-
-  const requests = await page.evaluate(() => window.__site2Requests || []);
-  const refinementRequest = requests
-    .filter((request) => request.method === "PUT" && /\/api\/goals\/\d+\/refinement$/.test(request.path))
-    .slice(-1)[0];
-  expect(refinementRequest).toBeTruthy();
-  expect(refinementRequest.body.decomposition.startsWith("1. Epic: Realtime sync")).toBe(true);
 });
 
 test("keeps the session and visible tickets across refresh", async ({ page }) => {

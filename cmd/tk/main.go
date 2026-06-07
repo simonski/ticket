@@ -172,8 +172,6 @@ func run(args []string) error {
 		return runRole(trimmedArgs[1:])
 	case "story":
 		return runStory(trimmedArgs[1:])
-	case "goal":
-		return runGoal(trimmedArgs[1:])
 	case "document":
 		return runDocument(trimmedArgs[1:])
 	case "workflow":
@@ -328,7 +326,7 @@ func shouldRouteToActionNamespace(args []string) bool {
 	case "help", "version", "upgrade", "upgrade-database", "status", "whoami",
 		"login", "logout", "register", "init", "initdb", "server",
 		"config", "project", "workflow", "team", "user", "role", "idea", "decision",
-		"story", "goal", "document", "label", "dep", "time", "doctor", "summary",
+		"story", "document", "label", "dep", "time", "doctor", "summary",
 		"agent", "work-item", "onboard", "skill", "docker-compose":
 		return false
 	default:

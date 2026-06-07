@@ -86,64 +86,12 @@ type roleRequest struct {
 	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
 }
 
-type goalRequest struct {
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	Notes              string `json:"notes"`
-	ETA                string `json:"eta"`
-	Priority           int    `json:"priority"`
-	AgentModelProvider string `json:"agent_model_provider"`
-	AgentModelName     string `json:"agent_model_name"`
-	AgentModelURL      string `json:"agent_model_url"`
-	AgentModelAPIKey   string `json:"agent_model_api_key"`
-}
-
 type agentModelConfigRequest struct {
 	Provider  string                     `json:"provider"`
 	Model     string                     `json:"model"`
 	URL       string                     `json:"url"`
 	APIKey    string                     `json:"api_key"`
 	Providers []store.AgentModelProvider `json:"providers,omitempty"`
-}
-
-type goalRefinementRequest struct {
-	RefinedGoal   string `json:"refined_goal"`
-	Decomposition string `json:"decomposition"`
-}
-
-type goalReadyRequest struct {
-	ConfirmRefinement bool `json:"confirm_refinement"`
-}
-
-type goalRefinementConfirmRequest struct {
-	Confirmed bool `json:"confirmed"`
-}
-
-type goalDecompositionItemRequest struct {
-	Kind      string `json:"kind"`
-	Text      string `json:"text"`
-	SortOrder *int   `json:"sort_order,omitempty"`
-}
-
-type goalDecompositionReorderRequest struct {
-	ItemIDs []int64 `json:"item_ids"`
-}
-
-type goalClarificationRequest struct {
-	Question string `json:"question"`
-}
-
-type goalClarificationResolveRequest struct {
-	Resolved bool `json:"resolved"`
-}
-
-type goalChatMessageRequest struct {
-	Author string `json:"author"`
-	Text   string `json:"text"`
-}
-
-type goalStoryLinkRequest struct {
-	StoryID int64 `json:"story_id"`
 }
 
 type workflowRequest struct {

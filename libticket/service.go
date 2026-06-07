@@ -188,11 +188,6 @@ type TicketService interface {
 	GetStory(ctx context.Context, id int64) (store.Story, error)
 	UpdateStory(ctx context.Context, id int64, title, description string) (store.Story, error)
 	DeleteStory(ctx context.Context, id int64) error
-	CreateGoal(ctx context.Context, projectID int64, request GoalRequest) (store.Goal, error)
-	ListGoals(ctx context.Context, projectID int64) ([]store.Goal, error)
-	GetGoal(ctx context.Context, id int64) (store.Goal, error)
-	UpdateGoal(ctx context.Context, id int64, request GoalRequest) (store.Goal, error)
-	DeleteGoal(ctx context.Context, id int64) error
 	CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error)
 	ListDocuments(ctx context.Context, projectID int64) ([]store.Document, error)
 	GetDocument(ctx context.Context, id int64) (store.Document, error)

@@ -148,16 +148,6 @@ func (r *router) registerProjectHandlers() {
 				return
 			}
 		}
-		if len(parts) == 2 && parts[1] == "goals" {
-			if handled := handleProjectGoals(w, r, db, parts[0]); handled {
-				return
-			}
-		}
-		if len(parts) == 2 && parts[1] == "goal-inbox" {
-			if handled := handleProjectGoalInbox(w, r, db, parts[0]); handled {
-				return
-			}
-		}
 		if len(parts) == 2 && parts[1] == "documents" {
 			if handled := handleProjectDocuments(w, r, db, parts[0]); handled {
 				return

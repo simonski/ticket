@@ -24,7 +24,6 @@
             projectHistoryError: "",
             myProjectAccessRequests: [],
             myNotifications: [],
-            goals: [],
             documents: [],
             tickets: [],
             interventions: [],
@@ -38,20 +37,7 @@
             teams: [],
             selectedProjectID: null,
             selectedProjectDraft: emptyProject(),
-            selectedGoalID: null,
             selectedDocumentID: null,
-            selectedGoalDraft: {
-                id: null,
-                project_id: 0,
-                title: "",
-                description: "",
-                notes: "",
-                eta: "",
-                priority: 1,
-                status: "draft",
-                refined_goal: "",
-                decomposition: "",
-            },
             selectedDocumentDraft: {
                 id: null,
                 project_id: 0,
@@ -86,18 +72,9 @@
             liveSocket: null,
             liveRefreshTimer: null,
             agentBarPollTimer: null,
-            goalChatSocket: null,
-            goalChatMessages: [],
-            goalChatLoadedFor: null,
-            goalChatAgentState: "idle",
-            goalDecompositionItems: [],
             documentFiles: [],
-            goalInboxStatusFilter: "",
-            goalInboxSort: "updated_desc",
             systemAgentModelConfig: { provider: "", model: "", url: "", api_key: "", providers: [] },
             projectAgentModelConfig: { provider: "", model: "", url: "", api_key: "" },
-            goalAgentModelConfig: { provider: "", model: "", url: "", api_key: "" },
-            resolvedGoalAgentModelConfig: null,
             configSettings: [],
             selectedConfigSettingKey: "",
             selectedProviderConfigID: "",
@@ -123,7 +100,6 @@
         const VIEW_SCROLL_STORAGE_KEY = "site2.viewScroll";
         const NAV_ORDER_STORAGE_KEY = "site2.navOrder";
         const NAV_ITEMS = [
-            { view: "goals", label: "Goals", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3l3 6 6 .9-4.5 4.4 1.1 6.2L12 17.8 6.4 20.5l1.1-6.2L3 9.9 9 9z\"></path></svg>" },
             { view: "tickets", label: "Board", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16\"></path><path d=\"M4 12h16\"></path><path d=\"M4 17h10\"></path></svg>" },
             { view: "documents", label: "Documents", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 3h7l5 5v13H7z\"></path><path d=\"M14 3v5h5\"></path><path d=\"M9 13h8\"></path><path d=\"M9 17h8\"></path></svg>" },
             { view: "interventions", label: "Mailbox", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
@@ -141,7 +117,6 @@
             { view: "admin-summary", label: "Summary", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\"/></svg>" },
         ];
         let navDragView = "";
-        let goalChatIdleTimer = null;
         let documentDropDepth = 0;
         let documentDropSuccessTimer = null;
 
@@ -233,7 +208,6 @@
             accountMenuDropdown: document.getElementById("account-menu-dropdown"),
             accountMenuName: document.getElementById("account-menu-name"),
             projectList: document.getElementById("project-list"),
-            goalList: document.getElementById("goal-list"),
             documentList: document.getElementById("document-list"),
             workflowList: document.getElementById("workflow-list"),
             workflowSelect: document.getElementById("workflow-select"),
@@ -277,19 +251,9 @@
             ticketTimeMinutes: document.getElementById("ticket-time-minutes"),
             ticketTimeNote: document.getElementById("ticket-time-note"),
             addTicketTimeButton: document.getElementById("add-ticket-time-button"),
-            goalChatLog: document.getElementById("goal-chat-log"),
-            goalChatInput: document.getElementById("goal-chat-input"),
-            goalChatStatus: document.getElementById("goal-chat-status"),
-            goalRefinedGoal: document.getElementById("goal-refined-goal"),
-            goalDecomposition: document.getElementById("goal-decomposition"),
-            goalDecompositionList: document.getElementById("goal-decomposition-list"),
-            goalDecompositionItemInput: document.getElementById("goal-decomposition-item-input"),
-            goalInboxStatusFilter: document.getElementById("goal-inbox-status-filter"),
-            goalInboxSort: document.getElementById("goal-inbox-sort"),
             agentHarnessSummary: document.getElementById("agent-harness-summary"),
             systemAgentProvider: document.getElementById("system-agent-provider"),
             projectAgentProvider: document.getElementById("project-agent-provider"),
-            goalAgentProvider: document.getElementById("goal-agent-provider"),
             resolvedAgentProvider: document.getElementById("resolved-agent-provider"),
             resolvedAgentModel: document.getElementById("resolved-agent-model"),
             resolvedAgentURL: document.getElementById("resolved-agent-url"),
@@ -388,21 +352,6 @@
                     teams: [],
                     projects: [],
                 },
-            };
-        }
-
-        function emptyGoal(projectID) {
-            return {
-                id: null,
-                project_id: Number(projectID || 0),
-                title: "",
-                description: "",
-                notes: "",
-                eta: "",
-                priority: 1,
-                status: "draft",
-                refined_goal: "",
-                decomposition: "",
             };
         }
 
@@ -668,17 +617,6 @@
             };
         }
 
-        function normalizeGoal(goal) {
-            return Object.assign({}, goal, {
-                id: goal.id !== undefined ? goal.id : goal.goal_id,
-                project_id: Number(goal.project_id || 0),
-                priority: Number(goal.priority || 1),
-                status: goal.status || "draft",
-                refined_goal: goal.refined_goal || "",
-                decomposition: goal.decomposition || "",
-            });
-        }
-
         function normalizeDocument(documentItem) {
             return Object.assign({}, documentItem, {
                 id: documentItem.id !== undefined ? documentItem.id : documentItem.document_id,
@@ -698,25 +636,6 @@
                 content_type: file.content_type || "",
                 size_bytes: Number(file.size_bytes || 0),
             });
-        }
-
-        function parseGoalDecompositionItems(text) {
-            if (!text) {
-                return [];
-            }
-            return String(text)
-                .split(/\r?\n/)
-                .map((line) => line.trim())
-                .filter(Boolean)
-                .map((line) => line.replace(/^[-*]\s+/, "").replace(/^\d+[\.\)\-\s]+/, "").trim())
-                .filter(Boolean);
-        }
-
-        function formatGoalDecompositionItems(items) {
-            if (!Array.isArray(items) || !items.length) {
-                return "";
-            }
-            return items.map((item, index) => (String(index + 1) + ". " + String(item).trim())).join("\n");
         }
 
         function normalizeTicket(ticket) {
@@ -1284,10 +1203,6 @@
             return state.projects.find((project) => project.id === state.selectedProjectID) || null;
         }
 
-        function getCurrentGoal() {
-            return state.goals.find((goal) => (goal.id !== undefined ? goal.id : goal.goal_id) === state.selectedGoalID) || null;
-        }
-
         function getCurrentDocument() {
             return state.documents.find((documentItem) => (documentItem.id !== undefined ? documentItem.id : documentItem.document_id) === state.selectedDocumentID) || null;
         }
@@ -1587,7 +1502,7 @@
             state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
             populateTicketTypeAndStageSelects();
             await loadProjectAgentModelConfig();
-            await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
+            await Promise.all([loadTickets(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
             renderAll();
         }
 
@@ -1679,32 +1594,6 @@
                 state.projectAgentModelConfig = normalizeAgentModelConfig(response);
             } catch (error) {
                 state.projectAgentModelConfig = emptyAgentModelConfig();
-            }
-        }
-
-        async function loadGoalAgentModelConfig() {
-            if (!state.selectedGoalID) {
-                state.goalAgentModelConfig = emptyAgentModelConfig();
-                return;
-            }
-            try {
-                const response = await api("/api/goals/" + state.selectedGoalID + "/agent-model");
-                state.goalAgentModelConfig = normalizeAgentModelConfig(response);
-            } catch (error) {
-                state.goalAgentModelConfig = emptyAgentModelConfig();
-            }
-        }
-
-        async function loadResolvedGoalAgentModelConfig() {
-            if (!state.selectedGoalID) {
-                state.resolvedGoalAgentModelConfig = null;
-                return;
-            }
-            try {
-                const response = await api("/api/goals/" + state.selectedGoalID + "/agent-model/resolved");
-                state.resolvedGoalAgentModelConfig = normalizeAgentModelConfig(response);
-            } catch (error) {
-                state.resolvedGoalAgentModelConfig = null;
             }
         }
 
@@ -1868,56 +1757,6 @@
             }
         }
 
-        async function loadGoals() {
-            if (!state.selectedProjectID) {
-                state.goals = [];
-                state.selectedGoalID = null;
-                state.selectedGoalDraft = emptyGoal(state.selectedProjectID);
-                state.goalAgentModelConfig = emptyAgentModelConfig();
-                state.resolvedGoalAgentModelConfig = null;
-                return;
-            }
-            try {
-                const query = new URLSearchParams();
-                if (state.goalInboxStatusFilter) {
-                    query.set("status", state.goalInboxStatusFilter);
-                }
-                if (state.goalInboxSort) {
-                    query.set("sort", state.goalInboxSort);
-                }
-                const inboxPath = "/api/projects/" + state.selectedProjectID + "/goal-inbox" + (query.toString() ? ("?" + query.toString()) : "");
-                const inbox = await api(inboxPath);
-                const goals = await api("/api/projects/" + state.selectedProjectID + "/goals");
-                const goalsByID = new Map((Array.isArray(goals) ? goals : []).map((goal) => [goal.goal_id || goal.id, normalizeGoal(goal)]));
-                state.goals = Array.isArray(inbox)
-                    ? inbox.map((entry) => {
-                        const id = entry.goal_id || entry.id;
-                        const goal = goalsByID.get(id);
-                        if (!goal) {
-                            return null;
-                        }
-                        return Object.assign({}, goal, {
-                            decomposition_depth: Number(entry.decomposition_depth || 0),
-                            unresolved_clarifications: Number(entry.unresolved_clarifications || 0),
-                            refinement_confirmed: Boolean(entry.refinement_confirmed),
-                        });
-                    }).filter(Boolean)
-                    : [];
-            } catch (error) {
-                state.goals = [];
-            }
-            if (!state.selectedGoalID && state.goals.length) {
-                state.selectedGoalID = state.goals[0].goal_id || state.goals[0].id;
-            }
-            if (state.selectedGoalID && !state.goals.some((goal) => (goal.goal_id || goal.id) === state.selectedGoalID)) {
-                state.selectedGoalID = state.goals.length ? (state.goals[0].goal_id || state.goals[0].id) : null;
-            }
-            const current = getCurrentGoal();
-            state.selectedGoalDraft = current ? structuredClone(normalizeGoal(current)) : emptyGoal(state.selectedProjectID);
-            await loadGoalChatMessages();
-            await Promise.all([loadGoalAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
-        }
-
         async function loadDocuments() {
             if (!state.selectedProjectID) {
                 state.documents = [];
@@ -1954,28 +1793,6 @@
             } catch (error) {
                 state.documentFiles = [];
             }
-        }
-
-        async function loadGoalChatMessages() {
-            if (!state.selectedGoalID) {
-                state.goalChatMessages = [];
-                state.goalChatLoadedFor = null;
-                setGoalChatAgentState("idle");
-                return;
-            }
-            if (state.goalChatLoadedFor === state.selectedGoalID) {
-                return;
-            }
-            try {
-                const messages = await api("/api/goals/" + state.selectedGoalID + "/chat/messages");
-                state.goalChatMessages = Array.isArray(messages)
-                    ? messages.map((message) => ({ author: message.author || "system", text: message.text || "" }))
-                    : [];
-            } catch (error) {
-                state.goalChatMessages = [];
-            }
-            state.goalChatLoadedFor = state.selectedGoalID;
-            setGoalChatAgentState("idle");
         }
 
         async function loadWorkflows() {
@@ -2085,7 +1902,7 @@
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
-            await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
+            await Promise.all([loadTickets(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
             renderAll();
         }
 
@@ -2214,7 +2031,6 @@
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
             renderProjects();
-            renderGoals();
             renderDocuments();
             renderWorkflows();
             renderRoles();
@@ -2419,39 +2235,6 @@
             }
         }
 
-        function renderGoals() {
-            if (els.goalInboxStatusFilter) {
-                els.goalInboxStatusFilter.value = state.goalInboxStatusFilter || "";
-            }
-            if (els.goalInboxSort) {
-                els.goalInboxSort.value = state.goalInboxSort || "updated_desc";
-            }
-            if (!state.selectedProjectID) {
-                els.goalList.innerHTML = "<div class=\"empty\">Select a project first.</div>";
-                renderGoalChat();
-                return;
-            }
-            if (!state.goals.length) {
-                els.goalList.innerHTML = "<div class=\"empty\">No goals yet.</div>";
-                renderGoalChat();
-                return;
-            }
-            els.goalList.innerHTML = state.goals.map((rawGoal) => {
-                const goal = normalizeGoal(rawGoal);
-                const active = goal.id === state.selectedGoalID ? " active" : "";
-                return "<div class=\"entity-card" + active + "\" data-goal-id=\"" + goal.id + "\">" +
-                    "<h4>" + escapeHTML(goal.title || "Untitled goal") + "</h4>" +
-                    "<p>" + escapeHTML(goal.description || "No description") + "</p>" +
-                    "<div class=\"tag-row tag-row-spaced\">" +
-                    "<span class=\"chip\">" + escapeHTML(goal.status || "draft") + "</span>" +
-                    "<span class=\"chip\">p" + escapeHTML(String(goal.priority || 1)) + "</span>" +
-                    "<span class=\"chip\">depth " + escapeHTML(String(goal.decomposition_depth || 0)) + "</span>" +
-                    "<span class=\"chip\">open clarifications " + escapeHTML(String(goal.unresolved_clarifications || 0)) + "</span>" +
-                    "</div></div>";
-            }).join("");
-            renderGoalChat();
-        }
-
         function renderDocuments() {
             if (!state.selectedProjectID) {
                 els.documentList.innerHTML = "<div class=\"empty\">Select a project first.</div>";
@@ -2469,27 +2252,6 @@
                     "<p class=\"meta meta-top\">Updated " + escapeHTML(documentItem.updated_at || documentItem.created_at || "") + "</p>" +
                     "</div>";
             }).join("");
-        }
-
-        function renderGoalEditor() {
-            const goal = state.selectedGoalDraft || emptyGoal(state.selectedProjectID);
-            document.getElementById("goal-editor-title").textContent = goal.id ? "Goal: " + goal.title : "Goal editor";
-            document.getElementById("goal-title").value = goal.title || "";
-            document.getElementById("goal-description").value = goal.description || "";
-            document.getElementById("goal-notes").value = goal.notes || "";
-            document.getElementById("goal-eta").value = goal.eta || "";
-            document.getElementById("goal-priority").value = String(goal.priority || 1);
-            document.getElementById("goal-status").value = goal.status || "draft";
-            els.goalRefinedGoal.value = goal.refined_goal || "";
-            els.goalDecomposition.value = goal.decomposition || "";
-            state.goalDecompositionItems = parseGoalDecompositionItems(goal.decomposition || "");
-            renderGoalDecompositionList();
-            document.getElementById("delete-goal-button").disabled = !goal.id;
-            document.getElementById("refine-goal-button").disabled = !goal.id;
-            document.getElementById("ready-goal-button").disabled = !goal.id;
-            document.getElementById("save-goal-refinement-button").disabled = !goal.id;
-            document.getElementById("goal-use-last-agent-response").disabled = !goal.id;
-            renderAgentHarnessEditor();
         }
 
         function maskSecret(value) {
@@ -2586,10 +2348,10 @@
                 };
             }
             return {
-                provider: els.goalAgentProvider,
-                model: els.goalAgentModel,
-                url: els.goalAgentURL,
-                apiKey: els.goalAgentAPIKey,
+                provider: null,
+                model: null,
+                url: null,
+                apiKey: null,
                 includeInherit: true,
             };
         }
@@ -2765,19 +2527,14 @@
 
         function renderAgentHarnessEditor() {
             const hasProject = Boolean(state.selectedProjectID);
-            const hasGoal = Boolean(state.selectedGoalID);
 
             const system = normalizeAgentModelConfig(state.systemAgentModelConfig);
             const project = normalizeAgentModelConfig(state.projectAgentModelConfig);
-            const goal = normalizeAgentModelConfig(state.goalAgentModelConfig);
-            const resolved = state.resolvedGoalAgentModelConfig ? normalizeAgentModelConfig(state.resolvedGoalAgentModelConfig) : null;
 
             renderProviderSelect(els.systemAgentProvider, system.provider, false);
             renderProviderSelect(els.projectAgentProvider, project.provider, true);
-            renderProviderSelect(els.goalAgentProvider, goal.provider, true);
             renderModelSelect(els.systemAgentModel, system.provider, system.model, false);
             renderModelSelect(els.projectAgentModel, project.provider, project.model, true);
-            renderModelSelect(els.goalAgentModel, goal.provider, goal.model, true);
 
             if (els.systemAgentModel) {
                 els.systemAgentModel.value = system.model || "";
@@ -2804,24 +2561,8 @@
                 els.projectAgentProvider.disabled = !hasProject;
             }
 
-            if (els.goalAgentModel) {
-                els.goalAgentModel.disabled = !hasGoal;
-            }
-            if (els.goalAgentURL) {
-                els.goalAgentURL.value = goal.url || "";
-                els.goalAgentURL.disabled = !hasGoal;
-            }
-            if (els.goalAgentAPIKey) {
-                els.goalAgentAPIKey.value = goal.api_key || "";
-                els.goalAgentAPIKey.disabled = !hasGoal;
-            }
-            if (els.goalAgentProvider) {
-                els.goalAgentProvider.disabled = !hasGoal;
-            }
-
             applyHarnessRequirements("system");
             applyHarnessRequirements("project");
-            applyHarnessRequirements("goal");
 
             if (!hasProject) {
                 if (els.projectAgentProvider) els.projectAgentProvider.disabled = true;
@@ -2829,130 +2570,20 @@
                 if (els.projectAgentURL) els.projectAgentURL.disabled = true;
                 if (els.projectAgentAPIKey) els.projectAgentAPIKey.disabled = true;
             }
-            if (!hasGoal) {
-                if (els.goalAgentProvider) els.goalAgentProvider.disabled = true;
-                if (els.goalAgentModel) els.goalAgentModel.disabled = true;
-                if (els.goalAgentURL) els.goalAgentURL.disabled = true;
-                if (els.goalAgentAPIKey) els.goalAgentAPIKey.disabled = true;
-            }
-
-            if (els.resolvedAgentProvider) {
-                els.resolvedAgentProvider.value = resolved ? resolved.provider : "(select a goal)";
-            }
-            if (els.resolvedAgentModel) {
-                els.resolvedAgentModel.value = resolved ? resolved.model : "(select a goal)";
-            }
-            if (els.resolvedAgentURL) {
-                els.resolvedAgentURL.value = resolved ? (resolved.url || "(provider default)") : "(select a goal)";
-            }
-            if (els.resolvedAgentAPIKey) {
-                els.resolvedAgentAPIKey.value = resolved ? maskSecret(resolved.api_key) : "(select a goal)";
-            }
 
             const saveProjectButton = document.getElementById("save-project-agent-model");
             const clearProjectButton = document.getElementById("clear-project-agent-model");
-            const saveGoalButton = document.getElementById("save-goal-agent-model");
-            const clearGoalButton = document.getElementById("clear-goal-agent-model");
             if (saveProjectButton) saveProjectButton.disabled = !hasProject;
             if (clearProjectButton) clearProjectButton.disabled = !hasProject;
-            if (saveGoalButton) saveGoalButton.disabled = !hasGoal;
-            if (clearGoalButton) clearGoalButton.disabled = !hasGoal;
 
             if (els.agentHarnessSummary) {
                 if (!hasProject) {
-                    els.agentHarnessSummary.textContent = "Select a project to configure project/goal overrides.";
-                } else if (!hasGoal) {
-                    els.agentHarnessSummary.textContent = "Project override is active. Select a goal to configure or inspect goal-level resolution.";
+                    els.agentHarnessSummary.textContent = "Select a project to configure project overrides.";
                 } else {
-                    els.agentHarnessSummary.textContent = "Hierarchy: goal → project → system. Effective model shown below.";
+                    els.agentHarnessSummary.textContent = "Hierarchy: project → system. Effective model shown below.";
                 }
             }
             renderProviderConfigPanel();
-        }
-
-        function renderGoalDecompositionList() {
-            if (!els.goalDecompositionList) {
-                return;
-            }
-            if (!Array.isArray(state.goalDecompositionItems) || !state.goalDecompositionItems.length) {
-                els.goalDecompositionList.innerHTML = "<div class=\"empty\">No decomposition items yet.</div>";
-                return;
-            }
-            els.goalDecompositionList.innerHTML = state.goalDecompositionItems.map((item, index) => {
-                return "<div class=\"goal-decomposition-item\" data-decomposition-index=\"" + String(index) + "\">" +
-                    "<div class=\"meta\">" + escapeHTML(item) + "</div>" +
-                    "<div class=\"goal-decomposition-controls\">" +
-                    "<button type=\"button\" data-decomposition-up=\"" + String(index) + "\" " + (index === 0 ? "disabled" : "") + ">↑</button>" +
-                    "<button type=\"button\" data-decomposition-down=\"" + String(index) + "\" " + (index === state.goalDecompositionItems.length - 1 ? "disabled" : "") + ">↓</button>" +
-                    "<button type=\"button\" data-decomposition-delete=\"" + String(index) + "\" class=\"btn-danger\">Remove</button>" +
-                    "</div></div>";
-            }).join("");
-        }
-
-        function renderGoalChatStatus() {
-            if (!els.goalChatStatus) {
-                return;
-            }
-            const isProcessing = state.goalChatAgentState === "processing";
-            els.goalChatStatus.classList.toggle("processing", isProcessing);
-            const label = els.goalChatStatus.querySelector("span:last-child");
-            if (label) {
-                label.textContent = isProcessing ? "processing" : "idle";
-            }
-        }
-
-        function setGoalChatAgentState(nextState) {
-            state.goalChatAgentState = nextState === "processing" ? "processing" : "idle";
-            renderGoalChatStatus();
-        }
-
-        function scheduleGoalChatIdle() {
-            if (goalChatIdleTimer) {
-                clearTimeout(goalChatIdleTimer);
-            }
-            goalChatIdleTimer = setTimeout(() => {
-                setGoalChatAgentState("idle");
-                goalChatIdleTimer = null;
-            }, 1200);
-        }
-
-        function renderGoalChat() {
-            if (!els.goalChatLog) {
-                return;
-            }
-            renderGoalChatStatus();
-            if (!Array.isArray(state.goalChatMessages) || !state.goalChatMessages.length) {
-                els.goalChatLog.innerHTML = "<div class=\"empty\">No messages yet.</div>";
-                return;
-            }
-            let latestAgentIndex = -1;
-            for (let index = state.goalChatMessages.length - 1; index >= 0; index -= 1) {
-                const maybeAuthor = String((state.goalChatMessages[index] && state.goalChatMessages[index].author) || "").toLowerCase();
-                if (maybeAuthor === "agent") {
-                    latestAgentIndex = index;
-                    break;
-                }
-            }
-            const agentStateClass = state.goalChatAgentState === "processing" ? "agent-active" : "agent-stopped";
-            els.goalChatLog.innerHTML = state.goalChatMessages.map((message, index) => {
-                const author = String(message.author || "system").toLowerCase();
-                let className = "history-item";
-                let indicatorHTML = "";
-                if (author === "agent") {
-                    className += " history-item-agent";
-                    if (index === latestAgentIndex) {
-                        className += " history-item-latest-agent " + agentStateClass;
-                        indicatorHTML = "<span class=\"agent-live-dot\" aria-label=\"" + (state.goalChatAgentState === "processing" ? "agent active" : "agent stopped") + "\"></span>";
-                    }
-                } else if (author === "user") {
-                    className += " history-item-user";
-                } else if (author === "system") {
-                    className += " history-item-system";
-                }
-                return "<div class=\"" + className + "\">" + indicatorHTML + "<strong>" + escapeHTML(message.author || "system") + "</strong><div class=\"meta\">" +
-                    escapeHTML(message.text || "") + "</div></div>";
-            }).join("");
-            els.goalChatLog.scrollTop = els.goalChatLog.scrollHeight;
         }
 
         function summarizeStageCopy(value, fallback) {
@@ -3963,7 +3594,6 @@
 
         function renderEditors() {
             renderProjectEditor();
-            renderGoalEditor();
             renderDocumentEditor();
             renderWorkflowEditor();
             renderRoleEditor();
@@ -4495,7 +4125,7 @@
                 state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
                 renderProjectMenu();
                 populateTicketTypeAndStageSelects();
-                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]).then(renderAll).catch((error) => setNotice(error.message, true));
+                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]).then(renderAll).catch((error) => setNotice(error.message, true));
             });
 
             document.getElementById("new-project-button").addEventListener("click", () => {
@@ -4503,8 +4133,6 @@
                 storeSelectedProjectID(state.selectedProjectID);
                 state.selectedProjectDraft = emptyProject();
                 state.projectAgentModelConfig = emptyAgentModelConfig();
-                state.goalAgentModelConfig = emptyAgentModelConfig();
-                state.resolvedGoalAgentModelConfig = null;
                 renderEditors();
             });
 
@@ -4544,7 +4172,7 @@
                     state.selectedProjectID = project.id;
                     storeSelectedProjectID(state.selectedProjectID);
                     await Promise.all([loadProjects(), loadWorkflows()]);
-                    await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
+                    await Promise.all([loadTickets(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
                     renderAll();
                     setNotice("Project saved.");
                 } catch (error) {
@@ -4569,10 +4197,8 @@
                     state.projectAccessRequests = [];
                     state.projectAccessReviewEnabled = false;
                     state.projectAgentModelConfig = emptyAgentModelConfig();
-                    state.goalAgentModelConfig = emptyAgentModelConfig();
-                    state.resolvedGoalAgentModelConfig = null;
                     await loadProjects();
-                    await Promise.all([loadTickets(), loadGoals(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
+                    await Promise.all([loadTickets(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
                     renderAll();
                     setNotice("Project deleted.");
                 } catch (error) {
@@ -4780,123 +4406,7 @@
             }
         }
 
-        function ensureGoalChatConnected() {
-            if (window.__site2MockFetch || state.goalChatSocket) {
-                return;
-            }
-            const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
-            const socket = new WebSocket(scheme + "//" + window.location.host + "/api/chat/ws");
-            state.goalChatSocket = socket;
-            socket.addEventListener("open", () => {
-                if (state.goalChatAgentState !== "processing") {
-                    setGoalChatAgentState("idle");
-                }
-            });
-            socket.addEventListener("message", (event) => {
-                try {
-                    const payload = JSON.parse(event.data);
-                    if (!payload || !payload.type) {
-                        return;
-                    }
-                    if (payload.type === "chat_stream" || payload.type === "chat_output") {
-                        const text = payload.text || "";
-                        state.goalChatMessages.push({ author: "agent", text: text });
-                        if (state.selectedGoalID && text) {
-                            api("/api/goals/" + state.selectedGoalID + "/chat/messages", {
-                                method: "POST",
-                                body: JSON.stringify({ author: "agent", text: text }),
-                            }).catch(() => {});
-                        }
-                        scheduleGoalChatIdle();
-                        renderGoalChat();
-                        return;
-                    }
-                    if (payload.type === "chat_error") {
-                        const text = payload.error || "chat error";
-                        state.goalChatMessages.push({ author: "system", text: text });
-                        if (state.selectedGoalID && text) {
-                            api("/api/goals/" + state.selectedGoalID + "/chat/messages", {
-                                method: "POST",
-                                body: JSON.stringify({ author: "system", text: text }),
-                            }).catch(() => {});
-                        }
-                        setGoalChatAgentState("idle");
-                        renderGoalChat();
-                    }
-                } catch (error) {
-                    // Ignore malformed chat payloads.
-                }
-            });
-            socket.addEventListener("close", () => {
-                if (state.goalChatSocket === socket) {
-                    state.goalChatSocket = null;
-                }
-                setGoalChatAgentState("idle");
-            });
-            socket.addEventListener("error", () => {
-                setGoalChatAgentState("idle");
-            });
-        }
-
-        function sendGoalChatMessage(text) {
-            const messageText = (text || "").trim();
-            if (!messageText) {
-                return;
-            }
-            if (goalChatIdleTimer) {
-                clearTimeout(goalChatIdleTimer);
-                goalChatIdleTimer = null;
-            }
-            setGoalChatAgentState("processing");
-            if (window.__site2MockFetch) {
-                state.goalChatMessages.push({ author: "user", text: messageText });
-                if (state.selectedGoalID) {
-                    api("/api/goals/" + state.selectedGoalID + "/chat/messages", {
-                        method: "POST",
-                        body: JSON.stringify({ author: "user", text: messageText }),
-                    }).catch(() => {});
-                }
-                renderGoalChat();
-                scheduleGoalChatIdle();
-                return;
-            }
-            ensureGoalChatConnected();
-            if (!state.goalChatSocket || state.goalChatSocket.readyState !== WebSocket.OPEN) {
-                setTimeout(() => sendGoalChatMessage(messageText), 200);
-                return;
-            }
-            state.goalChatMessages.push({ author: "user", text: messageText });
-            if (state.selectedGoalID) {
-                api("/api/goals/" + state.selectedGoalID + "/chat/messages", {
-                    method: "POST",
-                    body: JSON.stringify({ author: "user", text: messageText }),
-                }).catch(() => {});
-            }
-            renderGoalChat();
-            state.goalChatSocket.send(JSON.stringify({ type: "chat_input", text: messageText }));
-        }
-
-        function syncGoalDecompositionFromTextarea() {
-            const text = els.goalDecomposition ? els.goalDecomposition.value : "";
-            state.goalDecompositionItems = parseGoalDecompositionItems(text);
-            const draft = state.selectedGoalDraft || emptyGoal(state.selectedProjectID);
-            draft.decomposition = text;
-            state.selectedGoalDraft = draft;
-            renderGoalDecompositionList();
-        }
-
-        function syncGoalDecompositionToTextarea() {
-            const text = formatGoalDecompositionItems(state.goalDecompositionItems || []);
-            if (els.goalDecomposition) {
-                els.goalDecomposition.value = text;
-            }
-            const draft = state.selectedGoalDraft || emptyGoal(state.selectedProjectID);
-            draft.decomposition = text;
-            state.selectedGoalDraft = draft;
-            renderGoalDecompositionList();
-        }
-
-        function bindGoalsHandlers() {
+        function bindAgentModelHandlers() {
             function buildAgentModelPayload(scope) {
                 if (scope === "system") {
                     return {
@@ -4907,107 +4417,12 @@
                         providers: Array.isArray(state.systemAgentModelConfig.providers) ? state.systemAgentModelConfig.providers : [],
                     };
                 }
-                if (scope === "project") {
-                    return {
-                        provider: String(els.projectAgentProvider ? els.projectAgentProvider.value : "").trim(),
-                        model: String(els.projectAgentModel ? els.projectAgentModel.value : "").trim(),
-                        url: String(els.projectAgentURL ? els.projectAgentURL.value : "").trim(),
-                        api_key: String(els.projectAgentAPIKey ? els.projectAgentAPIKey.value : "").trim(),
-                    };
-                }
                 return {
-                    provider: String(els.goalAgentProvider ? els.goalAgentProvider.value : "").trim(),
-                    model: String(els.goalAgentModel ? els.goalAgentModel.value : "").trim(),
-                    url: String(els.goalAgentURL ? els.goalAgentURL.value : "").trim(),
-                    api_key: String(els.goalAgentAPIKey ? els.goalAgentAPIKey.value : "").trim(),
+                    provider: String(els.projectAgentProvider ? els.projectAgentProvider.value : "").trim(),
+                    model: String(els.projectAgentModel ? els.projectAgentModel.value : "").trim(),
+                    url: String(els.projectAgentURL ? els.projectAgentURL.value : "").trim(),
+                    api_key: String(els.projectAgentAPIKey ? els.projectAgentAPIKey.value : "").trim(),
                 };
-            }
-
-            els.goalList.addEventListener("click", (event) => {
-                const card = event.target.closest("[data-goal-id]");
-                if (!card) {
-                    return;
-                }
-                state.selectedGoalID = Number(card.dataset.goalId);
-                const goal = getCurrentGoal();
-                state.selectedGoalDraft = goal ? structuredClone(normalizeGoal(goal)) : emptyGoal(state.selectedProjectID);
-                loadGoalChatMessages().then(renderAll).catch((error) => setNotice(error.message, true));
-            });
-
-            if (els.goalDecomposition) {
-                els.goalDecomposition.addEventListener("input", () => {
-                    syncGoalDecompositionFromTextarea();
-                });
-            }
-
-            if (els.goalDecompositionList) {
-                els.goalDecompositionList.addEventListener("click", (event) => {
-                    const upButton = event.target.closest("[data-decomposition-up]");
-                    if (upButton) {
-                        const index = Number(upButton.dataset.decompositionUp);
-                        if (index > 0) {
-                            const next = state.goalDecompositionItems.slice();
-                            [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                            state.goalDecompositionItems = next;
-                            syncGoalDecompositionToTextarea();
-                        }
-                        return;
-                    }
-                    const downButton = event.target.closest("[data-decomposition-down]");
-                    if (downButton) {
-                        const index = Number(downButton.dataset.decompositionDown);
-                        if (index >= 0 && index < state.goalDecompositionItems.length - 1) {
-                            const next = state.goalDecompositionItems.slice();
-                            [next[index], next[index + 1]] = [next[index + 1], next[index]];
-                            state.goalDecompositionItems = next;
-                            syncGoalDecompositionToTextarea();
-                        }
-                        return;
-                    }
-                    const deleteButton = event.target.closest("[data-decomposition-delete]");
-                    if (deleteButton) {
-                        const index = Number(deleteButton.dataset.decompositionDelete);
-                        if (index >= 0 && index < state.goalDecompositionItems.length) {
-                            state.goalDecompositionItems = state.goalDecompositionItems.filter((_, itemIndex) => itemIndex !== index);
-                            syncGoalDecompositionToTextarea();
-                        }
-                    }
-                });
-            }
-
-            document.getElementById("goal-decomposition-item-add").addEventListener("click", () => {
-                const text = (els.goalDecompositionItemInput ? els.goalDecompositionItemInput.value : "").trim();
-                if (!text) {
-                    return;
-                }
-                state.goalDecompositionItems = (state.goalDecompositionItems || []).concat([text]);
-                if (els.goalDecompositionItemInput) {
-                    els.goalDecompositionItemInput.value = "";
-                }
-                syncGoalDecompositionToTextarea();
-            });
-
-            if (els.goalDecompositionItemInput) {
-                els.goalDecompositionItemInput.addEventListener("keydown", (event) => {
-                    if (event.key !== "Enter") {
-                        return;
-                    }
-                    event.preventDefault();
-                    document.getElementById("goal-decomposition-item-add").click();
-                });
-            }
-
-            if (els.goalInboxStatusFilter) {
-                els.goalInboxStatusFilter.addEventListener("change", () => {
-                    state.goalInboxStatusFilter = els.goalInboxStatusFilter.value || "";
-                    loadGoals().then(renderAll).catch((error) => setNotice(error.message, true));
-                });
-            }
-            if (els.goalInboxSort) {
-                els.goalInboxSort.addEventListener("change", () => {
-                    state.goalInboxSort = els.goalInboxSort.value || "updated_desc";
-                    loadGoals().then(renderAll).catch((error) => setNotice(error.message, true));
-                });
             }
 
             if (els.systemAgentProvider) {
@@ -5019,12 +4434,6 @@
             if (els.projectAgentProvider) {
                 els.projectAgentProvider.addEventListener("change", () => {
                     applyProviderSelectionDefaults("project");
-                    renderAgentHarnessEditor();
-                });
-            }
-            if (els.goalAgentProvider) {
-                els.goalAgentProvider.addEventListener("change", () => {
-                    applyProviderSelectionDefaults("goal");
                     renderAgentHarnessEditor();
                 });
             }
@@ -5157,7 +4566,7 @@
                             }),
                         });
                         state.selectedProviderConfigID = draft.id;
-                        await Promise.all([loadSystemAgentModelConfig(), loadProjectAgentModelConfig(), loadGoalAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
+                        await Promise.all([loadSystemAgentModelConfig(), loadProjectAgentModelConfig()]);
                         renderAll();
                     } catch (error) {
                         setNotice(error.message, true);
@@ -5199,14 +4608,8 @@
                                 body: JSON.stringify({ provider: "", model: "", url: "", api_key: "" }),
                             });
                         }
-                        if (state.selectedGoalID && String(els.goalAgentProvider ? els.goalAgentProvider.value : "").trim() === targetID) {
-                            await api("/api/goals/" + state.selectedGoalID + "/agent-model", {
-                                method: "PUT",
-                                body: JSON.stringify({ provider: "", model: "", url: "", api_key: "" }),
-                            });
-                        }
                         state.selectedProviderConfigID = providers[0].id;
-                        await Promise.all([loadSystemAgentModelConfig(), loadProjectAgentModelConfig(), loadGoalAgentModelConfig(), loadResolvedGoalAgentModelConfig(), loadProjects(), loadGoals()]);
+                        await Promise.all([loadSystemAgentModelConfig(), loadProjectAgentModelConfig(), loadProjects()]);
                         renderAll();
                     } catch (error) {
                         setNotice(error.message, true);
@@ -5222,7 +4625,7 @@
                             method: "PUT",
                             body: JSON.stringify(buildAgentModelPayload("system")),
                         });
-                        await Promise.all([loadSystemAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
+                        await Promise.all([loadSystemAgentModelConfig()]);
                         renderAll();
                         setNotice("System agent model configuration saved.");
                     } catch (error) {
@@ -5243,7 +4646,7 @@
                             method: "PUT",
                             body: JSON.stringify(buildAgentModelPayload("project")),
                         });
-                        await Promise.all([loadProjects(), loadProjectAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
+                        await Promise.all([loadProjects(), loadProjectAgentModelConfig()]);
                         renderAll();
                         setNotice("Project agent model override saved.");
                     } catch (error) {
@@ -5263,7 +4666,7 @@
                             method: "PUT",
                             body: JSON.stringify({ provider: "", model: "", url: "", api_key: "" }),
                         });
-                        await Promise.all([loadProjects(), loadProjectAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
+                        await Promise.all([loadProjects(), loadProjectAgentModelConfig()]);
                         renderAll();
                         setNotice("Project agent model override cleared.");
                     } catch (error) {
@@ -5272,214 +4675,6 @@
                 });
             }
 
-            const saveGoalAgentModelButton = document.getElementById("save-goal-agent-model");
-            if (saveGoalAgentModelButton) {
-                saveGoalAgentModelButton.addEventListener("click", async () => {
-                    if (!state.selectedGoalID) {
-                        setNotice("Select a goal first.", true);
-                        return;
-                    }
-                    try {
-                        await api("/api/goals/" + state.selectedGoalID + "/agent-model", {
-                            method: "PUT",
-                            body: JSON.stringify(buildAgentModelPayload("goal")),
-                        });
-                        await Promise.all([loadGoals(), loadGoalAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
-                        renderAll();
-                        setNotice("Goal agent model override saved.");
-                    } catch (error) {
-                        setNotice(error.message, true);
-                    }
-                });
-            }
-
-            const clearGoalAgentModelButton = document.getElementById("clear-goal-agent-model");
-            if (clearGoalAgentModelButton) {
-                clearGoalAgentModelButton.addEventListener("click", async () => {
-                    if (!state.selectedGoalID) {
-                        return;
-                    }
-                    try {
-                        await api("/api/goals/" + state.selectedGoalID + "/agent-model", {
-                            method: "PUT",
-                            body: JSON.stringify({ provider: "", model: "", url: "", api_key: "" }),
-                        });
-                        await Promise.all([loadGoals(), loadGoalAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
-                        renderAll();
-                        setNotice("Goal agent model override cleared.");
-                    } catch (error) {
-                        setNotice(error.message, true);
-                    }
-                });
-            }
-
-            document.getElementById("new-goal-button").addEventListener("click", () => {
-                state.selectedGoalID = null;
-                state.selectedGoalDraft = emptyGoal(state.selectedProjectID);
-                state.goalAgentModelConfig = emptyAgentModelConfig();
-                state.resolvedGoalAgentModelConfig = null;
-                renderEditors();
-            });
-
-            document.getElementById("reset-goal-button").addEventListener("click", () => {
-                state.selectedGoalDraft = getCurrentGoal() ? structuredClone(normalizeGoal(getCurrentGoal())) : emptyGoal(state.selectedProjectID);
-                renderEditors();
-            });
-
-            document.getElementById("goal-form").addEventListener("submit", async (event) => {
-                event.preventDefault();
-                if (!state.selectedProjectID) {
-                    setNotice("Select a project first.", true);
-                    return;
-                }
-                const draft = state.selectedGoalDraft || emptyGoal(state.selectedProjectID);
-                const payload = {
-                    title: document.getElementById("goal-title").value.trim(),
-                    description: document.getElementById("goal-description").value.trim(),
-                    notes: document.getElementById("goal-notes").value.trim(),
-                    eta: document.getElementById("goal-eta").value.trim(),
-                    priority: Number(document.getElementById("goal-priority").value || 1),
-                };
-                try {
-                    const goal = normalizeGoal(draft.id
-                        ? await api("/api/goals/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
-                        : await api("/api/projects/" + state.selectedProjectID + "/goals", { method: "POST", body: JSON.stringify(payload) }));
-                    state.selectedGoalID = goal.id;
-                    await loadGoals();
-                    renderAll();
-                    setNotice("Goal saved.");
-                } catch (error) {
-                    setNotice(error.message, true);
-                }
-            });
-
-            document.getElementById("delete-goal-button").addEventListener("click", async () => {
-                const draft = state.selectedGoalDraft || emptyGoal(state.selectedProjectID);
-                if (!draft.id) {
-                    return;
-                }
-                const confirmed = await uiConfirm("Delete goal " + (draft.title ? "\"" + draft.title + "\"" : "#" + draft.id) + "?", "Delete");
-                if (!confirmed) {
-                    return;
-                }
-                try {
-                    await api("/api/goals/" + draft.id, { method: "DELETE" });
-                    state.selectedGoalID = null;
-                    state.selectedGoalDraft = emptyGoal(state.selectedProjectID);
-                    await loadGoals();
-                    renderAll();
-                    setNotice("Goal deleted.");
-                } catch (error) {
-                    setNotice(error.message, true);
-                }
-            });
-
-            document.getElementById("refine-goal-button").addEventListener("click", async () => {
-                const draft = state.selectedGoalDraft || emptyGoal(state.selectedProjectID);
-                if (!draft.id) {
-                    return;
-                }
-                try {
-                    const goal = normalizeGoal(await api("/api/goals/" + draft.id + "/refine", { method: "POST", body: JSON.stringify({}) }));
-                    state.selectedGoalID = goal.id;
-                    await loadGoals();
-                    renderAll();
-                    const prompt = "Refine this dirty goal into a clean goal and a decomposition.\nReturn sections:\n1) CLEAN GOAL\n2) HIGH-LEVEL OBJECTIVES\n3) PROPOSED SEQUENCE OF WORK\n4) EPICS/STORIES BREAKDOWN\n5) QUESTIONS/ASSUMPTIONS\n\nGoal: " + goal.title + "\nDescription: " + (goal.description || "") + "\nNotes: " + (goal.notes || "");
-                    sendGoalChatMessage(prompt);
-                    setNotice("Goal moved to refining.");
-                } catch (error) {
-                    setNotice(error.message, true);
-                }
-            });
-
-            document.getElementById("ready-goal-button").addEventListener("click", async () => {
-                const draft = state.selectedGoalDraft || emptyGoal(state.selectedProjectID);
-                if (!draft.id) {
-                    return;
-                }
-                const refinedGoal = (els.goalRefinedGoal.value || "").trim();
-                const decomposition = (els.goalDecomposition.value || "").trim();
-                if (!refinedGoal || !decomposition) {
-                    setNotice("Set a clean goal and decomposition before marking ready.", true);
-                    return;
-                }
-                try {
-                    await api("/api/goals/" + draft.id + "/refinement", {
-                        method: "PUT",
-                        body: JSON.stringify({
-                            refined_goal: refinedGoal,
-                            decomposition: decomposition,
-                        }),
-                    });
-                    const goal = normalizeGoal(await api("/api/goals/" + draft.id + "/ready", {
-                        method: "POST",
-                        body: JSON.stringify({ confirm_refinement: true }),
-                    }));
-                    state.selectedGoalID = goal.id;
-                    await loadGoals();
-                    renderAll();
-                    setNotice("Goal marked ready.");
-                } catch (error) {
-                    setNotice(error.message, true);
-                }
-            });
-
-            document.getElementById("save-goal-refinement-button").addEventListener("click", async () => {
-                const draft = state.selectedGoalDraft || emptyGoal(state.selectedProjectID);
-                if (!draft.id) {
-                    return;
-                }
-                try {
-                    const goal = normalizeGoal(await api("/api/goals/" + draft.id + "/refinement", {
-                        method: "PUT",
-                        body: JSON.stringify({
-                            refined_goal: els.goalRefinedGoal.value.trim(),
-                            decomposition: els.goalDecomposition.value.trim(),
-                        }),
-                    }));
-                    state.selectedGoalID = goal.id;
-                    await loadGoals();
-                    renderAll();
-                    setNotice("Goal refinement output saved.");
-                } catch (error) {
-                    setNotice(error.message, true);
-                }
-            });
-
-            document.getElementById("goal-use-last-agent-response").addEventListener("click", () => {
-                const lastAgentMessage = [...state.goalChatMessages].reverse().find((message) => message.author === "agent" && message.text);
-                if (!lastAgentMessage) {
-                    setNotice("No agent response available yet.", true);
-                    return;
-                }
-                els.goalDecomposition.value = lastAgentMessage.text;
-                syncGoalDecompositionFromTextarea();
-                if (!els.goalRefinedGoal.value.trim()) {
-                    els.goalRefinedGoal.value = "Refined from latest agent response.";
-                }
-                setNotice("Applied latest agent response to decomposition.");
-            });
-
-            document.getElementById("goal-chat-send").addEventListener("click", () => {
-                const text = (els.goalChatInput.value || "").trim();
-                if (!text) {
-                    return;
-                }
-                els.goalChatInput.value = "";
-                sendGoalChatMessage(text);
-            });
-            els.goalChatInput.addEventListener("keydown", (event) => {
-                if (event.key !== "Enter") {
-                    return;
-                }
-                event.preventDefault();
-                const text = (els.goalChatInput.value || "").trim();
-                if (!text) {
-                    return;
-                }
-                els.goalChatInput.value = "";
-                sendGoalChatMessage(text);
-            });
         }
 
         function bindDocumentsHandlers() {
@@ -6633,8 +5828,6 @@
                     storeSelectedProjectID(state.selectedProjectID);
                     state.selectedProjectDraft = emptyProject();
                     state.projectAgentModelConfig = emptyAgentModelConfig();
-                    state.goalAgentModelConfig = emptyAgentModelConfig();
-                    state.resolvedGoalAgentModelConfig = null;
                     switchView("projects");
                     renderAll();
                 }
@@ -7788,10 +6981,6 @@
                 }
                 closeAccountMenu();
                 disconnectLiveUpdates();
-                if (state.goalChatSocket) {
-                    state.goalChatSocket.close();
-                    state.goalChatSocket = null;
-                }
                 state.auth = null;
                 state.passkeys = [];
                 state.passkeyError = "";
@@ -7814,7 +7003,7 @@
         bindViewNavigation();
         bindProjectHandlers();
         bindPlanHandlers();
-        bindGoalsHandlers();
+        bindAgentModelHandlers();
         bindDocumentsHandlers();
         bindWorkflowHandlers();
         bindRolesHandlers();
@@ -7882,10 +7071,6 @@
                         startAgentBarPoller();
                     } catch (error) {
                         disconnectLiveUpdates();
-                        if (state.goalChatSocket) {
-                            state.goalChatSocket.close();
-                            state.goalChatSocket = null;
-                        }
                         if (isAuthError(error)) {
                             state.auth = null;
                             clearStoredAuth();
@@ -7910,10 +7095,6 @@
                 connectLiveUpdates();
             } catch (error) {
                 disconnectLiveUpdates();
-                if (state.goalChatSocket) {
-                    state.goalChatSocket.close();
-                    state.goalChatSocket = null;
-                }
                 if (isAuthError(error)) {
                     state.auth = null;
                     clearStoredAuth();

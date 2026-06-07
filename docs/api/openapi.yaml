@@ -429,7 +429,7 @@ components:
           $ref: '#/components/schemas/ResolvedGuidance'
         role:
           $ref: '#/components/schemas/ResolvedGuidance'
-        goal:
+        ticket:
           $ref: '#/components/schemas/ResolvedGuidance'
 
     ExecutionPacket:
@@ -6289,7 +6289,7 @@ paths:
     get:
       tags: [Tickets]
       summary: Get resolved execution packet for a ticket
-      description: Returns goal + role + phase + project guidance layers and the effective merged rules used for execution.
+      description: Returns ticket + role + phase + project guidance layers and the effective merged rules used for execution.
       operationId: getTicketExecutionPacket
       security:
         - BearerAuth: []
@@ -6501,7 +6501,7 @@ paths:
               properties:
                 decision:
                   type: string
-                  enum: [clarify_goal, start_again, refine_requirements]
+                  enum: [start_again, refine_requirements]
                 message:
                   type: string
       responses:

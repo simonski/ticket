@@ -583,66 +583,11 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 	})
 
-	t.Run("goals-and-documents", func(t *testing.T) {
+	t.Run("documents", func(t *testing.T) {
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Knowledge"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
-		}
-
-		goal, err := svc.CreateGoal(context.Background(), project.ID, libticket.GoalRequest{
-			Title:       "Launch docs",
-			Description: "Ship docs",
-			Notes:       "important",
-			ETA:         "2026-06-01",
-			Priority:    2,
-		})
-		if err != nil {
-			t.Fatalf("CreateGoal() error = %v", err)
-		}
-		if goal.ID == 0 || goal.Title != "Launch docs" || goal.Priority != 2 {
-			t.Fatalf("CreateGoal() = %#v", goal)
-		}
-
-		goals, err := svc.ListGoals(context.Background(), project.ID)
-		if err != nil {
-			t.Fatalf("ListGoals() error = %v", err)
-		}
-		if len(goals) != 1 || goals[0].ID != goal.ID {
-			t.Fatalf("ListGoals() = %#v", goals)
-		}
-
-		gotGoal, err := svc.GetGoal(context.Background(), goal.ID)
-		if err != nil {
-			t.Fatalf("GetGoal() error = %v", err)
-		}
-		if gotGoal.Title != goal.Title {
-			t.Fatalf("GetGoal() = %#v", gotGoal)
-		}
-
-		updatedGoal, err := svc.UpdateGoal(context.Background(), goal.ID, libticket.GoalRequest{
-			Title:       "Launch docs v2",
-			Description: "Ship docs better",
-			Notes:       "revised",
-			ETA:         "2026-07-01",
-			Priority:    3,
-		})
-		if err != nil {
-			t.Fatalf("UpdateGoal() error = %v", err)
-		}
-		if updatedGoal.Title != "Launch docs v2" || updatedGoal.Priority != 3 {
-			t.Fatalf("UpdateGoal() = %#v", updatedGoal)
-		}
-
-		if err := svc.DeleteGoal(context.Background(), goal.ID); err != nil {
-			t.Fatalf("DeleteGoal() error = %v", err)
-		}
-		goals, err = svc.ListGoals(context.Background(), project.ID)
-		if err != nil {
-			t.Fatalf("ListGoals() after delete error = %v", err)
-		}
-		if len(goals) != 0 {
-			t.Fatalf("ListGoals() after delete = %#v, want empty", goals)
 		}
 
 		document, err := svc.CreateDocument(context.Background(), project.ID, libticket.DocumentRequest{

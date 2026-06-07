@@ -110,14 +110,6 @@ type StoryCreateRequest struct {
 	Description string `json:"description"`
 }
 
-type GoalRequest struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Notes       string `json:"notes"`
-	ETA         string `json:"eta"`
-	Priority    int    `json:"priority"`
-}
-
 type DocumentRequest struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`

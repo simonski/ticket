@@ -1060,13 +1060,13 @@ func TestTicketExecutionPacketEndpoint(t *testing.T) {
 		"type":       "task",
 		"title":      "execution packet",
 		"dor_map": map[string]string{
-			"default": "goal dor",
+			"default": "ticket dor",
 		},
 		"dod_map": map[string]string{
-			"default": "goal dod",
+			"default": "ticket dod",
 		},
 		"ac_map": map[string]string{
-			"default": "goal ac",
+			"default": "ticket ac",
 		},
 	}, adminToken)
 	if createResp.Code != http.StatusCreated {
@@ -1084,201 +1084,8 @@ func TestTicketExecutionPacketEndpoint(t *testing.T) {
 	if packet.TicketID != ticket.ID {
 		t.Fatalf("packet ticket id=%q want=%q", packet.TicketID, ticket.ID)
 	}
-	if packet.Effective.DOR != "goal dor" || packet.Effective.DOD != "goal dod" || packet.Effective.AC != "goal ac" {
+	if packet.Effective.DOR != "ticket dor" || packet.Effective.DOD != "ticket dod" || packet.Effective.AC != "ticket ac" {
 		t.Fatalf("unexpected effective guidance: %#v", packet.Effective)
-	}
-}
-
-func TestGoalEndpoints(t *testing.T) {
-	t.Parallel()
-	handler, db := testHandler(t)
-	defer db.Close()
-	adminToken := loginAdmin(t, handler)
-
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/goals", map[string]any{
-		"title":       "Build a multiplayer todo app",
-		"description": "CockroachDB + websocket website",
-		"notes":       "registration/login required",
-		"eta":         "2026-07-01",
-		"priority":    2,
-	}, adminToken)
-	if createResp.Code != http.StatusCreated {
-		t.Fatalf("create goal status=%d body=%s", createResp.Code, createResp.Body.String())
-	}
-	var goal store.Goal
-	decodeResponse(t, createResp, &goal)
-	if goal.Status != "draft" {
-		t.Fatalf("goal status=%q want=draft", goal.Status)
-	}
-
-	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/goals", nil, adminToken)
-	if listResp.Code != http.StatusOK {
-		t.Fatalf("list goals status=%d body=%s", listResp.Code, listResp.Body.String())
-	}
-	var goals []store.Goal
-	decodeResponse(t, listResp, &goals)
-	if len(goals) != 1 {
-		t.Fatalf("goals len=%d want=1", len(goals))
-	}
-
-	refineResp := doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/refine", map[string]any{}, adminToken)
-	if refineResp.Code != http.StatusOK {
-		t.Fatalf("refine goal status=%d body=%s", refineResp.Code, refineResp.Body.String())
-	}
-	var refining store.Goal
-	decodeResponse(t, refineResp, &refining)
-	if refining.Status != "refining" {
-		t.Fatalf("refine status=%q want=refining", refining.Status)
-	}
-
-	readyResp := doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/ready", map[string]any{"confirm_refinement": true}, adminToken)
-	if readyResp.Code != http.StatusBadRequest {
-		t.Fatalf("ready goal (without refinement) status=%d body=%s", readyResp.Code, readyResp.Body.String())
-	}
-	var readyErr map[string]string
-	decodeResponse(t, readyResp, &readyErr)
-	if !strings.Contains(strings.ToLower(readyErr["error"]), "refined_goal") {
-		t.Fatalf("ready goal expected refined_goal error, body=%#v", readyErr)
-	}
-
-	refinementResp := doJSONRequest(t, handler, http.MethodPut, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/refinement", map[string]any{
-		"refined_goal":  "Build a low-friction realtime todo platform.",
-		"decomposition": "- Epic: Auth\n- Epic: Collaboration\n- Story: registration/login\n- Story: websocket sync",
-	}, adminToken)
-	if refinementResp.Code != http.StatusOK {
-		t.Fatalf("refinement update status=%d body=%s", refinementResp.Code, refinementResp.Body.String())
-	}
-	var refined store.Goal
-	decodeResponse(t, refinementResp, &refined)
-	if refined.RefinedGoal == "" || refined.Decompose == "" {
-		t.Fatalf("refined goal missing fields: %#v", refined)
-	}
-
-	decompositionListResp := doJSONRequest(t, handler, http.MethodGet, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/decomposition", nil, adminToken)
-	if decompositionListResp.Code != http.StatusOK {
-		t.Fatalf("decomposition list status=%d body=%s", decompositionListResp.Code, decompositionListResp.Body.String())
-	}
-	var decompositionItems []store.GoalDecompositionItem
-	decodeResponse(t, decompositionListResp, &decompositionItems)
-	if len(decompositionItems) != 4 {
-		t.Fatalf("decomposition items len=%d want=4", len(decompositionItems))
-	}
-
-	createClarificationResp := doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/clarifications", map[string]any{
-		"question": "Should realtime include typing indicators?",
-	}, adminToken)
-	if createClarificationResp.Code != http.StatusCreated {
-		t.Fatalf("clarification create status=%d body=%s", createClarificationResp.Code, createClarificationResp.Body.String())
-	}
-	var clarification store.GoalClarification
-	decodeResponse(t, createClarificationResp, &clarification)
-
-	readyResp = doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/ready", map[string]any{"confirm_refinement": true}, adminToken)
-	if readyResp.Code != http.StatusBadRequest {
-		t.Fatalf("ready goal with unresolved clarification status=%d body=%s", readyResp.Code, readyResp.Body.String())
-	}
-
-	resolveClarificationResp := doJSONRequest(t, handler, http.MethodPut, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/clarifications/"+strconv.FormatInt(clarification.ID, 10), map[string]any{
-		"resolved": true,
-	}, adminToken)
-	if resolveClarificationResp.Code != http.StatusOK {
-		t.Fatalf("clarification resolve status=%d body=%s", resolveClarificationResp.Code, resolveClarificationResp.Body.String())
-	}
-
-	readyResp = doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/ready", map[string]any{"confirm_refinement": true}, adminToken)
-	if readyResp.Code != http.StatusOK {
-		t.Fatalf("ready goal status=%d body=%s", readyResp.Code, readyResp.Body.String())
-	}
-	var ready store.Goal
-	decodeResponse(t, readyResp, &ready)
-	if ready.Status != "ready" {
-		t.Fatalf("ready status=%q want=ready", ready.Status)
-	}
-
-	goalInboxResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/goal-inbox?status=ready&sort=updated_desc", nil, adminToken)
-	if goalInboxResp.Code != http.StatusOK {
-		t.Fatalf("goal inbox status=%d body=%s", goalInboxResp.Code, goalInboxResp.Body.String())
-	}
-	var inbox []store.GoalInboxItem
-	decodeResponse(t, goalInboxResp, &inbox)
-	if len(inbox) != 1 || inbox[0].GoalID != goal.ID {
-		t.Fatalf("goal inbox payload=%#v want goal %d", inbox, goal.ID)
-	}
-
-	chatCreateResp := doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/chat/messages", map[string]any{
-		"author": "user",
-		"text":   "please tighten the scope",
-	}, adminToken)
-	if chatCreateResp.Code != http.StatusCreated {
-		t.Fatalf("chat create status=%d body=%s", chatCreateResp.Code, chatCreateResp.Body.String())
-	}
-	chatListResp := doJSONRequest(t, handler, http.MethodGet, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/chat/messages", nil, adminToken)
-	if chatListResp.Code != http.StatusOK {
-		t.Fatalf("chat list status=%d body=%s", chatListResp.Code, chatListResp.Body.String())
-	}
-	var chatMessages []store.GoalChatMessage
-	decodeResponse(t, chatListResp, &chatMessages)
-	if len(chatMessages) != 1 {
-		t.Fatalf("chat messages len=%d want=1", len(chatMessages))
-	}
-
-	storyResp := doJSONRequest(t, handler, http.MethodPost, "/api/stories", map[string]any{
-		"project_id":  1,
-		"title":       "Goal story",
-		"description": "linked to goal",
-	}, adminToken)
-	if storyResp.Code != http.StatusCreated {
-		t.Fatalf("story create status=%d body=%s", storyResp.Code, storyResp.Body.String())
-	}
-	var story store.Story
-	decodeResponse(t, storyResp, &story)
-
-	linkResp := doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/stories", map[string]any{
-		"story_id": story.ID,
-	}, adminToken)
-	if linkResp.Code != http.StatusCreated {
-		t.Fatalf("goal/story link status=%d body=%s", linkResp.Code, linkResp.Body.String())
-	}
-
-	listStoriesResp := doJSONRequest(t, handler, http.MethodGet, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/stories", nil, adminToken)
-	if listStoriesResp.Code != http.StatusOK {
-		t.Fatalf("list goal stories status=%d body=%s", listStoriesResp.Code, listStoriesResp.Body.String())
-	}
-	var linkedStories []store.Story
-	decodeResponse(t, listStoriesResp, &linkedStories)
-	if len(linkedStories) != 1 || linkedStories[0].ID != story.ID {
-		t.Fatalf("linked stories=%#v, want story %d", linkedStories, story.ID)
-	}
-}
-
-func TestProjectAliasGoalEndpoints(t *testing.T) {
-	t.Parallel()
-	handler, db := testHandler(t)
-	defer db.Close()
-	adminToken := loginAdmin(t, handler)
-
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/private/goals", map[string]any{
-		"title":       "Private roadmap",
-		"description": "Only visible in private workspace",
-		"notes":       "registration-driven private project",
-	}, adminToken)
-	if createResp.Code != http.StatusCreated {
-		t.Fatalf("create private goal status=%d body=%s", createResp.Code, createResp.Body.String())
-	}
-	var created store.Goal
-	decodeResponse(t, createResp, &created)
-	if created.ProjectID == 0 {
-		t.Fatalf("created private goal project_id=%d", created.ProjectID)
-	}
-
-	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/private/goals", nil, adminToken)
-	if listResp.Code != http.StatusOK {
-		t.Fatalf("list private goals status=%d body=%s", listResp.Code, listResp.Body.String())
-	}
-	var goals []store.Goal
-	decodeResponse(t, listResp, &goals)
-	if len(goals) != 1 || goals[0].ID != created.ID {
-		t.Fatalf("private goals=%#v, want created goal %d", goals, created.ID)
 	}
 }
 

@@ -1225,7 +1225,7 @@ func printRoleTable(roles []store.Role) {
 	}
 	titleW := remaining / 4
 	motW := (remaining - titleW) / 2
-	goalW := remaining - titleW - motW
+	acW := remaining - titleW - motW
 
 	truncRune := func(s string, n int) string {
 		r := []rune(strings.ReplaceAll(strings.ReplaceAll(s, "\n", " "), "\r", ""))
@@ -1244,7 +1244,7 @@ func printRoleTable(roles []store.Role) {
 			role.ID,
 			truncRune(role.Title, titleW),
 			truncRune(role.Description, motW),
-			truncRune(role.AcceptanceCriteria, goalW),
+			truncRune(role.AcceptanceCriteria, acW),
 		))
 	}
 	printBoxTable("ID\tTITLE\tDESCRIPTION\tAC", rows)

@@ -49,8 +49,8 @@ func TestBuildExecutionPacketMergesLayersByPrecedence(t *testing.T) {
 		WorkflowID: &workflow.ID,
 		Type:       "task",
 		Title:      "Implement packet",
-		DORMap:     GuidanceMap{"develop": "goal-dor"},
-		ACMap:      GuidanceMap{"develop": "goal-ac"},
+		DORMap:     GuidanceMap{"develop": "ticket-dor"},
+		ACMap:      GuidanceMap{"develop": "ticket-ac"},
 		CreatedBy:  "",
 	})
 	if err != nil {
@@ -61,19 +61,19 @@ func TestBuildExecutionPacketMergesLayersByPrecedence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildExecutionPacket() error = %v", err)
 	}
-	if packet.Layers.Project == nil || packet.Layers.Phase == nil || packet.Layers.Role == nil || packet.Layers.Goal == nil {
+	if packet.Layers.Project == nil || packet.Layers.Phase == nil || packet.Layers.Role == nil || packet.Layers.Ticket == nil {
 		t.Fatalf("expected all layers present, got %#v", packet.Layers)
 	}
 	if packet.RoleTitle != "Engineer" {
 		t.Fatalf("packet.RoleTitle = %q, want Engineer", packet.RoleTitle)
 	}
-	if packet.Effective.DOR != "goal-dor" {
-		t.Fatalf("effective DOR = %q, want goal-dor", packet.Effective.DOR)
+	if packet.Effective.DOR != "ticket-dor" {
+		t.Fatalf("effective DOR = %q, want ticket-dor", packet.Effective.DOR)
 	}
 	if packet.Effective.DOD != "role-dod" {
 		t.Fatalf("effective DOD = %q, want role-dod", packet.Effective.DOD)
 	}
-	if packet.Effective.AC != "goal-ac" {
-		t.Fatalf("effective AC = %q, want goal-ac", packet.Effective.AC)
+	if packet.Effective.AC != "ticket-ac" {
+		t.Fatalf("effective AC = %q, want ticket-ac", packet.Effective.AC)
 	}
 }

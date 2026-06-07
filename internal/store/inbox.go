@@ -14,7 +14,6 @@ const (
 	InboxStatusOpen            = "open"
 	InboxStatusResolved        = "resolved"
 
-	InboxDecisionClarifyGoal        = "clarify_goal"
 	InboxDecisionStartAgain         = "start_again"
 	InboxDecisionRefineRequirements = "refine_requirements"
 )
@@ -36,7 +35,6 @@ type InboxEntry struct {
 
 func defaultFailureEscalationRecommendations() []string {
 	return []string{
-		InboxDecisionClarifyGoal,
 		InboxDecisionStartAgain,
 		InboxDecisionRefineRequirements,
 	}
@@ -163,7 +161,7 @@ func EnsureFailureEscalationInboxEntry(ctx context.Context, db *sql.DB, ticket T
 func DecideInboxEntry(ctx context.Context, db *sql.DB, inboxID int64, decision, message, decidedBy string) (InboxEntry, error) {
 	decision = strings.TrimSpace(strings.ToLower(decision))
 	switch decision {
-	case InboxDecisionClarifyGoal, InboxDecisionStartAgain, InboxDecisionRefineRequirements:
+	case InboxDecisionStartAgain, InboxDecisionRefineRequirements:
 	default:
 		return InboxEntry{}, fmt.Errorf("invalid decision %q", decision)
 	}
