@@ -198,12 +198,18 @@ func runAgent(args []string) error {
 			ID:       agentIDVal,
 			Password: agentPassword,
 		}
-		fmt.Printf("[agent] REGISTER request: ID=%s Password=%s\n", registerRequest.ID, strings.Repeat("*", len(registerRequest.Password)))
+		agentVerbose := *verbose
+		alog := func(format string, args ...any) {
+			if agentVerbose {
+				fmt.Printf("[agent] "+format+"\n", args...)
+			}
+		}
+		alog("POST /api/agents/register  id=%s", registerRequest.ID)
 		agent, err := svc.RegisterAgent(context.Background(), registerRequest)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("[agent] REGISTER response: agent_id=%s username=%s role=%s status=%s enabled=%v\n", agent.ID, agent.Username, agent.AgentRole, agent.Status, agent.Enabled)
+		alog("  → 200 OK  username=%s role=%s status=%s enabled=%v", agent.Username, agent.AgentRole, agent.Status, agent.Enabled)
 		if !outputJSON {
 			fmt.Printf("agent %s (%s) registered\n", agentIDVal, agent.AgentRole)
 		}
@@ -212,13 +218,10 @@ func runAgent(args []string) error {
 		if modelCommand == "" {
 			modelCommand = "claude"
 		}
-		agentVerbose := *verbose
 		idleDelay := time.Duration(*pollSeconds) * time.Second
 		configUpdatedAt := "" // track last received config timestamp
 		for {
-			if agentVerbose {
-				fmt.Printf("[agent] requesting work (project=%d)\n", *projectID)
-			}
+			alog("POST /api/agents/request  project=%d", *projectID)
 			response, err := svc.RequestAgentWork(context.Background(), libticket.AgentRequest{
 				ID:              agentIDVal,
 				Password:        agentPassword,
@@ -228,28 +231,23 @@ func runAgent(args []string) error {
 			if err != nil {
 				return err
 			}
+			alog("  → 200 OK  status=%s", response.Status)
 			// Process config updates from server
 			if len(response.Config) > 0 {
-				if agentVerbose {
-					fmt.Printf("[agent] received config update\n")
-				}
+				alog("  config update received")
 				configUpdatedAt = response.ConfigUpdatedAt
 				// Apply config values (command-line flags take precedence)
 				if *llmCommand == "" || *llmCommand == envValue("TICKET_AGENT_LLM") {
 					if llmVal, ok := response.Config["llm"]; ok && llmVal != "" {
 						modelCommand = llmVal
-						if agentVerbose {
-							fmt.Printf("[agent] config: llm=%s\n", modelCommand)
-						}
+						alog("  config: llm=%s", modelCommand)
 					}
 				}
 				if *projectID == 0 {
 					if projVal, ok := response.Config["project_id"]; ok && projVal != "" {
 						if parsed, parseErr := strconv.ParseInt(projVal, 10, 64); parseErr == nil {
 							*projectID = parsed
-							if agentVerbose {
-								fmt.Printf("[agent] config: project_id=%d\n", *projectID)
-							}
+							alog("  config: project_id=%d", *projectID)
 						}
 					}
 				}
@@ -258,9 +256,7 @@ func runAgent(args []string) error {
 						if parsed, parseErr := strconv.Atoi(pollVal); parseErr == nil && parsed >= 1 {
 							*pollSeconds = parsed
 							idleDelay = time.Duration(*pollSeconds) * time.Second
-							if agentVerbose {
-								fmt.Printf("[agent] config: poll_seconds=%d\n", *pollSeconds)
-							}
+							alog("  config: poll_seconds=%d", *pollSeconds)
 						}
 					}
 				}
@@ -273,24 +269,21 @@ func runAgent(args []string) error {
 					}
 				}
 			}
-			if agentVerbose {
-				fmt.Printf("[agent] response status=%s", response.Status)
-				if response.Ticket != nil {
-					fmt.Printf(" ticket=%s type=%s title=%q", response.Ticket.ID, response.Ticket.Type, response.Ticket.Title)
+			if response.Ticket != nil {
+				alog("  ticket=%s type=%s title=%q", response.Ticket.ID, response.Ticket.Type, response.Ticket.Title)
+			}
+			if len(response.Reasons) > 0 {
+				for _, r := range response.Reasons {
+					alog("  reason: %s", r)
 				}
-				fmt.Println()
 			}
 			if (response.Status != "NEW" && response.Status != "CURRENT") || response.Ticket == nil {
-				if agentVerbose {
-					fmt.Printf("[agent] no work, sleeping %s\n", idleDelay)
-				}
+				alog("  no work available — sleeping %s", idleDelay)
 				time.Sleep(idleDelay)
 				continue
 			}
 			ticket := response.Ticket
-			if agentVerbose {
-				fmt.Printf("[agent] processing %s %q (role=%s)\n", ticketLabel(*ticket), ticket.Title, agentRole)
-			}
+			alog("processing %s %q (role=%s)", ticketLabel(*ticket), ticket.Title, agentRole)
 
 			var prompt string
 			if agentRole == "refiner" {
@@ -307,12 +300,11 @@ func runAgent(args []string) error {
 				for {
 					select {
 					case <-ticker.C:
+						alog("POST /api/agents/heartbeat  status=working")
 						if heartbeatErr := svc.HeartbeatAgent(context.Background(), agentIDVal, agentPassword, "working"); heartbeatErr != nil {
-							if agentVerbose {
-								fmt.Printf("[agent] heartbeat error: %v\n", heartbeatErr)
-							}
-						} else if agentVerbose {
-							fmt.Printf("[agent] heartbeat sent (working)\n")
+							alog("  heartbeat error: %v", heartbeatErr)
+						} else {
+							alog("  → 200 OK")
 						}
 					case <-heartbeatStop:
 						return
@@ -326,9 +318,7 @@ func runAgent(args []string) error {
 				fmt.Printf("failed %s: %v\n", ticketLabel(*ticket), err)
 				return fmt.Errorf("agent llm processing failed for ticket %s: %w", ticketLabel(*ticket), err)
 			}
-			if agentVerbose {
-				fmt.Printf("[agent] submitting result for %s (%d bytes)\n", ticketLabel(*ticket), len(result))
-			}
+			alog("submitting result for %s (%d bytes)", ticketLabel(*ticket), len(result))
 
 			if agentRole == "refiner" {
 				// Post refinement feedback as a comment, then signal ready.

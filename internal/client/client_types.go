@@ -301,6 +301,7 @@ type AgentWorkResponse struct {
 	Role            *store.Role               `json:"role,omitempty"`
 	Config          map[string]string         `json:"config,omitempty"`
 	ConfigUpdatedAt string                    `json:"config_updated_at,omitempty"`
+	Reasons         []string                  `json:"reasons,omitempty"`
 }
 
 type AgentCreateRequest struct {

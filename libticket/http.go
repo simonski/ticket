@@ -195,7 +195,17 @@ func (s *HTTPService) RequestAgentWork(ctx context.Context, request AgentRequest
 	if err != nil {
 		return AgentWorkResponse{}, err
 	}
-	return AgentWorkResponse(resp), nil
+	return AgentWorkResponse{
+		Status:          resp.Status,
+		Project:         resp.Project,
+		Ticket:          resp.Ticket,
+		Parents:         resp.Parents,
+		Workflow:        resp.Workflow,
+		Role:            resp.Role,
+		Config:          resp.Config,
+		ConfigUpdatedAt: resp.ConfigUpdatedAt,
+		Reasons:         resp.Reasons,
+	}, nil
 }
 
 func (s *HTTPService) AgentUpdateTicket(ctx context.Context, id string, request AgentTicketUpdateRequest) (store.Ticket, error) {

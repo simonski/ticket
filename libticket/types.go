@@ -267,6 +267,7 @@ type AgentWorkResponse struct {
 	Parents         []store.Ticket            `json:"parents"`
 	Workflow        *store.WorkflowWithStages `json:"workflow,omitempty"`
 	Role            *store.Role               `json:"role,omitempty"`
-	Config          map[string]string         `json:"config,omitempty"`            // agent config (if changed or ticket assigned)
-	ConfigUpdatedAt string                    `json:"config_updated_at,omitempty"` // timestamp of config state
+	Config          map[string]string         `json:"config,omitempty"`
+	ConfigUpdatedAt string                    `json:"config_updated_at,omitempty"`
+	Reasons         []string                  `json:"reasons,omitempty"`
 }

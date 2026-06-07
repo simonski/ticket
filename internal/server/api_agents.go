@@ -248,10 +248,11 @@ func (r *router) registerAgentHandlers() {
 				return
 			}
 			vlog("RequestTicket result: status=%s ticket_id=%s", status, ticket.ID)
+			var noWorkReasons []string
 			if status == "NO-WORK" {
-				// Explain why no work was found.
 				vlog("explaining NO-WORK decision for project=%d:", projectID)
 				if reasons, explainErr := store.ExplainNoWork(r.Context(), db, projectID, agent.Username); explainErr == nil {
+					noWorkReasons = reasons
 					for _, reason := range reasons {
 						vlog("  %s", reason)
 					}
@@ -262,7 +263,8 @@ func (r *router) registerAgentHandlers() {
 			case "NO-WORK", "REJECTED":
 				agentStatus = "NONE"
 				if status == "REJECTED" {
-					vlog("ticket rejected: not claimable (wrong stage, already assigned, or has children)")
+					noWorkReasons = []string{"ticket not claimable: wrong stage, already assigned, or has children"}
+					vlog("ticket rejected: %s", noWorkReasons[0])
 				}
 			case "ASSIGNED", "AVAILABLE":
 				if hadCurrent && currentAssigned.ID == ticket.ID {
@@ -310,6 +312,7 @@ func (r *router) registerAgentHandlers() {
 				"role":              nil,
 				"config":            configMap,
 				"config_updated_at": configUpdatedAt,
+				"reasons":           noWorkReasons,
 			}
 			if agentStatus == "NEW" || agentStatus == "CURRENT" {
 				response["ticket"] = ticket
