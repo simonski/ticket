@@ -1096,6 +1096,11 @@ select {
 
 .table-wrap { overflow-x: auto; }
 
+.chip-state-active  { background: #d1fae5; color: #065f46; }
+.chip-state-idle    { background: #f3f4f6; color: #374151; }
+.chip-state-success { background: #dbeafe; color: #1e40af; }
+.chip-state-failure { background: #fee2e2; color: #991b1b; }
+
 .ticket-plan-view {
     display: flex;
     gap: 1rem;
@@ -1196,6 +1201,15 @@ select {
     font-size: 0.75rem;
     min-width: 4rem;
     flex-shrink: 0;
+}
+
+.plan-ticket-locked {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.plan-sprint-group[data-sprint-closed] > summary {
+    opacity: 0.7;
 }
 
 .plan-empty {

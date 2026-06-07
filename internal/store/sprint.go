@@ -7,7 +7,11 @@ import (
 	"time"
 )
 
-var ErrSprintNotFound = errors.New("sprint not found")
+var (
+	ErrSprintNotFound   = errors.New("sprint not found")
+	ErrSprintClosed     = errors.New("sprint is closed — tickets cannot be moved in or out")
+	ErrSprintNotReady   = errors.New("sprint cannot be made active: some tickets are not yet ready for development (still in discovery stage)")
+)
 
 type Sprint struct {
 	ID        int       `json:"id"`
@@ -71,6 +75,18 @@ func CreateSprint(ctx context.Context, db *sql.DB, projectID int, title string) 
 }
 
 func UpdateSprint(ctx context.Context, db *sql.DB, id int, title, stage string) (Sprint, error) {
+	// Guard: cannot set active if any tickets are still in discovery stage.
+	if stage == "active" {
+		var notReadyCount int
+		if err := db.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM tickets WHERE sprint_id = ? AND stage = 'discovery'
+		`, id).Scan(&notReadyCount); err != nil {
+			return Sprint{}, err
+		}
+		if notReadyCount > 0 {
+			return Sprint{}, ErrSprintNotReady
+		}
+	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE sprints SET title = ?, stage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
 	`, title, stage, id)
@@ -107,6 +123,27 @@ func DeleteSprint(ctx context.Context, db *sql.DB, id int) error {
 }
 
 func SetTicketSprint(ctx context.Context, db *sql.DB, ticketID string, sprintID *int) error {
+	// Guard: if the ticket is currently in a closed sprint, block the move.
+	var currentSprintID sql.NullInt64
+	if err := db.QueryRowContext(ctx, `SELECT sprint_id FROM tickets WHERE ticket_id = ?`, ticketID).Scan(&currentSprintID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("ticket not found")
+		}
+		return err
+	}
+	if currentSprintID.Valid {
+		var currentStage string
+		if err := db.QueryRowContext(ctx, `SELECT stage FROM sprints WHERE id = ?`, currentSprintID.Int64).Scan(&currentStage); err == nil && currentStage == "closed" {
+			return ErrSprintClosed
+		}
+	}
+	// Guard: if moving into a sprint, that sprint must not be closed.
+	if sprintID != nil {
+		var targetStage string
+		if err := db.QueryRowContext(ctx, `SELECT stage FROM sprints WHERE id = ?`, *sprintID).Scan(&targetStage); err == nil && targetStage == "closed" {
+			return ErrSprintClosed
+		}
+	}
 	var err error
 	if sprintID == nil {
 		_, err = db.ExecContext(ctx, `UPDATE tickets SET sprint_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?`, ticketID)

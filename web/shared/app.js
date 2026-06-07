@@ -3536,15 +3536,18 @@
             const sprintsHtml = sprints.map((sprint) => {
                 const tickets = sprintTicketsMap[sprint.id] || [];
                 const label = "Sprint " + sprint.number + (sprint.title ? ": " + sprint.title : "");
+                const isClosed = sprint.stage === "closed";
+                const draggable = isClosed ? "false" : "true";
+                const closedAttr = isClosed ? " data-sprint-closed=\"true\"" : "";
                 const rowsHtml = tickets.map((t) =>
-                    "<div class=\"plan-ticket-row\" draggable=\"true\" data-ticket-id=\"" + escapeHTML(String(t.id)) + "\" data-sprint-id=\"" + escapeHTML(String(sprint.id)) + "\">" +
+                    "<div class=\"plan-ticket-row" + (isClosed ? " plan-ticket-locked" : "") + "\" draggable=\"" + draggable + "\" data-ticket-id=\"" + escapeHTML(String(t.id)) + "\" data-sprint-id=\"" + escapeHTML(String(sprint.id)) + "\">" +
                     "<span class=\"plan-ticket-key\">" + escapeHTML(t.key || String(t.id)) + "</span>" +
                     "<span>" + escapeHTML(t.title || "(untitled)") + "</span>" +
                     "</div>"
                 ).join("");
-                return "<details class=\"plan-sprint-group\" data-sprint-id=\"" + escapeHTML(String(sprint.id)) + "\" open>" +
+                return "<details class=\"plan-sprint-group\" data-sprint-id=\"" + escapeHTML(String(sprint.id)) + "\"" + closedAttr + " open>" +
                     "<summary><strong>" + escapeHTML(label) + "</strong> <span class=\"chip\">" + escapeHTML(sprint.stage) + "</span> <span class=\"chip\">" + tickets.length + "</span></summary>" +
-                    "<div class=\"plan-drop-zone\">" +
+                    "<div class=\"plan-drop-zone\"" + closedAttr + ">" +
                     (rowsHtml || "<div class=\"plan-empty\">No tickets</div>") +
                     "</div>" +
                     "</details>";
@@ -3626,13 +3629,15 @@
             if (!tickets.length) {
                 return "<div class=\"empty\">No tickets.</div>";
             }
-            return "<table class=\"ticket-list-table\"><thead><tr><th>ID</th><th>Title</th><th>Stage</th><th>Priority</th><th>Type</th></tr></thead><tbody>" +
+            return "<table class=\"ticket-list-table\"><thead><tr><th>ID</th><th>Title</th><th>Stage</th><th>State</th><th>Priority</th><th>Type</th><th>Assignee</th></tr></thead><tbody>" +
                 tickets.map((t) => "<tr class=\"ticket-list-row\" data-ticket-id=\"" + escapeHTML(t.id) + "\">" +
                     "<td>" + escapeHTML(t.key || t.id || "") + "</td>" +
                     "<td>" + escapeHTML(t.title || "(untitled)") + "</td>" +
                     "<td>" + escapeHTML(t.stage || "") + "</td>" +
+                    "<td><span class=\"chip chip-state-" + escapeHTML(t.state || "idle") + "\">" + escapeHTML(t.state || "idle") + "</span></td>" +
                     "<td>" + escapeHTML(String(t.priority || "")) + "</td>" +
                     "<td>" + escapeHTML(t.type || "") + "</td>" +
+                    "<td>" + escapeHTML(t.assignee || "—") + "</td>" +
                     "</tr>").join("") +
                 "</tbody></table>";
         }
@@ -6613,7 +6618,7 @@
             });
             els.ticketPlanView.addEventListener("dragover", (event) => {
                 const target = event.target.closest("[data-sprint-id]");
-                if (!target) {
+                if (!target || target.dataset.sprintClosed) {
                     return;
                 }
                 event.preventDefault();
@@ -6633,7 +6638,7 @@
                     return;
                 }
                 const target = event.target.closest("[data-sprint-id]");
-                if (!target) {
+                if (!target || target.dataset.sprintClosed) {
                     return;
                 }
                 const sprintId = target.dataset.sprintId;
@@ -6731,9 +6736,14 @@
                 return;
             }
             els.ticketHistory.innerHTML = state.ticketHistory.map((item) => {
-                return "<div class=\"history-item\"><strong>" + escapeHTML(item.action || item.type || "event") + "</strong><div class=\"meta\">" +
-                    escapeHTML(item.created_at || item.timestamp || "") + "</div><div class=\"meta\">" +
-                    escapeHTML(item.comment || item.message || "") + "</div></div>";
+                const rawType = item.event_type || item.action || item.type || "event";
+                const label = humanizeHistoryEventType(rawType);
+                const payload = parseHistoryPayload(item.payload);
+                const detail = formatHistoryPayloadSummary(payload);
+                return "<div class=\"history-item\"><strong>" + escapeHTML(label) + "</strong>" +
+                    (detail ? "<div class=\"meta detail\">" + escapeHTML(detail) + "</div>" : "") +
+                    "<div class=\"meta\">" + escapeHTML(item.created_by || "") + (item.created_by && item.created_at ? " · " : "") +
+                    escapeHTML(item.created_at || item.timestamp || "") + "</div></div>";
             }).join("");
         }
 

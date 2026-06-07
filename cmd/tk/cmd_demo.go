@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/simonski/ticket/internal/store"
 )
@@ -267,7 +268,7 @@ func runDemo(args []string) error {
 	numUsers := clamp(*n/50, 5, 100)
 	numTeams := clamp(*n/200, 2, 30)
 	numProjects := clamp(*n/200, 2, 20)
-	numSprintsPerProj := clamp(numTickets/(numProjects*30), 3, 60)
+	numSprintsPerProj := 6 // always: sprints 1-4 closed, 5 active (current), 6 design
 
 	fmt.Printf("Creating demo database at %s (~%d items)...\n", *dbPath, *n)
 
@@ -490,11 +491,27 @@ func runDemo(args []string) error {
 
 	fmt.Printf("  ✓ Created %d projects\n", len(projects))
 
+	// Sprint timeline: 6 sprints, 2 weeks each, today = mid-sprint 5.
+	// Sprint 5 (index 4) started 7 days ago; each prior sprint is 14 days earlier.
+	now := time.Now().UTC()
+	sprintLen := 14 * 24 * time.Hour
+	activeSprintIdx := numSprintsPerProj - 2 // index 4 for 6 sprints
+	midSprintOffset := sprintLen / 2          // 7 days
+
+	sqlTS := func(t time.Time) string { return t.Format("2006-01-02 15:04:05") }
+
+	// sprintStart(si) returns the start of sprint at 0-based index si.
+	sprintStart := func(si int) time.Time {
+		return now.Add(-midSprintOffset - time.Duration(activeSprintIdx-si)*sprintLen)
+	}
+	sprintEnd := func(si int) time.Time { return sprintStart(si).Add(sprintLen) }
+
 	// Create sprints per project
 	type projectSprints struct {
-		project store.Project
-		sprints []store.Sprint
-		pool    string
+		project    store.Project
+		sprints    []store.Sprint
+		pool       string
+		sprintIdxs []int // 0-based sprint index for each sprint
 	}
 	projectData := make([]projectSprints, len(projects))
 	totalSprints := 0
@@ -505,17 +522,17 @@ func runDemo(args []string) error {
 			pool = projectPool[pi].pool
 		}
 		sprints := make([]store.Sprint, 0, numSprintsPerProj)
+		sprintIdxs := make([]int, 0, numSprintsPerProj)
 		for si := 0; si < numSprintsPerProj; si++ {
 			sp, err := store.CreateSprint(ctx, db, int(proj.ID), "")
 			if err != nil {
 				return fmt.Errorf("creating sprint %d for project %s: %w", si+1, proj.Title, err)
 			}
-			// Determine stage
 			var stage string
 			switch {
-			case si < numSprintsPerProj-2:
+			case si < activeSprintIdx:
 				stage = "closed"
-			case si == numSprintsPerProj-2:
+			case si == activeSprintIdx:
 				stage = "active"
 			default:
 				stage = "design"
@@ -524,9 +541,15 @@ func runDemo(args []string) error {
 			if err != nil {
 				return fmt.Errorf("updating sprint stage: %w", err)
 			}
+			// Backdate sprint created_at to sprint start
+			ts := sqlTS(sprintStart(si))
+			if _, err := db.ExecContext(ctx, `UPDATE sprints SET created_at = ?, updated_at = ? WHERE id = ?`, ts, ts, sp.ID); err != nil {
+				return fmt.Errorf("backdating sprint: %w", err)
+			}
 			sprints = append(sprints, sp)
+			sprintIdxs = append(sprintIdxs, si)
 		}
-		projectData[pi] = projectSprints{project: proj, sprints: sprints, pool: pool}
+		projectData[pi] = projectSprints{project: proj, sprints: sprints, pool: pool, sprintIdxs: sprintIdxs}
 		totalSprints += len(sprints)
 	}
 
@@ -539,8 +562,19 @@ func runDemo(args []string) error {
 	ticketsPerProject := numTickets / len(projects)
 	extraTickets := numTickets % len(projects)
 
+	// Track sprint assignment for backdating: map ticketID → sprint 0-based index (-1 = backlog)
+	type ticketMeta struct {
+		id        string
+		sprintIdx int // -1 = backlog
+		stage     string
+	}
+	allTicketMeta := make([]ticketMeta, 0, numTickets)
+
 	ticketIndex := 0
-	sprintAssignCutoff := int(float64(numTickets) * 0.75)
+
+	// sprint5AssignCount tracks how many tickets have been routed to sprint 5 so we can
+	// send every other one to the backlog instead.
+	sprint5AssignCount := 0
 
 	for pi, pd := range projectData {
 		count := ticketsPerProject
@@ -558,28 +592,28 @@ func runDemo(args []string) error {
 		case "infra":
 			titlePool = infraTitles
 		default:
-			// mixed: combine all
 			titlePool = append(titlePool, frontendTitles...)
 			titlePool = append(titlePool, backendTitles...)
 			titlePool = append(titlePool, bugTitles...)
 		}
 
-		sprintIdx := 0
+		// Each project round-robins through all its sprints.
+		sprintCursor := 0
 
 		for ti := 0; ti < count; ti++ {
 			localIdx := ticketIndex
 
-			// Pick type by distribution (ticketIndex % 20)
+			// Pick type
 			mod20 := localIdx % 20
 			var ticketType string
 			switch {
-			case mod20 < 10: // 50% task
+			case mod20 < 10:
 				ticketType = "task"
-			case mod20 < 15: // 25% bug
+			case mod20 < 15:
 				ticketType = "bug"
-			case mod20 < 18: // 15% chore
+			case mod20 < 18:
 				ticketType = "chore"
-			default: // 10% epic
+			default:
 				ticketType = "epic"
 			}
 
@@ -594,9 +628,8 @@ func runDemo(args []string) error {
 				title = titlePool[localIdx%len(titlePool)]
 			}
 
-			// Pick description
+			// Build description
 			descTmpl := descTemplates[localIdx%len(descTemplates)]
-			// fill in %s with title words and project name
 			words := strings.Fields(title)
 			word1 := "feature"
 			if len(words) > 0 {
@@ -604,7 +637,6 @@ func runDemo(args []string) error {
 			}
 			word2 := pd.project.Title
 			var description string
-			// Count format verbs in template
 			verbCount := strings.Count(descTmpl, "%s")
 			switch verbCount {
 			case 0:
@@ -615,30 +647,72 @@ func runDemo(args []string) error {
 				description = fmt.Sprintf(descTmpl, word1, word2)
 			}
 
-			// Pick assignee
 			assignee := users[localIdx%len(users)].Username
 			author := users[(localIdx+1)%len(users)].Username
-
-			// Pick priority (1-5)
 			priority := (localIdx%5) + 1
 
-			// Determine stage and state
+			// Determine which sprint this ticket belongs to (round-robin across all sprints).
+			targetSprintLocalIdx := sprintCursor % len(pd.sprints)
+			targetSprintGlobalIdx := pd.sprintIdxs[targetSprintLocalIdx]
+			sprintCursor++
+
+			// Determine stage/state based on which sprint the ticket is in.
 			var stage, state string
-			switch localIdx % 20 {
-			case 0, 1, 2:
-				stage, state = "discovery", "idle"
-			case 3, 4, 5:
-				stage, state = "design", "idle"
-			case 6, 7, 8, 9:
-				stage, state = "develop", "idle"
-			case 10, 11, 12, 13:
-				stage, state = "develop", "active"
-			case 14, 15, 16:
-				stage, state = "review", "idle"
-			case 17:
-				stage, state = "review", "active"
-			default: // 18, 19
-				stage, state = "done", "success"
+			isBacklog := false
+			if targetSprintGlobalIdx == activeSprintIdx {
+				// Sprint 5 (active): send every other ticket to the backlog instead.
+				if sprint5AssignCount%2 == 1 {
+					isBacklog = true
+					stage, state = "design", "idle" // not yet started but designed
+				} else {
+					// In-sprint: tickets are past discovery (ready for dev)
+					switch localIdx % 10 {
+					case 0, 1:
+						stage, state = "design", "idle"
+					case 2, 3, 4:
+						stage, state = "develop", "idle"
+					case 5, 6, 7:
+						stage, state = "develop", "active"
+					case 8:
+						stage, state = "review", "idle"
+					default:
+						stage, state = "review", "active"
+					}
+				}
+				sprint5AssignCount++
+			} else if targetSprintGlobalIdx > activeSprintIdx {
+				// Future design sprint: tickets are in design stage with various states
+				stage = "design"
+				switch localIdx % 3 {
+				case 0:
+					state = "idle"
+				case 1:
+					state = "active"
+				default:
+					state = "idle"
+				}
+				// ~30% have no assignee yet
+				if localIdx%3 == 2 {
+					assignee = ""
+				}
+			} else {
+				// Past (closed) sprint: most tickets done, some in various stages
+				switch localIdx % 20 {
+				case 0, 1, 2:
+					stage, state = "discovery", "idle"
+				case 3, 4, 5:
+					stage, state = "design", "idle"
+				case 6, 7, 8, 9:
+					stage, state = "develop", "idle"
+				case 10, 11, 12, 13:
+					stage, state = "develop", "active"
+				case 14, 15, 16:
+					stage, state = "review", "idle"
+				case 17:
+					stage, state = "review", "active"
+				default: // 18, 19 — 10% done
+					stage, state = "done", "success"
+				}
 			}
 
 			t, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
@@ -656,7 +730,6 @@ func runDemo(args []string) error {
 				return fmt.Errorf("creating ticket %d: %w", localIdx, err)
 			}
 
-			// Update stage/state if not default
 			if stage != "discovery" || state != "idle" {
 				_, _ = store.UpdateTicket(ctx, db, t.ID, store.TicketUpdateParams{
 					Title:       t.Title,
@@ -669,18 +742,69 @@ func runDemo(args []string) error {
 				})
 			}
 
-			// Assign to sprint
-			if localIdx < sprintAssignCutoff && len(pd.sprints) > 0 {
-				spID := pd.sprints[sprintIdx%len(pd.sprints)].ID
-				_ = store.SetTicketSprint(ctx, db, t.ID, &spID)
-				sprintIdx++
+			if !isBacklog {
+				// Direct SQL to bypass the closed-sprint guard (valid for seeding only).
+				spID := pd.sprints[targetSprintLocalIdx].ID
+				if _, err := db.ExecContext(ctx, `UPDATE tickets SET sprint_id = ? WHERE ticket_id = ?`, spID, t.ID); err != nil {
+					return fmt.Errorf("assigning sprint to ticket %s: %w", t.ID, err)
+				}
 			}
 
-			ticketIndex++
+			allTicketMeta = append(allTicketMeta, ticketMeta{
+				id:        t.ID,
+				sprintIdx: func() int { if isBacklog { return -1 }; return targetSprintGlobalIdx }(),
+				stage:     stage,
+			})
 
+			ticketIndex++
 			if ticketIndex%1000 == 0 {
 				fmt.Printf(" [%d/%d]", ticketIndex, numTickets)
 			}
+		}
+	}
+	fmt.Println(" done")
+
+	// Backdate ticket timestamps based on their sprint assignment.
+	fmt.Printf("  Backdating %d tickets...", len(allTicketMeta))
+	for _, tm := range allTicketMeta {
+		var createdAt, updatedAt string
+		if tm.sprintIdx == -1 {
+			// Backlog: created in the last 3 days
+			offset := time.Duration(rand.Intn(3*24*60)) * time.Minute
+			createdAt = sqlTS(now.Add(-offset))
+			updatedAt = createdAt
+		} else {
+			si := tm.sprintIdx
+			start := sprintStart(si)
+			end := sprintEnd(si)
+			if si == activeSprintIdx {
+				end = now // cap active sprint end at now
+			}
+			dur := end.Sub(start)
+			if dur <= 0 {
+				dur = time.Hour
+			}
+			// Created randomly in the first half of the sprint
+			halfDur := dur / 2
+			createOffset := time.Duration(rand.Int63n(int64(halfDur)))
+			createdAt = sqlTS(start.Add(createOffset))
+			if tm.stage == "done" && si < activeSprintIdx {
+				// Completed in the second half of the sprint
+				doneOffset := halfDur + time.Duration(rand.Int63n(int64(halfDur)))
+				updatedAt = sqlTS(start.Add(doneOffset))
+			} else if si == activeSprintIdx {
+				// Updated at some point since sprint start
+				updateOffset := time.Duration(rand.Int63n(int64(end.Sub(start))))
+				updatedAt = sqlTS(start.Add(updateOffset))
+			} else {
+				// Past closed sprint, not done: updated mid-sprint
+				updateOffset := halfDur + time.Duration(rand.Int63n(int64(halfDur)/2+1))
+				updatedAt = sqlTS(start.Add(updateOffset))
+			}
+		}
+		if _, err := db.ExecContext(ctx, `UPDATE tickets SET created_at = ?, updated_at = ? WHERE ticket_id = ?`,
+			createdAt, updatedAt, tm.id); err != nil {
+			return fmt.Errorf("backdating ticket %s: %w", tm.id, err)
 		}
 	}
 	fmt.Println(" done")
