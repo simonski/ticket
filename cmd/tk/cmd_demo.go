@@ -298,6 +298,17 @@ func runDemo(args []string) error {
 
 	fmt.Println("  ✓ Initialized database")
 
+	// Remove private projects created by store.Init (admin's private workspace, bootstrap ticket project, etc.)
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("disabling fk for cleanup: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM projects WHERE visibility = 'private'`); err != nil {
+		return fmt.Errorf("removing private projects: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
+		return fmt.Errorf("re-enabling fk after cleanup: %w", err)
+	}
+
 	// Get admin user
 	adminUser, err := store.GetUserByUsername(ctx, db, "admin")
 	if err != nil {
@@ -362,6 +373,7 @@ func runDemo(args []string) error {
 				Role:                   "user",
 				Enabled:                true,
 				SkipPasswordValidation: true,
+				SkipProvisioning:       true,
 			})
 			if err != nil {
 				return fmt.Errorf("creating user %s: %w", p.username, err)
@@ -383,6 +395,7 @@ func runDemo(args []string) error {
 				Role:                   "user",
 				Enabled:                true,
 				SkipPasswordValidation: true,
+				SkipProvisioning:       true,
 			})
 			if err != nil {
 				return fmt.Errorf("creating user %s: %w", username, err)
