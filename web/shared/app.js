@@ -1434,26 +1434,26 @@
                 primaryNames = getStageOptions();
             }
 
-            // Safety net: any stage present in currently-visible tickets that is not already
-            // in the column list gets appended so no tickets can become invisible.
+            // Safety net: any stage present in currently-visible tickets gets a column,
+            // even if it was not in the primary list. Merge everything by workflow order
+            // so no ticket is invisible and the column sequence always matches the workflow.
             const visibleTickets = sel === "backlog" || !sel || sel === ""
                 ? state.tickets
                 : sprintFilterTickets(state.tickets);
             const presentStages = new Set(visibleTickets.map((t) => t.stage).filter(Boolean));
-            const primarySet = new Set(primaryNames);
-            const extraNames = [];
-            for (const stageName of presentStages) {
-                if (!primarySet.has(stageName)) {
-                    // Insert at position matching workflow order, or append.
-                    const ws = stageMap.get(stageName);
-                    const idx = ws ? allStages.indexOf(ws) : -1;
-                    extraNames.push({ name: stageName, order: idx >= 0 ? idx : 9999 });
-                }
-            }
-            extraNames.sort((a, b) => a.order - b.order);
 
-            const names = [...primaryNames, ...extraNames.map((e) => e.name)];
-            return names.map((name) => ({
+            // Build a unified ordered set: start from all workflow stages in order,
+            // keep those that are either in primaryNames or have visible tickets.
+            const primarySet = new Set(primaryNames);
+            const workflowOrderMap = new Map(allStages.map((s, i) => [s.name, i]));
+            const allNeeded = new Set([...primaryNames, ...presentStages]);
+            const orderedNames = [...allNeeded].sort((a, b) => {
+                const ia = workflowOrderMap.has(a) ? workflowOrderMap.get(a) : 9999;
+                const ib = workflowOrderMap.has(b) ? workflowOrderMap.get(b) : 9999;
+                return ia - ib;
+            });
+
+            return orderedNames.map((name) => ({
                 name,
                 workflowStageID: (stageMap.get(name) || {}).id || null,
             }));
