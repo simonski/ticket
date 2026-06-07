@@ -435,15 +435,16 @@ deploy: build-linux
 		echo "Usage: EXE_DEV_URL=user@host make deploy"; \
 		exit 1; \
 	fi
-	@echo "Copying compose.yaml, env.template, README.md, and tk binary to $(EXE_DEV_URL):~/"
-	@scp deploy/compose.yaml deploy/env.template deploy/README.md $(EXE_DEV_URL):~/
+	@echo "Copying deploy bundle and tk binary to $(EXE_DEV_URL):~/"
+	@scp deploy/compose.yaml deploy/env.template deploy/README.md deploy/Makefile $(EXE_DEV_URL):~/
 	@scp bin/tk-linux $(EXE_DEV_URL):~/tk
 	@echo ""
 	@echo "✓ Deployed to $(EXE_DEV_URL):~/"
 	@echo ""
 	@echo "Next steps on remote server:"
 	@echo "  ssh $(EXE_DEV_URL)"
-	@echo "  cp ~/env.template ~/.env"
-	@echo "  cat ~/README.md"
+	@echo "  make setup   # creates .env, pre-owns ./data"
+	@echo "  \$$EDITOR .env  # set TICKET_UID, TICKET_GID, TICKET_ADMIN_PASSWORD"
+	@echo "  make up"
 	@echo ""
 	@echo "This bundle uses ghcr.io/simonski/ticket:latest and a 30-second watchtower poll."
