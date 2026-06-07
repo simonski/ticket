@@ -85,6 +85,7 @@
             drag: null,
             liveSocket: null,
             liveRefreshTimer: null,
+            agentBarPollTimer: null,
             goalChatSocket: null,
             goalChatMessages: [],
             goalChatLoadedFor: null,
@@ -1106,6 +1107,7 @@
             storeAuth(auth);
             showAuthenticatedShell();
             connectLiveUpdates();
+            startAgentBarPoller();
         }
 
         function resetAuthFailure(message) {
@@ -2127,6 +2129,17 @@
                 state.liveRefreshTimer = null;
                 refreshAll().catch((error) => setNotice(error.message, true));
             }, 150);
+        }
+
+        function startAgentBarPoller() {
+            if (state.agentBarPollTimer) return;
+            state.agentBarPollTimer = setInterval(async () => {
+                if (!state.auth || !state.selectedProjectID) return;
+                try {
+                    await loadProjectAgents();
+                    renderProjectAgentBar();
+                } catch (_) { /* ignore */ }
+            }, 15000);
         }
 
         function connectLiveUpdates() {
@@ -7811,6 +7824,7 @@
                     try {
                         await refreshAll();
                         connectLiveUpdates();
+                        startAgentBarPoller();
                     } catch (error) {
                         disconnectLiveUpdates();
                         if (state.goalChatSocket) {

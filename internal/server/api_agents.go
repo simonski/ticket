@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/simonski/ticket/internal/store"
@@ -152,6 +153,14 @@ func (r *router) registerAgentHandlers() {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
+			// Notify connected clients so the agent bar updates in real time.
+			if cfg, cfgErr := store.GetAgentConfigMap(r.Context(), db, agent.ID); cfgErr == nil {
+				if projIDStr, ok := cfg[store.AgentConfigKeyProjectID]; ok && projIDStr != "" {
+					if projID, parseErr := strconv.ParseInt(projIDStr, 10, 64); parseErr == nil {
+						notify("agent_heartbeat", projID, "")
+					}
+				}
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 			return
 		}
@@ -220,13 +229,19 @@ func (r *router) registerAgentHandlers() {
 			} else {
 				vlog("agent has no current assignment")
 			}
-			ticket, status, err := store.RequestTicket(r.Context(), db, store.TicketRequestParams{
-				ProjectID: projectID,
-				TicketID:  payload.TicketID,
-				Username:  agent.Username,
-				UserID:    "",
-				DryRun:    payload.DryRun,
-			})
+			var ticket store.Ticket
+			var status string
+			if agent.AgentRole == "refiner" {
+				ticket, status, err = store.RequestRefineTicket(r.Context(), db, projectID, agent.Username, agent.ID)
+			} else {
+				ticket, status, err = store.RequestTicket(r.Context(), db, store.TicketRequestParams{
+					ProjectID: projectID,
+					TicketID:  payload.TicketID,
+					Username:  agent.Username,
+					UserID:    "",
+					DryRun:    payload.DryRun,
+				})
+			}
 			if err != nil {
 				vlog("RequestTicket error: %v", err)
 				writeStoreError(w, err)
@@ -308,84 +323,6 @@ func (r *router) registerAgentHandlers() {
 			writeJSON(w, http.StatusOK, response)
 			return
 		}
-		if parts[0] == "tickets" && len(parts) == 3 && parts[2] == "update" {
-			if r.Method != http.MethodPost {
-				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-				return
-			}
-			agentID, agentPass, ok := r.BasicAuth()
-			if !ok || agentID == "" || agentPass == "" {
-				writeError(w, http.StatusUnauthorized, "basic auth required")
-				return
-			}
-			ticketID := strings.TrimSpace(parts[1])
-			if ticketID == "" {
-				writeError(w, http.StatusBadRequest, "invalid ticket id")
-				return
-			}
-			var payload struct {
-				Result string `json:"result"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				writeError(w, http.StatusBadRequest, "invalid json body")
-				return
-			}
-			agent, err := store.AuthenticateAgent(r.Context(), db, agentID, agentPass)
-			if err != nil {
-				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
-					writeAuthError(w, err)
-					return
-				}
-				writeStoreError(w, err)
-				return
-			}
-			current, err := store.GetTicket(r.Context(), db, ticketID)
-			if err != nil {
-				if errors.Is(err, store.ErrTicketNotFound) {
-					writeError(w, http.StatusNotFound, "ticket not found")
-					return
-				}
-				writeStoreError(w, err)
-				return
-			}
-			updated, err := store.UpdateTicket(r.Context(), db, ticketID, store.TicketUpdateParams{
-				Title:              current.Title,
-				Description:        current.Description,
-				AcceptanceCriteria: current.AcceptanceCriteria,
-				GitRepository:      current.GitRepository,
-				GitBranch:          current.GitBranch,
-				ParentID:           current.ParentID,
-				Assignee:           agent.Username,
-				State:              store.StateSuccess,
-				Priority:           current.Priority,
-				Order:              current.Order,
-				EstimateEffort:     current.EstimateEffort,
-				EstimateComplete:   current.EstimateComplete,
-				UpdatedBy:          "",
-				ActorUsername:      agent.Username,
-				ActorRole:          "admin",
-			})
-			if err != nil {
-				writeStoreError(w, err)
-				return
-			}
-			if err := store.AddHistoryEvent(r.Context(), db, updated.ProjectID, updated.ID, "agent_completed", map[string]any{
-				"key":       updated.ID,
-				"agent":     agent.Username,
-				"result":    payload.Result,
-				"new_stage": updated.Stage,
-				"new_state": updated.State,
-			}, agent.ID); err != nil {
-				log.Printf("server: add agent completion history for ticket %s: %v", updated.ID, err)
-			}
-			if _, err := store.TouchAgent(r.Context(), db, agent.ID, "soliciting"); err != nil {
-				log.Printf("server: touch agent %s status=soliciting: %v", agent.ID, err)
-			}
-			notify("ticket_updated", updated.ProjectID, updated.ID)
-			writeJSON(w, http.StatusOK, updated)
-			return
-		}
-
 		if _, err := requireAdmin(db, r); err != nil {
 			writeAuthError(w, err)
 			return
@@ -493,4 +430,163 @@ func (r *router) registerAgentHandlers() {
 		}
 		writeError(w, http.StatusNotFound, "not found")
 	})
+
+	// /api/agents/tickets/{id}/{action} — agent ticket actions (update, recommend-ready).
+	// This handler takes priority over /api/agents/ for paths under /api/agents/tickets/.
+	mux.HandleFunc("/api/agents/tickets/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/agents/tickets/")
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) != 2 {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		ticketID := strings.TrimSpace(parts[0])
+		action := parts[1]
+		agentID, agentPass, ok := r.BasicAuth()
+		if !ok || agentID == "" || agentPass == "" {
+			writeError(w, http.StatusUnauthorized, "basic auth required")
+			return
+		}
+		agent, err := store.AuthenticateAgent(r.Context(), db, agentID, agentPass)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+
+		switch action {
+		case "recommend-ready":
+			updated, err := store.SetRecommendedReady(r.Context(), db, ticketID, true, agent.Username, agent.ID)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			recipientID := strings.TrimSpace(updated.CreatedBy)
+			if recipientID != "" {
+				_ = func() error {
+					_, nErr := store.CreateUserNotification(r.Context(), db, store.UserNotificationCreateParams{
+						UserID:  recipientID,
+						Kind:    store.UserNotificationKindRefinerRecommended,
+						Title:   fmt.Sprintf("Ready for development: %s", updated.ID),
+						Message: fmt.Sprintf("Refiner agent %s recommends %s — %s is ready for development.", agent.Username, updated.ID, updated.Title),
+						Payload: map[string]any{"ticket_id": updated.ID, "project_id": updated.ProjectID, "agent": agent.Username},
+					})
+					return nErr
+				}()
+			}
+			notify("ticket_updated", updated.ProjectID, updated.ID)
+			writeJSON(w, http.StatusOK, updated)
+
+		case "update":
+			var payload struct {
+				Result string `json:"result"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			current, err := store.GetTicket(r.Context(), db, ticketID)
+			if err != nil {
+				if errors.Is(err, store.ErrTicketNotFound) {
+					writeError(w, http.StatusNotFound, "ticket not found")
+					return
+				}
+				writeStoreError(w, err)
+				return
+			}
+			updated, err := store.UpdateTicket(r.Context(), db, ticketID, store.TicketUpdateParams{
+				Title:              current.Title,
+				Description:        current.Description,
+				AcceptanceCriteria: current.AcceptanceCriteria,
+				GitRepository:      current.GitRepository,
+				GitBranch:          current.GitBranch,
+				ParentID:           current.ParentID,
+				Assignee:           agent.Username,
+				State:              store.StateSuccess,
+				Priority:           current.Priority,
+				Order:              current.Order,
+				EstimateEffort:     current.EstimateEffort,
+				EstimateComplete:   current.EstimateComplete,
+				UpdatedBy:          "",
+				ActorUsername:      agent.Username,
+				ActorRole:          "admin",
+			})
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			prURL := extractPRURL(payload.Result)
+			if prURL != "" {
+				if t, prErr := store.SetTicketPrURL(r.Context(), db, updated.ID, prURL); prErr == nil {
+					updated = t
+				}
+			}
+			if err := store.AddHistoryEvent(r.Context(), db, updated.ProjectID, updated.ID, "agent_completed", map[string]any{
+				"key":       updated.ID,
+				"agent":     agent.Username,
+				"result":    payload.Result,
+				"new_stage": updated.Stage,
+				"new_state": updated.State,
+				"pr_url":    prURL,
+			}, agent.ID); err != nil {
+				log.Printf("server: add agent completion history for ticket %s: %v", updated.ID, err)
+			}
+			recipientID := strings.TrimSpace(current.CreatedBy)
+			if recipientID == "" {
+				recipientID = strings.TrimSpace(current.Author)
+			}
+			if recipientID != "" {
+				msg := fmt.Sprintf("Agent %s completed work on %s — %s", agent.Username, updated.ID, updated.Title)
+				if prURL != "" {
+					msg += ". PR: " + prURL
+				}
+				notif := store.UserNotificationCreateParams{
+					UserID:  recipientID,
+					Kind:    store.UserNotificationKindPRReady,
+					Title:   fmt.Sprintf("PR ready for review: %s", updated.ID),
+					Message: msg,
+					Payload: map[string]any{
+						"ticket_id":  updated.ID,
+						"project_id": updated.ProjectID,
+						"pr_url":     prURL,
+						"agent":      agent.Username,
+					},
+				}
+				if _, nErr := store.CreateUserNotification(r.Context(), db, notif); nErr != nil {
+					log.Printf("server: create pr-ready notification for ticket %s: %v", updated.ID, nErr)
+				}
+			}
+			if _, err := store.TouchAgent(r.Context(), db, agent.ID, "soliciting"); err != nil {
+				log.Printf("server: touch agent %s status=soliciting: %v", agent.ID, err)
+			}
+			notify("ticket_updated", updated.ProjectID, updated.ID)
+			writeJSON(w, http.StatusOK, updated)
+
+		default:
+			writeError(w, http.StatusNotFound, "not found")
+		}
+	})
+}
+
+// extractPRURL scans the agent result text for a PR URL.
+func extractPRURL(result string) string {
+	for _, line := range strings.Split(result, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "PR:") || strings.HasPrefix(line, "PR URL:") || strings.HasPrefix(line, "Pull Request:") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				url := strings.TrimSpace(parts[1])
+				if strings.HasPrefix(url, "http") {
+					return url
+				}
+			}
+		}
+		if strings.HasPrefix(line, "https://github.com/") && strings.Contains(line, "/pull/") {
+			return line
+		}
+	}
+	return ""
 }
