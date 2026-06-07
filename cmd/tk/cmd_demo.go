@@ -198,15 +198,17 @@ type persona struct {
 	displayName string
 }
 
+var demoDomains = []string{"blowpipe.xyz", "brzzt.com"}
+
 var personaPool = []persona{
-	{"sarah.chen", "sarah.chen@example.com", "Sarah Chen (Lead Engineer)"},
-	{"marcus.wright", "marcus.wright@example.com", "Marcus Wright (Backend)"},
-	{"priya.patel", "priya.patel@example.com", "Priya Patel (Frontend)"},
-	{"james.okoye", "james.okoye@example.com", "James Okoye (DevOps)"},
-	{"lisa.nakamura", "lisa.nakamura@example.com", "Lisa Nakamura (QA Lead)"},
-	{"tom.harrison", "tom.harrison@example.com", "Tom Harrison (Product)"},
-	{"elena.vasquez", "elena.vasquez@example.com", "Elena Vasquez (Full Stack)"},
-	{"ryan.cooper", "ryan.cooper@example.com", "Ryan Cooper (Junior Dev)"},
+	{"schan", "sarah.chen@blowpipe.xyz", "Sarah Chen"},
+	{"mwright", "marcus.wright@brzzt.com", "Marcus Wright"},
+	{"ppatel", "priya.patel@blowpipe.xyz", "Priya Patel"},
+	{"jokoye", "james.okoye@brzzt.com", "James Okoye"},
+	{"lnakamura", "lisa.nakamura@blowpipe.xyz", "Lisa Nakamura"},
+	{"tharrison", "tom.harrison@brzzt.com", "Tom Harrison"},
+	{"evasquez", "elena.vasquez@blowpipe.xyz", "Elena Vasquez"},
+	{"rcooper", "ryan.cooper@brzzt.com", "Ryan Cooper"},
 }
 
 type projectDef struct {
@@ -370,8 +372,10 @@ func runDemo(args []string) error {
 			}
 			u.DisplayName = p.displayName
 		} else {
-			username := fmt.Sprintf("dev%02d", i-len(personaPool)+1)
-			email := fmt.Sprintf("dev%02d@example.com", i-len(personaPool)+1)
+			n := i - len(personaPool) + 1
+			username := fmt.Sprintf("ddev%02d", n)
+			domain := demoDomains[i%len(demoDomains)]
+			email := fmt.Sprintf("dev%02d@%s", n, domain)
 			u, err = store.CreateUserWithParams(ctx, db, store.UserCreateParams{
 				Username:               username,
 				Email:                  email,
