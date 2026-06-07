@@ -121,8 +121,15 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 		workflow, sErr := CreateWorkflow(ctx, db, "default", "Minimal bootstrap Workflow")
 		if sErr == nil {
 			for i, name := range []string{StageIdea, StageRefine, StageReady, StageDevelop, StageComplete} {
-				if _, stageErr := AddWorkflowStage(ctx, db, workflow.ID, name, "", "", i); stageErr != nil {
+				isBacklog := name == StageIdea || name == StageRefine || name == StageReady
+				stage, stageErr := AddWorkflowStage(ctx, db, workflow.ID, name, "", "", i)
+				if stageErr != nil {
 					return stageErr
+				}
+				if isBacklog {
+					if err := SetWorkflowStageBacklog(ctx, db, stage.ID, true); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -572,6 +579,7 @@ CREATE TABLE IF NOT EXISTS workflow_stages (
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
 	sort_order INTEGER NOT NULL DEFAULT 0,
+	is_backlog_stage INTEGER NOT NULL DEFAULT 0,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id),

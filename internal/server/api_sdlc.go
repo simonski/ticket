@@ -133,7 +133,7 @@ func (r *router) registerWorkflowHandlers() {
 			if dor == "" {
 				dor = payload.AcceptanceCriteria
 			}
-			stage, err := store.UpdateWorkflowStageWithDefinitions(r.Context(), db, stageID, payload.StageName, wow, dor, payload.DefinitionOfDone)
+			stage, err := store.UpdateWorkflowStageWithDefinitions(r.Context(), db, stageID, payload.StageName, wow, dor, payload.DefinitionOfDone, payload.IsBacklogStage)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "workflow stage not found")
@@ -325,6 +325,13 @@ func (r *router) registerWorkflowHandlers() {
 				if err != nil {
 					writeStoreError(w, err)
 					return
+				}
+				if payload.IsBacklogStage != nil {
+					if bErr := store.SetWorkflowStageBacklog(r.Context(), db, stage.ID, *payload.IsBacklogStage); bErr != nil {
+						writeStoreError(w, bErr)
+						return
+					}
+					stage.IsBacklogStage = *payload.IsBacklogStage
 				}
 				writeJSON(w, http.StatusCreated, stage)
 				return

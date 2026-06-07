@@ -34,6 +34,7 @@ type WorkflowStage struct {
 	DefinitionOfReady  string  `json:"definition_of_ready"`
 	DefinitionOfDone   string  `json:"definition_of_done"`
 	SortOrder          int     `json:"sort_order"`
+	IsBacklogStage     bool    `json:"is_backlog_stage"`
 	Roles              []Role  `json:"roles,omitempty"`
 	NextStageIDs       []int64 `json:"next_stage_ids,omitempty"`
 	CreatedAt          string  `json:"created_at"`
@@ -48,11 +49,12 @@ type WorkflowWithStages struct {
 // Export types use role title instead of ID for portability.
 
 type WorkflowStageExport struct {
-	StageName   string   `json:"stage_name"`
-	Description string   `json:"description"`
-	Roles       []string `json:"roles,omitempty"`
-	NextStages  []string `json:"next_stages,omitempty"`
-	SortOrder   int      `json:"sort_order"`
+	StageName      string   `json:"stage_name"`
+	Description    string   `json:"description"`
+	IsBacklogStage bool     `json:"is_backlog_stage,omitempty"`
+	Roles          []string `json:"roles,omitempty"`
+	NextStages     []string `json:"next_stages,omitempty"`
+	SortOrder      int      `json:"sort_order"`
 }
 
 type WorkflowExport struct {
@@ -257,14 +259,43 @@ func AddWorkflowStageWithDefinitions(ctx context.Context, db *sql.DB, workflowID
 	return getWorkflowStageRow(ctx, db, id)
 }
 
-func UpdateWorkflowStage(ctx context.Context, db *sql.DB, stageID int64, name, description, acceptanceCriteria string) (WorkflowStage, error) {
-	return UpdateWorkflowStageWithDefinitions(ctx, db, stageID, name, description, acceptanceCriteria, "")
+// SetWorkflowStageBacklog marks a stage as a backlog stage (shown in the backlog board)
+// or a sprint stage (shown in the sprint board). This should be called after creating
+// stages to configure their board placement.
+func SetWorkflowStageBacklog(ctx context.Context, db *sql.DB, stageID int64, isBacklogStage bool) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE workflow_stages SET is_backlog_stage = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE workflow_stage_id = ?
+	`, isBacklogStage, stageID)
+	return err
 }
 
-func UpdateWorkflowStageWithDefinitions(ctx context.Context, db *sql.DB, stageID int64, name, wow, dor, dod string) (WorkflowStage, error) {
+func UpdateWorkflowStage(ctx context.Context, db *sql.DB, stageID int64, name, description, acceptanceCriteria string) (WorkflowStage, error) {
+	return UpdateWorkflowStageWithDefinitions(ctx, db, stageID, name, description, acceptanceCriteria, "", nil)
+}
+
+func UpdateWorkflowStageWithDefinitions(ctx context.Context, db *sql.DB, stageID int64, name, wow, dor, dod string, isBacklogStage *bool) (WorkflowStage, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return WorkflowStage{}, errors.New("stage name is required")
+	}
+	if isBacklogStage != nil {
+		result, err := db.ExecContext(ctx, `
+			UPDATE workflow_stages
+			SET stage_name = ?, description = ?, acceptance_criteria = ?, definition_of_ready = ?, definition_of_done = ?, is_backlog_stage = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE workflow_stage_id = ?
+		`, name, strings.TrimSpace(wow), strings.TrimSpace(dor), strings.TrimSpace(dor), strings.TrimSpace(dod), *isBacklogStage, stageID)
+		if err != nil {
+			return WorkflowStage{}, err
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return WorkflowStage{}, err
+		}
+		if affected == 0 {
+			return WorkflowStage{}, sql.ErrNoRows
+		}
+		return getWorkflowStageRow(ctx, db, stageID)
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE workflow_stages
@@ -840,13 +871,13 @@ func getWorkflowRow(ctx context.Context, db *sql.DB, id int64) (Workflow, error)
 
 func getWorkflowStageRow(ctx context.Context, db *sql.DB, id int64) (WorkflowStage, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT workflow_stage_id, workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, created_at, updated_at
+		SELECT workflow_stage_id, workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, COALESCE(is_backlog_stage, 0), created_at, updated_at
 		FROM workflow_stages
 		WHERE workflow_stage_id = ?
 	`, id)
 	var s WorkflowStage
 	if err := row.Scan(&s.ID, &s.WorkflowID, &s.StageName, &s.Description,
-		&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.IsBacklogStage, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return WorkflowStage{}, err
 	}
 	roles, err := ListWorkflowStageRoles(ctx, db, s.WorkflowID, s.ID)
@@ -865,7 +896,7 @@ func getWorkflowStageRow(ctx context.Context, db *sql.DB, id int64) (WorkflowSta
 
 func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]WorkflowStage, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT workflow_stage_id, workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, created_at, updated_at
+		SELECT workflow_stage_id, workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, COALESCE(is_backlog_stage, 0), created_at, updated_at
 		FROM workflow_stages
 		WHERE workflow_id = ?
 		ORDER BY sort_order, workflow_stage_id
@@ -878,7 +909,7 @@ func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]Wo
 	for rows.Next() {
 		var s WorkflowStage
 		if scanErr := rows.Scan(&s.ID, &s.WorkflowID, &s.StageName, &s.Description,
-			&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); scanErr != nil {
+			&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.IsBacklogStage, &s.CreatedAt, &s.UpdatedAt); scanErr != nil {
 			return nil, scanErr
 		}
 		stages = append(stages, s)

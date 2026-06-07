@@ -1413,19 +1413,49 @@
 
         function getBoardLaneDescriptors() {
             const workflow = getCurrentProjectWorkflow();
-            const stageMap = new Map((workflow && workflow.stages ? workflow.stages : []).map((stage) => [stage.name, stage.id]));
+            const allStages = workflow && workflow.stages ? workflow.stages : [];
+            const stageMap = new Map(allStages.map((stage) => [stage.name, stage]));
             const sel = state.selectedSprintID;
-            let names;
+
+            let primaryNames;
             if (sel === "backlog") {
-                names = BACKLOG_BOARD_STAGES;
+                // Show stages marked as backlog stages; fall back to hardcoded list if workflow has none flagged.
+                const backlogStages = allStages.filter((s) => s.is_backlog_stage);
+                primaryNames = backlogStages.length > 0
+                    ? backlogStages.map((s) => s.name)
+                    : BACKLOG_BOARD_STAGES;
             } else if (sel && sel !== "") {
-                names = SPRINT_BOARD_STAGES;
+                // Show stages NOT marked as backlog stages; fall back to hardcoded list if workflow has none flagged.
+                const sprintStages = allStages.filter((s) => !s.is_backlog_stage);
+                primaryNames = sprintStages.length > 0
+                    ? sprintStages.map((s) => s.name)
+                    : SPRINT_BOARD_STAGES;
             } else {
-                names = getStageOptions();
+                primaryNames = getStageOptions();
             }
+
+            // Safety net: any stage present in currently-visible tickets that is not already
+            // in the column list gets appended so no tickets can become invisible.
+            const visibleTickets = sel === "backlog" || !sel || sel === ""
+                ? state.tickets
+                : sprintFilterTickets(state.tickets);
+            const presentStages = new Set(visibleTickets.map((t) => t.stage).filter(Boolean));
+            const primarySet = new Set(primaryNames);
+            const extraNames = [];
+            for (const stageName of presentStages) {
+                if (!primarySet.has(stageName)) {
+                    // Insert at position matching workflow order, or append.
+                    const ws = stageMap.get(stageName);
+                    const idx = ws ? allStages.indexOf(ws) : -1;
+                    extraNames.push({ name: stageName, order: idx >= 0 ? idx : 9999 });
+                }
+            }
+            extraNames.sort((a, b) => a.order - b.order);
+
+            const names = [...primaryNames, ...extraNames.map((e) => e.name)];
             return names.map((name) => ({
                 name,
-                workflowStageID: stageMap.get(name) || null,
+                workflowStageID: (stageMap.get(name) || {}).id || null,
             }));
         }
 

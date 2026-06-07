@@ -344,11 +344,18 @@ func runDemo(args []string) error {
 		{store.StageReject, "Rejected — will not be completed in this sprint"},
 	}
 
+	backlogStageNames := map[string]bool{store.StageIdea: true, store.StageRefine: true, store.StageReady: true}
 	createdStages := make([]store.WorkflowStage, 0, len(stages))
 	for i, s := range stages {
 		ws, err := store.AddWorkflowStage(ctx, db, wf.ID, s.name, s.desc, "", i)
 		if err != nil {
 			return fmt.Errorf("adding workflow stage %s: %w", s.name, err)
+		}
+		if backlogStageNames[s.name] {
+			if err := store.SetWorkflowStageBacklog(ctx, db, ws.ID, true); err != nil {
+				return fmt.Errorf("setting backlog flag for stage %s: %w", s.name, err)
+			}
+			ws.IsBacklogStage = true
 		}
 		createdStages = append(createdStages, ws)
 	}
@@ -771,9 +778,8 @@ func runDemo(args []string) error {
 					stage, state = store.StageReject, store.StateSuccess
 				}
 			}
-			// Ready-stage tickets and unstarted develop tickets have no assignee
-			// so agents (and users) can pick them up naturally.
-			if stage == store.StageReady || (stage == store.StageDevelop && state == store.StateIdle) {
+			// Idle tickets have no assignee — they are available to be picked up.
+			if state == store.StateIdle {
 				assignee = ""
 			}
 

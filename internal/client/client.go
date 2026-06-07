@@ -2388,7 +2388,17 @@ func (c *Client) AddWorkflowStage(ctx context.Context, workflowID int64, request
 		if strings.TrimSpace(dor) == "" {
 			dor = request.AcceptanceCriteria
 		}
-		return store.AddWorkflowStageWithDefinitions(ctx, db, workflowID, request.StageName, wow, dor, request.DefinitionOfDone, request.SortOrder)
+		stage, err := store.AddWorkflowStageWithDefinitions(ctx, db, workflowID, request.StageName, wow, dor, request.DefinitionOfDone, request.SortOrder)
+		if err != nil {
+			return stage, err
+		}
+		if request.IsBacklogStage != nil {
+			if bErr := store.SetWorkflowStageBacklog(ctx, db, stage.ID, *request.IsBacklogStage); bErr != nil {
+				return stage, bErr
+			}
+			stage.IsBacklogStage = *request.IsBacklogStage
+		}
+		return stage, nil
 	}
 	var stage store.WorkflowStage
 	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/workflows/%d/stages", workflowID), request, &stage)
@@ -2409,7 +2419,7 @@ func (c *Client) UpdateWorkflowStage(ctx context.Context, stageID int64, request
 		if strings.TrimSpace(dor) == "" {
 			dor = request.AcceptanceCriteria
 		}
-		return store.UpdateWorkflowStageWithDefinitions(ctx, db, stageID, request.StageName, wow, dor, request.DefinitionOfDone)
+		return store.UpdateWorkflowStageWithDefinitions(ctx, db, stageID, request.StageName, wow, dor, request.DefinitionOfDone, request.IsBacklogStage)
 	}
 	var stage store.WorkflowStage
 	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/workflows/stages/%d", stageID), request, &stage)

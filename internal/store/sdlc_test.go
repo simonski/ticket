@@ -244,7 +244,7 @@ func TestWorkflowStageDefinitionsCRUD(t *testing.T) {
 		t.Fatalf("added stage = %#v", stage)
 	}
 
-	stage, err = UpdateWorkflowStageWithDefinitions(context.Background(), db, stage.ID, "develop", "ways-2", "ready-2", "done-2")
+	stage, err = UpdateWorkflowStageWithDefinitions(context.Background(), db, stage.ID, "develop", "ways-2", "ready-2", "done-2", nil)
 	if err != nil {
 		t.Fatalf("UpdateWorkflowStageWithDefinitions() error = %v", err)
 	}

@@ -161,6 +161,7 @@ type workflowStageRequest struct {
 	DefinitionOfReady  string `json:"dor"`
 	DefinitionOfDone   string `json:"dod"`
 	SortOrder          int    `json:"sort_order"`
+	IsBacklogStage     *bool  `json:"is_backlog_stage,omitempty"`
 }
 
 type workflowReorderRequest struct {

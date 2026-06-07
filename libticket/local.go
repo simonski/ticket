@@ -1643,7 +1643,17 @@ func (s *LocalService) AddWorkflowStage(ctx context.Context, workflowID int64, r
 	if strings.TrimSpace(dor) == "" {
 		dor = request.AcceptanceCriteria
 	}
-	return store.AddWorkflowStageWithDefinitions(ctx, db, workflowID, request.StageName, wow, dor, request.DefinitionOfDone, request.SortOrder)
+	stage, err := store.AddWorkflowStageWithDefinitions(ctx, db, workflowID, request.StageName, wow, dor, request.DefinitionOfDone, request.SortOrder)
+	if err != nil {
+		return stage, err
+	}
+	if request.IsBacklogStage != nil {
+		if bErr := store.SetWorkflowStageBacklog(ctx, db, stage.ID, *request.IsBacklogStage); bErr != nil {
+			return stage, bErr
+		}
+		stage.IsBacklogStage = *request.IsBacklogStage
+	}
+	return stage, nil
 }
 
 func (s *LocalService) UpdateWorkflowStage(ctx context.Context, stageID int64, request WorkflowStageRequest) (store.WorkflowStage, error) {
@@ -1659,7 +1669,7 @@ func (s *LocalService) UpdateWorkflowStage(ctx context.Context, stageID int64, r
 	if strings.TrimSpace(dor) == "" {
 		dor = request.AcceptanceCriteria
 	}
-	return store.UpdateWorkflowStageWithDefinitions(ctx, db, stageID, request.StageName, wow, dor, request.DefinitionOfDone)
+	return store.UpdateWorkflowStageWithDefinitions(ctx, db, stageID, request.StageName, wow, dor, request.DefinitionOfDone, request.IsBacklogStage)
 }
 
 func (s *LocalService) GetWorkflowStage(ctx context.Context, stageID int64) (store.WorkflowStage, error) {
