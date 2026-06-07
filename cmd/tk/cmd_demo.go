@@ -421,18 +421,19 @@ func runDemo(args []string) error {
 	type demoAgent struct {
 		username string
 		role     string
+		id       string
 	}
 	demoAgents := []demoAgent{
 		{username: "refiner", role: "refiner"},
 		{username: "developer", role: "developer"},
 		{username: "tester", role: "tester"},
 	}
-	for _, da := range demoAgents {
-		// Create agent with known UUID derived from username for reproducibility.
+	for i, da := range demoAgents {
 		agent, _, err := store.CreateAgent(ctx, db, "password")
 		if err != nil {
 			return fmt.Errorf("creating agent %s: %w", da.username, err)
 		}
+		demoAgents[i].id = agent.ID
 		// Rename to friendly username and set agent_role.
 		if _, sqlErr := db.ExecContext(ctx, `UPDATE users SET username = ?, display_name = ?, agent_role = ? WHERE user_id = ?`,
 			da.username, strings.Title(da.role)+" Agent", da.role, agent.ID); sqlErr != nil {
@@ -535,6 +536,32 @@ func runDemo(args []string) error {
 		}
 	}
 	fmt.Printf("  ✓ Created programme %q with %d projects\n", programme.Name, len(projects))
+
+	// For each project, create a dedicated set of agents so the agent bar is
+	// populated on every project (agent_config project_id is a single-value key).
+	agentRoleDefs := []demoAgent{
+		{username: "refiner", role: "refiner"},
+		{username: "developer", role: "developer"},
+		{username: "tester", role: "tester"},
+	}
+	for pi, proj := range projects {
+		projIDStr := fmt.Sprintf("%d", proj.ID)
+		suffix := fmt.Sprintf("%d", pi+1)
+		for _, def := range agentRoleDefs {
+			pa, _, err := store.CreateAgent(ctx, db, "password")
+			if err != nil {
+				return fmt.Errorf("creating project agent %s/%s: %w", def.username, proj.Prefix, err)
+			}
+			uname := def.username + suffix
+			if _, sqlErr := db.ExecContext(ctx, `UPDATE users SET username = ?, display_name = ?, agent_role = ? WHERE user_id = ?`,
+				uname, strings.Title(def.role)+" Agent", def.role, pa.ID); sqlErr != nil {
+				return fmt.Errorf("updating project agent username: %w", sqlErr)
+			}
+			if err := store.SetAgentConfig(ctx, db, pa.ID, store.AgentConfigKeyProjectID, projIDStr); err != nil {
+				return fmt.Errorf("setting project agent config: %w", err)
+			}
+		}
+	}
 
 	// Sprint timeline: 6 sprints, 2 weeks each, today = mid-sprint 5.
 	// Sprint 5 (index 4) started 7 days ago; each prior sprint is 14 days earlier.
