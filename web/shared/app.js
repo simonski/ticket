@@ -659,6 +659,15 @@
             });
         }
 
+        // splitAgentRoles parses an agent's role field (comma-separated role names)
+        // into a trimmed list, dropping empties. Mirrors store.SplitAgentRoles.
+        function splitAgentRoles(agentRole) {
+            return String(agentRole || "")
+                .split(",")
+                .map((r) => r.trim())
+                .filter((r) => r.length > 0);
+        }
+
         function normalizePasskeyCredential(credential) {
             return Object.assign({}, credential, {
                 id: credential.id || credential.credential_id,
@@ -2929,25 +2938,28 @@
                 els.agentList.innerHTML = "<div class=\"empty\">No agents available.</div>";
                 return;
             }
-            const roleDescriptions = {
-                "product-owner": "picks up design/idle tickets",
-                "business-analyst": "picks up design/idle tickets",
-                "engineer": "picks up develop/idle tickets",
-                "qa": "picks up test/idle tickets",
-                "refiner": "refines draft tickets",
-            };
             els.agentList.innerHTML = state.agents.map((agent) => {
                 const active = agent.id === state.selectedAgentID ? " active" : "";
-                const role = agent.agent_role || "";
-                const roleChip = role ? "<span class=\"chip\">" + escapeHTML(role) + "</span> " : "";
-                const roleDesc = role ? (roleDescriptions[role] || "picks up any idle ticket") : "picks up any idle ticket";
+                const roles = splitAgentRoles(agent.agent_role);
+                const roleChips = roles.length
+                    ? roles.map((r) => "<span class=\"chip\">" + escapeHTML(r) + "</span>").join(" ") + " "
+                    : "";
+                const isRefiner = roles.some((r) => r.toLowerCase() === "refiner");
+                let roleDesc;
+                if (!roles.length) {
+                    roleDesc = "claims any idle ticket";
+                } else if (isRefiner && roles.length === 1) {
+                    roleDesc = "refines draft tickets";
+                } else {
+                    roleDesc = "claims idle tickets whose current role is " + roles.join(" or ");
+                }
                 const statusChip = agent.enabled
                     ? "<span class=\"chip chip-success\">enabled</span>"
                     : "<span class=\"chip chip-danger\">disabled</span>";
                 const name = escapeHTML(agent.username || agent.id);
                 return "<div class=\"entity-card" + active + "\" data-agent-id=\"" + escapeHTML(agent.id) + "\">" +
                     "<h4>" + name + "</h4>" +
-                    "<p>" + roleChip + statusChip + "</p>" +
+                    "<p>" + roleChips + statusChip + "</p>" +
                     "<small>" + escapeHTML(roleDesc) + "</small>" +
                     "</div>";
             }).join("");
@@ -3943,11 +3955,45 @@
             document.getElementById("agent-username").value = agent ? (agent.username || "") : "";
             document.getElementById("agent-username").disabled = !agent;
             document.getElementById("agent-enabled").value = agent ? String(Boolean(agent.enabled)) : "";
-            document.getElementById("agent-role").value = agent ? (agent.agent_role || "") : "";
+            populateAgentRoleOptions(agent ? agent.agent_role : "");
             document.getElementById("agent-new-password").value = "";
             document.getElementById("save-agent-button").disabled = !agent;
             document.getElementById("toggle-agent-button").disabled = !agent;
             document.getElementById("delete-agent-button").disabled = !agent;
+        }
+
+        // populateAgentRoleOptions fills the agent-role multi-select with the
+        // distinct role titles defined across all workflows (matched by name),
+        // plus a "Refiner" pseudo-role, and selects the agent's current roles.
+        function populateAgentRoleOptions(agentRole) {
+            const select = document.getElementById("agent-role");
+            if (!select) return;
+            const selected = splitAgentRoles(agentRole);
+            const selectedLower = new Set(selected.map((r) => r.toLowerCase()));
+            // Distinct role titles (case-insensitive), preserving first-seen casing.
+            const seen = new Map();
+            (state.roles || []).forEach((role) => {
+                const title = String(role.title || "").trim();
+                if (title && !seen.has(title.toLowerCase())) {
+                    seen.set(title.toLowerCase(), title);
+                }
+            });
+            // Always offer the Refiner pseudo-role.
+            if (!seen.has("refiner")) {
+                seen.set("refiner", "Refiner");
+            }
+            // Include any currently-assigned role not otherwise present (custom).
+            selected.forEach((r) => {
+                if (!seen.has(r.toLowerCase())) {
+                    seen.set(r.toLowerCase(), r);
+                }
+            });
+            const options = Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+            select.innerHTML = options.map((title) => {
+                const isSel = selectedLower.has(title.toLowerCase()) ? " selected" : "";
+                return "<option value=\"" + escapeHTML(title) + "\"" + isSel + ">" + escapeHTML(title) + "</option>";
+            }).join("");
+            select.disabled = !getCurrentAgent();
         }
 
         function renderTeamEditor() {
@@ -5354,12 +5400,13 @@
                     return;
                 }
                 try {
-                    const roleValue = document.getElementById("agent-role").value;
+                    const roleSelect = document.getElementById("agent-role");
+                    const roleValue = Array.from(roleSelect.selectedOptions).map((o) => o.value).join(",");
                     const passwordValue = document.getElementById("agent-new-password").value;
                     const usernameValue = String(document.getElementById("agent-username").value || "").trim();
                     const body = {};
                     if (passwordValue) body.password = passwordValue;
-                    if (roleValue !== undefined) body.agent_role = roleValue;
+                    body.agent_role = roleValue;
                     if (usernameValue && usernameValue !== agent.username) body.username = usernameValue;
                     await api("/api/agents/" + agent.id, {
                         method: "PUT",

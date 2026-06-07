@@ -405,11 +405,13 @@ func runDemo(args []string) error {
 		role     string
 		id       string
 	}
+	// Role values are the workflow role TITLES (matched case-insensitively by
+	// name against each ticket's current role), not slugs.
 	demoAgents := []demoAgent{
-		{username: "po-agent", role: "product-owner"},
-		{username: "ba-agent", role: "business-analyst"},
-		{username: "eng-agent", role: "engineer"},
-		{username: "qa-agent", role: "qa"},
+		{username: "po-agent", role: "Product Owner"},
+		{username: "ba-agent", role: "Business Analyst"},
+		{username: "eng-agent", role: "Engineer"},
+		{username: "qa-agent", role: "QA Engineer"},
 	}
 	for i, da := range demoAgents {
 		agent, _, err := store.CreateAgent(ctx, db, "password")
@@ -526,7 +528,7 @@ func runDemo(args []string) error {
 	now := time.Now().UTC()
 	sprintLen := 14 * 24 * time.Hour
 	activeSprintIdx := numSprintsPerProj - 2 // index 4 for 6 sprints
-	midSprintOffset := sprintLen / 2          // 7 days
+	midSprintOffset := sprintLen / 2         // 7 days
 
 	sqlTS := func(t time.Time) string { return t.Format("2006-01-02 15:04:05") }
 
@@ -679,7 +681,7 @@ func runDemo(args []string) error {
 
 			assignee := users[localIdx%len(users)].Username
 			author := users[(localIdx+1)%len(users)].Username
-			priority := (localIdx%5) + 1
+			priority := (localIdx % 5) + 1
 
 			// Determine which sprint this ticket belongs to (round-robin across all sprints).
 			targetSprintLocalIdx := sprintCursor % len(pd.sprints)
@@ -763,9 +765,14 @@ func runDemo(args []string) error {
 			}
 
 			allTicketMeta = append(allTicketMeta, ticketMeta{
-				id:        t.ID,
-				sprintIdx: func() int { if isBacklog { return -1 }; return targetSprintGlobalIdx }(),
-				stage:     stage,
+				id: t.ID,
+				sprintIdx: func() int {
+					if isBacklog {
+						return -1
+					}
+					return targetSprintGlobalIdx
+				}(),
+				stage: stage,
 			})
 
 			ticketIndex++

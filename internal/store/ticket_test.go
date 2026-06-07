@@ -2384,3 +2384,97 @@ func TestTicketHasChildrenUsesExistenceCheck(t *testing.T) {
 		t.Fatal("ticketHasChildren(parent after child) = false, want true")
 	}
 }
+
+func TestSplitAgentRoles(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"", []string{}},
+		{"Engineer", []string{"Engineer"}},
+		{"Engineer,QA Engineer", []string{"Engineer", "QA Engineer"}},
+		{" Engineer , , QA Engineer ", []string{"Engineer", "QA Engineer"}},
+		{",,", []string{}},
+	}
+	for _, tc := range cases {
+		got := SplitAgentRoles(tc.in)
+		if len(got) != len(tc.want) {
+			t.Fatalf("SplitAgentRoles(%q) = %#v, want %#v", tc.in, got, tc.want)
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Fatalf("SplitAgentRoles(%q)[%d] = %q, want %q", tc.in, i, got[i], tc.want[i])
+			}
+		}
+	}
+}
+
+// TestRequestTicketRoleMatching verifies that an agent only claims idle tickets
+// whose current role title matches one of the agent's roles (case-insensitive),
+// and that an agent with no roles claims any idle ticket.
+func TestRequestTicketRoleMatching(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := context.Background()
+	adminID := testAdminID(t, db)
+
+	project, err := CreateProject(ctx, db, "Role Match", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	wfBase, err := CreateWorkflow(ctx, db, "Role Flow", "")
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	if _, err := AddWorkflowStage(ctx, db, wfBase.ID, "Develop", "", "", 1); err != nil {
+		t.Fatalf("AddWorkflowStage() error = %v", err)
+	}
+	engineer, err := CreateRoleWithParams(ctx, db, RoleCreateParams{WorkflowID: &wfBase.ID, Title: "Engineer"})
+	if err != nil {
+		t.Fatalf("CreateRole() error = %v", err)
+	}
+	wf, err := GetWorkflow(ctx, db, wfBase.ID)
+	if err != nil {
+		t.Fatalf("GetWorkflow() error = %v", err)
+	}
+	if err := AddWorkflowStageRole(ctx, db, wf.ID, wf.Stages[0].ID, engineer.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole() error = %v", err)
+	}
+
+	if _, err := CreateUser(ctx, db, "eng-bot", "password123", "user"); err != nil {
+		t.Fatalf("CreateUser(eng-bot) error = %v", err)
+	}
+	if _, err := CreateUser(ctx, db, "qa-bot", "password123", "user"); err != nil {
+		t.Fatalf("CreateUser(qa-bot) error = %v", err)
+	}
+
+	ticket, err := CreateTicket(ctx, db, TicketCreateParams{ProjectID: project.ID, Type: "task", Title: "Build it"})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if _, err := SetTicketWorkflow(ctx, db, ticket.ID, wf.ID); err != nil {
+		t.Fatalf("SetTicketWorkflow() error = %v", err)
+	}
+	if _, err := SetTicketDraft(ctx, db, ticket.ID, false, "admin", adminID); err != nil {
+		t.Fatalf("SetTicketDraft() error = %v", err)
+	}
+
+	// An agent whose role does not match gets no work.
+	_, status, err := RequestTicket(ctx, db, TicketRequestParams{ProjectID: project.ID, Username: "qa-bot", AgentRole: "QA Engineer"})
+	if err != nil {
+		t.Fatalf("RequestTicket(QA) error = %v", err)
+	}
+	if status != "NO-WORK" {
+		t.Fatalf("RequestTicket(QA) status = %q, want NO-WORK", status)
+	}
+
+	// A matching role (case-insensitive) claims the ticket.
+	assigned, status, err := RequestTicket(ctx, db, TicketRequestParams{ProjectID: project.ID, Username: "eng-bot", AgentRole: "engineer"})
+	if err != nil {
+		t.Fatalf("RequestTicket(engineer) error = %v", err)
+	}
+	if status != "ASSIGNED" || assigned.ID != ticket.ID {
+		t.Fatalf("RequestTicket(engineer) = %q %q, want ASSIGNED %s", status, assigned.ID, ticket.ID)
+	}
+}

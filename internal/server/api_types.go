@@ -51,9 +51,11 @@ type planUpdateRequest struct {
 }
 
 type agentRequest struct {
-	Password  string `json:"password,omitempty"`
-	AgentRole string `json:"agent_role,omitempty"`
-	Username  string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	// AgentRole is a pointer so an explicit empty value (deselecting all roles)
+	// clears the agent's roles, while an absent field leaves them unchanged.
+	AgentRole *string `json:"agent_role,omitempty"`
+	Username  string  `json:"username,omitempty"`
 }
 
 type projectRequest struct {

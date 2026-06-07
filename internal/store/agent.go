@@ -16,6 +16,20 @@ import (
 // Agent is a type alias for User. Agents are users with user_type='agent'.
 type Agent = User
 
+// SplitAgentRoles parses an agent's role field — a comma-separated list of role
+// names — into a normalized slice with surrounding whitespace trimmed and empty
+// entries dropped. An agent may perform multiple roles (e.g. "Architect,Engineer").
+func SplitAgentRoles(agentRole string) []string {
+	parts := strings.Split(agentRole, ",")
+	roles := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			roles = append(roles, trimmed)
+		}
+	}
+	return roles
+}
+
 type AgentUpdateParams struct {
 	Password  *string
 	AgentRole *string

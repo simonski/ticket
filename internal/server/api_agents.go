@@ -231,7 +231,14 @@ func (r *router) registerAgentHandlers() {
 			}
 			var ticket store.Ticket
 			var status string
-			if agent.AgentRole == "refiner" {
+			isRefiner := false
+			for _, role := range store.SplitAgentRoles(agent.AgentRole) {
+				if strings.EqualFold(role, "refiner") {
+					isRefiner = true
+					break
+				}
+			}
+			if isRefiner {
 				ticket, status, err = store.RequestRefineTicket(r.Context(), db, projectID, agent.Username, agent.ID)
 			} else {
 				ticket, status, err = store.RequestTicket(r.Context(), db, store.TicketRequestParams{
@@ -346,7 +353,7 @@ func (r *router) registerAgentHandlers() {
 				}
 				updated, err := store.UpdateAgent(r.Context(), db, id, store.AgentUpdateParams{
 					Password:  nullableTrimmed(payload.Password),
-					AgentRole: nullableTrimmed(payload.AgentRole),
+					AgentRole: payload.AgentRole,
 					Username:  nullableTrimmed(payload.Username),
 				})
 				if err != nil {
