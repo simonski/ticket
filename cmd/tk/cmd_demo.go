@@ -339,7 +339,7 @@ func runDemo(args []string) error {
 
 	// Mark the design stage as the backlog stage
 	var designStageID int64
-	err = db.QueryRowContext(ctx, `SELECT workflow_stage_id FROM workflow_stages WHERE workflow_id = ? AND name = 'design' LIMIT 1`, agileWorkflowID).Scan(&designStageID)
+	err = db.QueryRowContext(ctx, `SELECT workflow_stage_id FROM workflow_stages WHERE workflow_id = ? AND stage_name = 'design' LIMIT 1`, agileWorkflowID).Scan(&designStageID)
 	if err != nil {
 		return fmt.Errorf("looking up design stage: %w", err)
 	}
