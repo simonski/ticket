@@ -282,7 +282,7 @@ func runDemo(args []string) error {
 	}
 
 	// Initialize DB
-	if err := store.Init(*dbPath, "admin", "Admin123456"); err != nil {
+	if err := store.Init(*dbPath, "admin", "password"); err != nil {
 		return fmt.Errorf("initializing database: %w", err)
 	}
 
@@ -356,7 +356,7 @@ func runDemo(args []string) error {
 			u, err = store.CreateUserWithParams(ctx, db, store.UserCreateParams{
 				Username:               p.username,
 				Email:                  p.email,
-				PlainPassword:          "Demo123456",
+				PlainPassword:          "password",
 				Role:                   "user",
 				Enabled:                true,
 				SkipPasswordValidation: true,
@@ -375,7 +375,7 @@ func runDemo(args []string) error {
 			u, err = store.CreateUserWithParams(ctx, db, store.UserCreateParams{
 				Username:               username,
 				Email:                  email,
-				PlainPassword:          "Demo123456",
+				PlainPassword:          "password",
 				Role:                   "user",
 				Enabled:                true,
 				SkipPasswordValidation: true,
@@ -745,8 +745,8 @@ func runDemo(args []string) error {
 
 	// Print summary
 	fmt.Printf("\nDemo database ready: %s\n", *dbPath)
-	fmt.Printf("  Login:   admin / Admin123456\n")
-	fmt.Printf("  Server:  tk serve --db %s (then open https://localhost:8443)\n", *dbPath)
+	fmt.Printf("  Login:   admin / password\n")
+	fmt.Printf("  Server:  tk serve -f %s (then open http://localhost:8080)\n", *dbPath)
 
 	// Build user list for display
 	usernames := make([]string, 0, len(users))
@@ -760,7 +760,7 @@ func runDemo(args []string) error {
 	if len(users) > 5 {
 		suffix = ", ..."
 	}
-	fmt.Printf("  Users:   %s%s (password: Demo123456)\n", strings.Join(usernames, ", "), suffix)
+	fmt.Printf("  Users:   %s%s (password: password)\n", strings.Join(usernames, ", "), suffix)
 
 	return nil
 }
