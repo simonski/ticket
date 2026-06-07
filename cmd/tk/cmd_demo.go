@@ -298,12 +298,13 @@ func runDemo(args []string) error {
 
 	fmt.Println("  ✓ Initialized database")
 
-	// Remove private projects created by store.Init (admin's private workspace, bootstrap ticket project, etc.)
+	// Remove auto-generated private and public placeholder projects from store.Init
+	// (admin private workspace, bootstrap ticket tracker project, public placeholder)
 	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return fmt.Errorf("disabling fk for cleanup: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, `DELETE FROM projects WHERE visibility = 'private'`); err != nil {
-		return fmt.Errorf("removing private projects: %w", err)
+	if _, err := db.ExecContext(ctx, `DELETE FROM projects WHERE visibility = 'private' OR (prefix = 'PUB' AND title = 'Public')`); err != nil {
+		return fmt.Errorf("removing placeholder projects: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
 		return fmt.Errorf("re-enabling fk after cleanup: %w", err)

@@ -387,6 +387,17 @@
             return put("/api/tickets/" + encodeURIComponent(ticketID) + "/sprint", { sprint_id: sprintID });
         }
 
+        function getOrg() { return get("/api/org"); }
+        function updateOrg(name, domain, description, logoURL) {
+            return put("/api/org", { name, domain, description, logo_url: logoURL });
+        }
+
+        function listProgrammes() { return get("/api/programmes"); }
+        function createProgramme(name, description) { return post("/api/programmes", { name, description }); }
+        function updateProgramme(id, name, description) { return put("/api/programmes/" + encodeURIComponent(id), { name, description }); }
+        function deleteProgramme(id) { return del("/api/programmes/" + encodeURIComponent(id)); }
+        function setProjectProgramme(projectID, programmeID) { return put("/api/projects/" + encodeURIComponent(projectID) + "/programme", { programme_id: programmeID }); }
+
         return {
             setToken: setToken,
             getToken: getToken,
@@ -435,6 +446,13 @@
             updateSprint: updateSprint,
             deleteSprint: deleteSprint,
             setTicketSprint: setTicketSprint,
+            getOrg: getOrg,
+            updateOrg: updateOrg,
+            listProgrammes: listProgrammes,
+            createProgramme: createProgramme,
+            updateProgramme: updateProgramme,
+            deleteProgramme: deleteProgramme,
+            setProjectProgramme: setProjectProgramme,
         };
     }
 

@@ -43,6 +43,7 @@ type Project struct {
 	AgentModelName     string      `json:"agent_model_name"`
 	AgentModelURL      string      `json:"agent_model_url"`
 	AgentModelAPIKey   string      `json:"agent_model_api_key"`
+	ProgrammeID        *int64      `json:"programme_id"`
 }
 
 func (p Project) ResolveGuidance(stage string) ResolvedGuidance {
@@ -197,12 +198,14 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 func scanProject(s scanner) (Project, error) {
 	var project Project
 	var workflowID sql.NullInt64
+	var programmeID sql.NullInt64
 	var dorJSON, dodJSON, acJSON string
 	if err := s.Scan(
 		&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria,
 		&dorJSON, &dodJSON, &acJSON, &project.GitRepository, &project.Notes, &project.Status, &project.Visibility,
 		&project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &workflowID,
 		&project.AgentModelProvider, &project.AgentModelName, &project.AgentModelURL, &project.AgentModelAPIKey,
+		&programmeID,
 	); err != nil {
 		return Project{}, err
 	}
@@ -223,6 +226,9 @@ func scanProject(s scanner) (Project, error) {
 	if workflowID.Valid {
 		project.WorkflowID = &workflowID.Int64
 	}
+	if programmeID.Valid {
+		project.ProgrammeID = &programmeID.Int64
+	}
 	return project, nil
 }
 
@@ -234,7 +240,7 @@ func ListProjects(ctx context.Context, db *sql.DB, limit int) ([]Project, error)
 		limit = 1000
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id
 		FROM projects
 		ORDER BY created_at, project_id
 		LIMIT ?
@@ -283,7 +289,7 @@ func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Pr
 			FROM teams parent
 			JOIN team_scope ts ON ts.parent_team_id = parent.team_id
 		)
-		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.agent_model_provider, p.agent_model_name, p.agent_model_url, p.agent_model_api_key
+		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.agent_model_provider, p.agent_model_name, p.agent_model_url, p.agent_model_api_key, p.programme_id
 		FROM projects p
 		LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = ?
 		LEFT JOIN project_teams pt ON pt.project_id = p.project_id
@@ -329,7 +335,7 @@ func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) 
 		return GetProjectByID(ctx, db, id)
 	}
 	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id
 		FROM projects
 		WHERE prefix = ?
 	`, strings.ToUpper(rawID))
@@ -352,7 +358,7 @@ func GetProjectByID(ctx context.Context, db *sql.DB, id int64) (Project, error) 
 		return Project{}, err
 	}
 	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id
 		FROM projects
 		WHERE project_id = ?
 	`, id)
@@ -382,7 +388,7 @@ func GetProjectByGitRepository(ctx context.Context, db *sql.DB, gitRepository st
 		return Project{}, err
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.agent_model_provider, p.agent_model_name, p.agent_model_url, p.agent_model_api_key,
+		SELECT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.agent_model_provider, p.agent_model_name, p.agent_model_url, p.agent_model_api_key, p.programme_id,
 		       r.repository
 		FROM projects p
 		JOIN project_git_repositories r ON r.project_id = p.project_id
@@ -441,12 +447,14 @@ type projectWithRepository struct {
 func scanProjectWithWorkflowIDAndRepository(s scanner) (projectWithRepository, error) {
 	var result projectWithRepository
 	var workflowID sql.NullInt64
+	var programmeID sql.NullInt64
 	var dorJSON, dodJSON, acJSON string
 	if err := s.Scan(
 		&result.project.ID, &result.project.Prefix, &result.project.Title, &result.project.Description, &result.project.AcceptanceCriteria,
 		&dorJSON, &dodJSON, &acJSON, &result.project.GitRepository, &result.project.Notes, &result.project.Status, &result.project.Visibility,
 		&result.project.DefaultDraft, &result.project.CreatedBy, &result.project.CreatedAt, &result.project.UpdatedAt, &workflowID,
 		&result.project.AgentModelProvider, &result.project.AgentModelName, &result.project.AgentModelURL, &result.project.AgentModelAPIKey,
+		&programmeID,
 		&result.repository,
 	); err != nil {
 		return projectWithRepository{}, err
@@ -468,6 +476,10 @@ func scanProjectWithWorkflowIDAndRepository(s scanner) (projectWithRepository, e
 	if workflowID.Valid {
 		id := workflowID.Int64
 		result.project.WorkflowID = &id
+	}
+	if programmeID.Valid {
+		id := programmeID.Int64
+		result.project.ProgrammeID = &id
 	}
 	return result, nil
 }
@@ -600,7 +612,7 @@ func validProjectVisibility(visibility string) bool {
 
 func getProjectByTitle(ctx context.Context, db *sql.DB, title string) (Project, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id
 		FROM projects
 		WHERE LOWER(title) = LOWER(?)
 		ORDER BY project_id

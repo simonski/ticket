@@ -137,11 +137,15 @@
                             <button class="btn icon-btn" type="button" data-perspective="list" title="List view">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>
                             </button>
+                            <button class="btn icon-btn" type="button" data-perspective="plan" title="Sprint planner">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="18"/><rect x="13" y="3" width="8" height="9"/><rect x="13" y="14" width="8" height="7"/></svg>
+                            </button>
                             <button id="new-ticket-button" class="btn btn-primary" type="button">New ticket</button>
                         </div>
                     </div>
                     <div id="ticket-board" class="board"></div>
                     <div id="ticket-list-view" class="ticket-list-view hidden"></div>
+                    <div id="ticket-plan-view" class="ticket-plan-view hidden"></div>
                 </section>
 
                 <!-- Goals -->
@@ -840,6 +844,60 @@
                     </div>
                     <div class="card">
                         <div id="user-list" class="item-list"></div>
+                    </div>
+                </section>
+
+                <!-- Admin Summary (admin only) -->
+                <section id="view-admin-summary" class="view">
+                    <div class="view-header">
+                        <div><h1>Summary</h1><p class="meta">System overview for administrators.</p></div>
+                    </div>
+                    <div id="admin-summary-content" class="admin-summary-grid"></div>
+                </section>
+
+                <!-- Organisation (admin only) -->
+                <section id="view-org" class="view">
+                    <div class="view-header">
+                        <div><h1>Organisation</h1><p class="meta">Company identity and settings.</p></div>
+                    </div>
+                    <div class="card" style="max-width:600px">
+                        <div class="card-header"><h2>Details</h2></div>
+                        <form id="org-form" class="form-stack">
+                            <div class="field"><label for="org-name">Name</label><input id="org-name" required></div>
+                            <div class="field"><label for="org-domain">Domain</label><input id="org-domain" placeholder="example.com"></div>
+                            <div class="field"><label for="org-description">Description</label><textarea id="org-description"></textarea></div>
+                            <div class="field"><label for="org-logo">Logo URL</label><input id="org-logo" placeholder="https://..."></div>
+                            <div class="form-actions">
+                                <button id="save-org-button" class="btn btn-primary" type="submit">Save</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Programmes (admin only) -->
+                <section id="view-programmes" class="view split">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Programmes</h2>
+                            <button id="new-programme-button" class="btn btn-primary" type="button">New programme</button>
+                        </div>
+                        <div id="programme-list" class="item-list"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h2 id="programme-editor-title">Programme editor</h2></div>
+                        <form id="programme-form" class="form-stack">
+                            <div class="field"><label for="programme-name">Name</label><input id="programme-name" required></div>
+                            <div class="field"><label for="programme-description">Description</label><textarea id="programme-description"></textarea></div>
+                            <div class="field">
+                                <label>Projects in this programme</label>
+                                <div id="programme-projects-list" class="item-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:4px"></div>
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-programme-button" class="btn btn-primary" type="submit">Save</button>
+                                <button id="delete-programme-button" class="btn btn-danger" type="button">Delete</button>
+                                <button id="reset-programme-button" class="btn btn-ghost" type="button">Clear</button>
+                            </div>
+                        </form>
                     </div>
                 </section>
 

@@ -106,6 +106,9 @@
             sprints: [],
             selectedSprintID: "",
             boardPerspective: localStorage.getItem("site2.board-view") || "board",
+            org: null,
+            programmes: [],
+            selectedProgrammeID: null,
         };
 
         const TICKET_TYPES = ["epic", "task", "bug", "spike", "chore", "story", "note", "question", "requirement", "decision"];
@@ -124,11 +127,14 @@
             { view: "workflows", label: "Workflows", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
             { view: "roles", label: "Roles", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8a3 3 0 1 0 0.001 0\"></path><path d=\"M17 16a3 3 0 1 0 0.001 0\"></path><path d=\"M9.5 10.5l5 3\"></path></svg>" },
             { view: "teams", label: "Teams", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 11a2.5 2.5 0 1 0 0.001 0\"></path><path d=\"M16 9a2 2 0 1 0 0.001 0\"></path><path d=\"M4 19a4 4 0 0 1 8 0\"></path><path d=\"M14 19a3 3 0 0 1 6 0\"></path></svg>" },
+            { view: "org", label: "Organisation", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 21h18\"/><path d=\"M5 21V7l7-4 7 4v14\"/><path d=\"M9 21v-4h6v4\"/></svg>" },
+            { view: "programmes", label: "Programmes", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 3h7v7H3z\"/><path d=\"M14 3h7v7h-7z\"/><path d=\"M3 14h7v7H3z\"/><path d=\"M14 14h7v7h-7z\"/></svg>" },
             { view: "config", label: "Config", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M12 17v4\"></path><path d=\"M4.9 6.3l2.8 2\"></path><path d=\"M16.3 15.7l2.8 2\"></path><path d=\"M3 12h4\"></path><path d=\"M17 12h4\"></path><path d=\"M4.9 17.7l2.8-2\"></path><path d=\"M16.3 8.3l2.8-2\"></path><circle cx=\"12\" cy=\"12\" r=\"3.5\"></circle></svg>" },
             { view: "providers", label: "Providers", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2l3 3-3 3-3-3z\"></path><path d=\"M4 11l3-3 3 3-3 3z\"></path><path d=\"M20 11l-3-3-3 3 3 3z\"></path><path d=\"M12 20l-3-3 3-3 3 3z\"></path></svg>" },
             { view: "plans", label: "Plans", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 4h12v16H6z\"></path><path d=\"M9 8h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 16h4\"></path></svg>" },
             { view: "agents", label: "Agents", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M8 8a4 4 0 1 1 8 0\"></path><path d=\"M7 13h10v7H7z\"></path></svg>" },
             { view: "users", label: "Users", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"></path><circle cx=\"9\" cy=\"7\" r=\"4\"></circle><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"></path><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"></path></svg>" },
+            { view: "admin-summary", label: "Summary", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\"/></svg>" },
         ];
         let navDragView = "";
         let goalChatIdleTimer = null;
@@ -236,6 +242,8 @@
             teamList: document.getElementById("team-list"),
             ticketBoard: document.getElementById("ticket-board"),
             ticketListView: document.getElementById("ticket-list-view"),
+            ticketPlanView: document.getElementById("ticket-plan-view"),
+            adminSummaryContent: document.getElementById("admin-summary-content"),
             boardSearch: document.getElementById("board-search"),
             boardHideDone: document.getElementById("board-hide-done"),
             boardSprintSelect: document.getElementById("board-sprint-select"),
@@ -309,6 +317,21 @@
             dialogInput: document.getElementById("dialog-input"),
             dialogOK: document.getElementById("dialog-ok"),
             dialogCancel: document.getElementById("dialog-cancel"),
+            orgForm: document.getElementById("org-form"),
+            orgName: document.getElementById("org-name"),
+            orgDomain: document.getElementById("org-domain"),
+            orgDescription: document.getElementById("org-description"),
+            orgLogo: document.getElementById("org-logo"),
+            saveOrgButton: document.getElementById("save-org-button"),
+            programmeList: document.getElementById("programme-list"),
+            programmeEditorTitle: document.getElementById("programme-editor-title"),
+            programmeForm: document.getElementById("programme-form"),
+            programmeName: document.getElementById("programme-name"),
+            programmeDescription: document.getElementById("programme-description"),
+            programmeProjectsList: document.getElementById("programme-projects-list"),
+            saveProgrammeButton: document.getElementById("save-programme-button"),
+            deleteProgrammeButton: document.getElementById("delete-programme-button"),
+            resetProgrammeButton: document.getElementById("reset-programme-button"),
         };
         const TRASH_ICON_SVG = "<svg class=\"icon-trash\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16\"></path><path d=\"M9 7V5h6v2\"></path><path d=\"M10 11v6\"></path><path d=\"M14 11v6\"></path><path d=\"M7 7l1 12h8l1-12\"></path></svg>";
         let dialogResolve = null;
@@ -1485,6 +1508,15 @@
             if (settings.restoreScroll !== false) {
                 restoreCurrentViewScroll();
             }
+            if (viewName === "admin-summary") {
+                renderAdminSummary();
+            }
+        }
+
+        function programmeLabelForProject(project) {
+            if (!project || !project.programme_id) return "";
+            const prog = (state.programmes || []).find((p) => p.id === project.programme_id);
+            return prog ? " · <span class=\"chip\" style=\"font-size:0.7rem;padding:1px 5px\">" + escapeHTML(prog.name) + "</span>" : "";
         }
 
         function renderProjectMenu() {
@@ -1496,7 +1528,8 @@
             els.projectMenuList.innerHTML = otherProjects.length
                 ? otherProjects.map((project) => {
                     const label = project.title + " (" + project.prefix + ")" + (defaultProjectID === project.id ? " · default" : "");
-                    return "<button type=\"button\" class=\"dropdown-item\" data-project-switch=\"" + project.id + "\">" + escapeHTML(label) + "</button>";
+                    const programmeBadge = programmeLabelForProject(project);
+                    return "<button type=\"button\" class=\"dropdown-item\" data-project-switch=\"" + project.id + "\">" + escapeHTML(label) + programmeBadge + "</button>";
                 }).join("")
                 : "<div class=\"dropdown-label\">No other projects</div>";
         }
@@ -1990,7 +2023,7 @@
 
         async function refreshAll() {
             await loadStatus();
-            await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans(), loadPasskeys(), fetchUsers()]);
+            await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans(), loadPasskeys(), fetchUsers(), loadOrg(), loadProgrammes()]);
             await loadConfigSettings();
             renderProjectMenu();
             populateWorkflowSelects();
@@ -2125,10 +2158,15 @@
             renderSprintSelect();
             renderTicketBoard();
             renderTicketListView();
+            renderTicketPlanView();
+            if (isAdmin()) { renderAdminSummary(); }
             renderInterventions();
             renderEditors();
             renderPlans();
             renderConfigSettingsPanel();
+            renderOrg();
+            renderProgrammeList();
+            renderProgrammeEditor();
             decorateDeleteButtons(document);
             restoreCurrentViewScroll();
         }
@@ -3200,17 +3238,23 @@
                 els.userList.innerHTML = "<div class=\"empty\">No users.</div>";
                 return;
             }
-            els.userList.innerHTML = state.users.map((u) => {
+            const rows = state.users.map((u) => {
                 const roleChip = "<span class=\"chip\">" + escapeHTML(u.role || "user") + "</span>";
                 const statusChip = u.enabled === false
                     ? "<span class=\"chip chip-danger\">disabled</span>"
                     : "<span class=\"chip chip-success\">active</span>";
-                return "<div class=\"entity-card\" data-user-id=\"" + escapeHTML(String(u.id || u.username)) + "\">" +
-                    "<h4>" + escapeHTML(u.username) + "</h4>" +
-                    "<p>" + escapeHTML(u.email || "") + "</p>" +
-                    "<div class=\"tag-row\">" + roleChip + statusChip + "</div>" +
-                    "</div>";
+                return "<tr class=\"ticket-list-row\" data-user-id=\"" + escapeHTML(String(u.id || u.username)) + "\">" +
+                    "<td>" + escapeHTML(u.username) + "</td>" +
+                    "<td>" + escapeHTML(u.display_name || "—") + "</td>" +
+                    "<td>" + escapeHTML(u.email || "—") + "</td>" +
+                    "<td>" + roleChip + "</td>" +
+                    "<td>" + statusChip + "</td>" +
+                    "</tr>";
             }).join("");
+            els.userList.innerHTML = "<div class=\"table-wrap\"><table class=\"ticket-list-table\">" +
+                "<thead><tr><th>Username</th><th>Display name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>" +
+                "<tbody>" + rows + "</tbody>" +
+                "</table></div>";
         }
 
         async function fetchUsers() {
@@ -3221,6 +3265,82 @@
             } catch (e) {
                 console.error("fetchUsers:", e);
             }
+        }
+
+        async function loadOrg() {
+            if (!isAdmin()) return;
+            try {
+                state.org = await apiClient.getOrg();
+            } catch (e) {
+                console.error("loadOrg:", e);
+            }
+        }
+
+        function renderOrg() {
+            if (!els.orgForm) return;
+            const o = state.org || {};
+            if (els.orgName) els.orgName.value = o.name || "";
+            if (els.orgDomain) els.orgDomain.value = o.domain || "";
+            if (els.orgDescription) els.orgDescription.value = o.description || "";
+            if (els.orgLogo) els.orgLogo.value = o.logo_url || "";
+        }
+
+        async function loadProgrammes() {
+            if (!isAdmin()) return;
+            try {
+                const result = await apiClient.listProgrammes();
+                state.programmes = Array.isArray(result) ? result : [];
+            } catch (e) {
+                console.error("loadProgrammes:", e);
+            }
+        }
+
+        function renderProgrammeList() {
+            if (!els.programmeList) return;
+            if (!state.programmes || !state.programmes.length) {
+                els.programmeList.innerHTML = "<div class=\"empty\">No programmes.</div>";
+                return;
+            }
+            els.programmeList.innerHTML = state.programmes.map((p) => {
+                const active = p.id === state.selectedProgrammeID ? " active" : "";
+                return "<div class=\"entity-card" + active + "\" data-programme-id=\"" + p.id + "\">" +
+                    "<h4>" + escapeHTML(p.name) + "</h4>" +
+                    "<p>" + escapeHTML(p.description || "") + "</p>" +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderProgrammeProjects() {
+            if (!els.programmeProjectsList) return;
+            const programmeID = state.selectedProgrammeID;
+            const projects = state.projects || [];
+            if (!projects.length) {
+                els.programmeProjectsList.innerHTML = "<div class=\"empty\">No projects.</div>";
+                return;
+            }
+            els.programmeProjectsList.innerHTML = projects.map((p) => {
+                const inProgramme = p.programme_id === programmeID;
+                const chipClass = inProgramme ? "chip chip-success" : "chip";
+                const label = inProgramme ? "remove" : "add";
+                return "<div style=\"display:flex;align-items:center;justify-content:space-between;padding:4px 8px\">" +
+                    "<span>" + escapeHTML(p.prefix || p.title) + " — " + escapeHTML(p.title) + "</span>" +
+                    "<button class=\"btn btn-sm " + chipClass + "\" type=\"button\" data-programme-project-id=\"" + p.id + "\" data-programme-project-in=\"" + inProgramme + "\">" + label + "</button>" +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderProgrammeEditor() {
+            if (!els.programmeForm) return;
+            const prog = state.programmes.find((p) => p.id === state.selectedProgrammeID) || null;
+            if (els.programmeEditorTitle) {
+                els.programmeEditorTitle.textContent = prog ? "Edit programme" : "New programme";
+            }
+            if (els.programmeName) els.programmeName.value = prog ? prog.name : "";
+            if (els.programmeDescription) els.programmeDescription.value = prog ? prog.description : "";
+            if (els.deleteProgrammeButton) {
+                els.deleteProgrammeButton.style.display = prog ? "" : "none";
+            }
+            renderProgrammeProjects();
         }
 
         function renderTeamMembers() {
@@ -3300,12 +3420,15 @@
             const hideDone = Boolean(els.boardHideDone && els.boardHideDone.checked);
             const perspective = state.boardPerspective || "board";
 
-            // Toggle board/list visibility
+            // Toggle board/list/plan visibility
             if (els.ticketBoard) {
                 els.ticketBoard.classList.toggle("hidden", perspective !== "board");
             }
             if (els.ticketListView) {
                 els.ticketListView.classList.toggle("hidden", perspective !== "list");
+            }
+            if (els.ticketPlanView) {
+                els.ticketPlanView.classList.toggle("hidden", perspective !== "plan");
             }
 
             if (perspective !== "board") {
@@ -3384,6 +3507,119 @@
                 html = "<div class=\"empty\">No tickets.</div>";
             }
             els.ticketListView.innerHTML = html;
+        }
+
+        function renderTicketPlanView() {
+            if (!els.ticketPlanView) {
+                return;
+            }
+            const perspective = state.boardPerspective || "board";
+            if (perspective !== "plan") {
+                return;
+            }
+            const sprints = (state.sprints || []).slice().sort((a, b) => a.number - b.number);
+            const allTickets = state.tickets || [];
+
+            const sprintTicketsMap = {};
+            const backlogTickets = [];
+            allTickets.forEach((t) => {
+                if (t.sprint_id) {
+                    if (!sprintTicketsMap[t.sprint_id]) {
+                        sprintTicketsMap[t.sprint_id] = [];
+                    }
+                    sprintTicketsMap[t.sprint_id].push(t);
+                } else {
+                    backlogTickets.push(t);
+                }
+            });
+
+            const sprintsHtml = sprints.map((sprint) => {
+                const tickets = sprintTicketsMap[sprint.id] || [];
+                const label = "Sprint " + sprint.number + (sprint.title ? ": " + sprint.title : "");
+                const rowsHtml = tickets.map((t) =>
+                    "<div class=\"plan-ticket-row\" draggable=\"true\" data-ticket-id=\"" + escapeHTML(String(t.id)) + "\" data-sprint-id=\"" + escapeHTML(String(sprint.id)) + "\">" +
+                    "<span class=\"plan-ticket-key\">" + escapeHTML(t.key || String(t.id)) + "</span>" +
+                    "<span>" + escapeHTML(t.title || "(untitled)") + "</span>" +
+                    "</div>"
+                ).join("");
+                return "<details class=\"plan-sprint-group\" data-sprint-id=\"" + escapeHTML(String(sprint.id)) + "\" open>" +
+                    "<summary><strong>" + escapeHTML(label) + "</strong> <span class=\"chip\">" + escapeHTML(sprint.stage) + "</span> <span class=\"chip\">" + tickets.length + "</span></summary>" +
+                    "<div class=\"plan-drop-zone\">" +
+                    (rowsHtml || "<div class=\"plan-empty\">No tickets</div>") +
+                    "</div>" +
+                    "</details>";
+            }).join("");
+
+            const backlogRowsHtml = backlogTickets.map((t) =>
+                "<div class=\"plan-ticket-row\" draggable=\"true\" data-ticket-id=\"" + escapeHTML(String(t.id)) + "\" data-sprint-id=\"\">" +
+                "<span class=\"plan-ticket-key\">" + escapeHTML(t.key || String(t.id)) + "</span>" +
+                "<span>" + escapeHTML(t.title || "(untitled)") + "</span>" +
+                "</div>"
+            ).join("");
+
+            const html = "<div class=\"plan-pane plan-sprints-pane\">" +
+                "<div class=\"plan-pane-header\">Sprints</div>" +
+                (sprintsHtml || "<div class=\"plan-empty\">No sprints</div>") +
+                "</div>" +
+                "<div class=\"plan-pane plan-backlog-pane\" data-sprint-id=\"\">" +
+                "<div class=\"plan-pane-header\">Backlog</div>" +
+                (backlogRowsHtml || "<div class=\"plan-empty\">No backlog tickets</div>") +
+                "</div>";
+
+            setInnerHTMLIfChanged(els.ticketPlanView, html);
+        }
+
+        function renderAdminSummary() {
+            if (!els.adminSummaryContent) {
+                return;
+            }
+            if (!isAdmin()) {
+                return;
+            }
+
+            const users = state.users || [];
+            const projects = state.projects || [];
+            const teams = state.teams || [];
+
+            const usersHtml = "<div class=\"card admin-summary-card\">" +
+                "<div class=\"card-header\"><h2>Users <span class=\"chip\">" + users.length + "</span></h2></div>" +
+                "<div class=\"item-list\">" +
+                users.map((u) => {
+                    const enabled = u.enabled !== false;
+                    return "<div class=\"item-row\">" +
+                        "<span class=\"item-name\">" + escapeHTML(u.display_name || u.username) + "</span>" +
+                        "<span class=\"item-meta\">" + escapeHTML(u.username) + " · " + escapeHTML(u.role || "user") + "</span>" +
+                        "<button class=\"btn btn-sm\" data-admin-toggle-user=\"" + escapeHTML(u.username) + "\" data-enabled=\"" + (enabled ? "true" : "false") + "\">" + (enabled ? "Disable" : "Enable") + "</button>" +
+                        "</div>";
+                }).join("") +
+                "</div></div>";
+
+            const projectsHtml = "<div class=\"card admin-summary-card\">" +
+                "<div class=\"card-header\"><h2>Projects <span class=\"chip\">" + projects.length + "</span></h2></div>" +
+                "<div class=\"item-list\">" +
+                projects.map((p) => {
+                    const active = (p.status || "active") !== "disabled";
+                    const ticketCount = (state.tickets || []).filter((t) => t.project_id === p.id).length;
+                    return "<div class=\"item-row\">" +
+                        "<span class=\"item-name\">" + escapeHTML(p.title) + " <span class=\"chip\">" + escapeHTML(p.prefix) + "</span></span>" +
+                        "<span class=\"item-meta\">" + escapeHTML(p.visibility || "public") + " · " + ticketCount + " tickets</span>" +
+                        "<button class=\"btn btn-sm\" data-admin-toggle-project=\"" + escapeHTML(String(p.id)) + "\" data-active=\"" + (active ? "true" : "false") + "\">" + (active ? "Disable" : "Enable") + "</button>" +
+                        "</div>";
+                }).join("") +
+                "</div></div>";
+
+            const teamsHtml = "<div class=\"card admin-summary-card\">" +
+                "<div class=\"card-header\"><h2>Teams <span class=\"chip\">" + teams.length + "</span></h2></div>" +
+                "<div class=\"item-list\">" +
+                teams.map((t) => {
+                    return "<div class=\"item-row\">" +
+                        "<span class=\"item-name\">" + escapeHTML(t.name) + "</span>" +
+                        "<span class=\"item-meta\">" + (t.member_count !== undefined ? t.member_count + " members" : "") + "</span>" +
+                        "</div>";
+                }).join("") +
+                "</div></div>";
+
+            setInnerHTMLIfChanged(els.adminSummaryContent, usersHtml + projectsHtml + teamsHtml);
         }
 
         function renderTicketListRows(tickets) {
@@ -5872,6 +6108,139 @@
                     els.userModalError.textContent = error.message || "Failed to delete user.";
                 }
             });
+
+            if (els.adminSummaryContent) {
+                els.adminSummaryContent.addEventListener("click", async (event) => {
+                    const userBtn = event.target.closest("[data-admin-toggle-user]");
+                    const projBtn = event.target.closest("[data-admin-toggle-project]");
+                    if (userBtn) {
+                        const username = userBtn.dataset.adminToggleUser;
+                        const enabled = userBtn.dataset.enabled === "true";
+                        try {
+                            if (enabled) { await apiClient.disableUser(username); } else { await apiClient.enableUser(username); }
+                            await fetchUsers();
+                            renderAdminSummary();
+                        } catch (e) { setNotice(e.message, true); }
+                    }
+                    if (projBtn) {
+                        const id = projBtn.dataset.adminToggleProject;
+                        const active = projBtn.dataset.active === "true";
+                        try {
+                            if (active) {
+                                await api("/api/projects/" + encodeURIComponent(id) + "/disable", { method: "POST", body: JSON.stringify({}) });
+                            } else {
+                                await api("/api/projects/" + encodeURIComponent(id) + "/enable", { method: "POST", body: JSON.stringify({}) });
+                            }
+                            await loadProjects();
+                            renderAdminSummary();
+                        } catch (e) { setNotice(e.message, true); }
+                    }
+                });
+            }
+        }
+
+        function bindOrgHandlers() {
+            if (!els.orgForm) return;
+            els.orgForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                try {
+                    const name = els.orgName ? els.orgName.value.trim() : "";
+                    const domain = els.orgDomain ? els.orgDomain.value.trim() : "";
+                    const description = els.orgDescription ? els.orgDescription.value.trim() : "";
+                    const logoURL = els.orgLogo ? els.orgLogo.value.trim() : "";
+                    state.org = await apiClient.updateOrg(name, domain, description, logoURL);
+                    setNotice("Organisation saved.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+        }
+
+        function bindProgrammeHandlers() {
+            if (!els.programmeList) return;
+
+            els.programmeList.addEventListener("click", (event) => {
+                const card = event.target.closest("[data-programme-id]");
+                if (!card) return;
+                state.selectedProgrammeID = Number(card.dataset.programmeId);
+                renderProgrammeList();
+                renderProgrammeEditor();
+            });
+
+            if (document.getElementById("new-programme-button")) {
+                document.getElementById("new-programme-button").addEventListener("click", () => {
+                    state.selectedProgrammeID = null;
+                    renderProgrammeList();
+                    renderProgrammeEditor();
+                });
+            }
+
+            if (els.resetProgrammeButton) {
+                els.resetProgrammeButton.addEventListener("click", () => {
+                    state.selectedProgrammeID = null;
+                    renderProgrammeList();
+                    renderProgrammeEditor();
+                });
+            }
+
+            if (els.programmeForm) {
+                els.programmeForm.addEventListener("submit", async (event) => {
+                    event.preventDefault();
+                    const name = els.programmeName ? els.programmeName.value.trim() : "";
+                    const description = els.programmeDescription ? els.programmeDescription.value.trim() : "";
+                    try {
+                        if (state.selectedProgrammeID) {
+                            await apiClient.updateProgramme(state.selectedProgrammeID, name, description);
+                        } else {
+                            const created = await apiClient.createProgramme(name, description);
+                            state.selectedProgrammeID = created.id;
+                        }
+                        await loadProgrammes();
+                        renderProgrammeList();
+                        renderProgrammeEditor();
+                        setNotice("Programme saved.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
+            if (els.deleteProgrammeButton) {
+                els.deleteProgrammeButton.addEventListener("click", async () => {
+                    if (!state.selectedProgrammeID) return;
+                    const prog = state.programmes.find((p) => p.id === state.selectedProgrammeID);
+                    const confirmed = await uiConfirm("Delete programme " + (prog ? "\"" + prog.name + "\"" : "#" + state.selectedProgrammeID) + "?", "Delete");
+                    if (!confirmed) return;
+                    try {
+                        await apiClient.deleteProgramme(state.selectedProgrammeID);
+                        state.selectedProgrammeID = null;
+                        await loadProgrammes();
+                        await loadProjects();
+                        renderProgrammeList();
+                        renderProgrammeEditor();
+                        setNotice("Programme deleted.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
+            if (els.programmeProjectsList) {
+                els.programmeProjectsList.addEventListener("click", async (event) => {
+                    const btn = event.target.closest("[data-programme-project-id]");
+                    if (!btn) return;
+                    const projectID = Number(btn.dataset.programmeProjectId);
+                    const inProgramme = btn.dataset.programmeProjectIn === "true";
+                    const newProgrammeID = inProgramme ? null : state.selectedProgrammeID;
+                    try {
+                        await apiClient.setProjectProgramme(projectID, newProgrammeID);
+                        await loadProjects();
+                        renderProgrammeProjects();
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
         }
 
         function bindTeamsHandlers() {
@@ -5972,10 +6341,10 @@
         function bindTicketsHandlers() {
             document.getElementById("new-ticket-button").addEventListener("click", () => openTicketModal(emptyTicket()));
             if (els.boardSearch) {
-                els.boardSearch.addEventListener("input", () => { renderTicketBoard(); renderTicketListView(); });
+                els.boardSearch.addEventListener("input", () => { renderTicketBoard(); renderTicketListView(); renderTicketPlanView(); });
             }
             if (els.boardHideDone) {
-                els.boardHideDone.addEventListener("change", () => { renderTicketBoard(); renderTicketListView(); });
+                els.boardHideDone.addEventListener("change", () => { renderTicketBoard(); renderTicketListView(); renderTicketPlanView(); });
             }
             if (els.boardSprintSelect) {
                 els.boardSprintSelect.addEventListener("change", () => {
@@ -5985,6 +6354,7 @@
                     }
                     renderTicketBoard();
                     renderTicketListView();
+                    renderTicketPlanView();
                 });
             }
             if (els.newSprintButton) {
@@ -5998,6 +6368,7 @@
                         renderSprintSelect();
                         renderTicketBoard();
                         renderTicketListView();
+                        renderTicketPlanView();
                     } catch (e) {
                         setNotice(e.message, true);
                     }
@@ -6010,6 +6381,7 @@
                     localStorage.setItem("site2.board-view", state.boardPerspective);
                     renderTicketBoard();
                     renderTicketListView();
+                    renderTicketPlanView();
                 });
             });
             // Ticket list view row click
@@ -6220,6 +6592,61 @@
             });
 
             bindTicketBoardDragAndDrop();
+            bindPlanViewHandlers();
+        }
+
+        function bindPlanViewHandlers() {
+            if (!els.ticketPlanView) {
+                return;
+            }
+            els.ticketPlanView.addEventListener("dragstart", (event) => {
+                const row = event.target.closest("[data-ticket-id]");
+                if (!row) {
+                    return;
+                }
+                row.classList.add("dragging");
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", row.dataset.ticketId);
+            });
+            els.ticketPlanView.addEventListener("dragend", () => {
+                els.ticketPlanView.querySelectorAll(".dragging").forEach((el) => el.classList.remove("dragging"));
+            });
+            els.ticketPlanView.addEventListener("dragover", (event) => {
+                const target = event.target.closest("[data-sprint-id]");
+                if (!target) {
+                    return;
+                }
+                event.preventDefault();
+                els.ticketPlanView.querySelectorAll(".plan-drop-target").forEach((el) => el.classList.remove("plan-drop-target"));
+                target.classList.add("plan-drop-target");
+            });
+            els.ticketPlanView.addEventListener("dragleave", (event) => {
+                if (!els.ticketPlanView.contains(event.relatedTarget)) {
+                    els.ticketPlanView.querySelectorAll(".plan-drop-target").forEach((el) => el.classList.remove("plan-drop-target"));
+                }
+            });
+            els.ticketPlanView.addEventListener("drop", async (event) => {
+                event.preventDefault();
+                els.ticketPlanView.querySelectorAll(".plan-drop-target").forEach((el) => el.classList.remove("plan-drop-target"));
+                const ticketId = event.dataTransfer.getData("text/plain");
+                if (!ticketId) {
+                    return;
+                }
+                const target = event.target.closest("[data-sprint-id]");
+                if (!target) {
+                    return;
+                }
+                const sprintId = target.dataset.sprintId;
+                try {
+                    await apiClient.setTicketSprint(ticketId, sprintId ? parseInt(sprintId, 10) : null);
+                    await loadTickets();
+                    renderTicketBoard();
+                    renderTicketListView();
+                    renderTicketPlanView();
+                } catch (e) {
+                    setNotice(e.message, true);
+                }
+            });
         }
 
         function openTicketModal(ticket) {
@@ -6599,6 +7026,7 @@
                 await loadTickets();
                 renderTicketBoard();
                 renderTicketListView();
+                renderTicketPlanView();
                 setNotice("Ticket saved.");
             } catch (error) {
                 setNotice(error.message, true);
@@ -7150,6 +7578,8 @@
         bindRolesHandlers();
         bindAgentsHandlers();
         bindUsersHandlers();
+        bindOrgHandlers();
+        bindProgrammeHandlers();
         bindTeamsHandlers();
         bindTicketsHandlers();
         bindMiscHandlers();

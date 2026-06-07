@@ -741,6 +741,24 @@ CREATE TABLE IF NOT EXISTS user_notifications (
 	FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS org (
+	id INTEGER PRIMARY KEY DEFAULT 1 CHECK(id = 1),
+	name TEXT NOT NULL DEFAULT '',
+	domain TEXT NOT NULL DEFAULT '',
+	description TEXT NOT NULL DEFAULT '',
+	logo_url TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS programmes (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 CREATE INDEX IF NOT EXISTS idx_passkey_credentials_user_id ON passkey_credentials(user_id);
@@ -1693,6 +1711,45 @@ CREATE TABLE user_notifications (
 	// Add sprint_id column to tickets if it doesn't exist yet.
 	if !columnExists(ctx, db, "tickets", "sprint_id") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN sprint_id INTEGER REFERENCES sprints(id)`); err != nil {
+			return err
+		}
+	}
+
+	// Add org table if it doesn't exist yet.
+	if !tableExists(ctx, db, "org") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE org (
+				id INTEGER PRIMARY KEY DEFAULT 1 CHECK(id = 1),
+				name TEXT NOT NULL DEFAULT '',
+				domain TEXT NOT NULL DEFAULT '',
+				description TEXT NOT NULL DEFAULT '',
+				logo_url TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+			)
+		`); err != nil {
+			return err
+		}
+	}
+
+	// Add programmes table if it doesn't exist yet.
+	if !tableExists(ctx, db, "programmes") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE programmes (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+			)
+		`); err != nil {
+			return err
+		}
+	}
+
+	// Add programme_id column to projects if it doesn't exist yet.
+	if !columnExists(ctx, db, "projects", "programme_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN programme_id INTEGER REFERENCES programmes(id)`); err != nil {
 			return err
 		}
 	}

@@ -1093,3 +1093,159 @@ select {
 .ticket-list-row:last-child td {
     border-bottom: none;
 }
+
+.table-wrap { overflow-x: auto; }
+
+.ticket-plan-view {
+    display: flex;
+    gap: 1rem;
+    height: calc(100vh - 160px);
+    overflow: hidden;
+}
+
+.plan-pane {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.plan-pane-header {
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--fg-muted);
+    padding: 0.4rem 0.5rem;
+    position: sticky;
+    top: 0;
+    background: var(--bg, #fff);
+    z-index: 1;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.25rem;
+}
+
+.plan-sprint-group {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--card-bg);
+}
+
+.plan-sprint-group > summary {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    user-select: none;
+    background: var(--surface, #f8f8f8);
+    font-weight: 500;
+    font-size: 0.875rem;
+    list-style: none;
+}
+
+.plan-sprint-group[open] > summary {
+    border-bottom: 1px solid var(--border);
+}
+
+.plan-sprint-group > summary strong {
+    flex: 1;
+}
+
+.plan-drop-zone {
+    min-height: 2.5rem;
+    transition: background 0.15s;
+}
+
+.plan-drop-target > .plan-drop-zone,
+.plan-pane.plan-drop-target {
+    background: var(--accent-muted, #e8f0ff);
+    outline: 2px dashed var(--accent, #4a80f0);
+    outline-offset: -2px;
+}
+
+.plan-ticket-row {
+    padding: 0.4rem 0.75rem;
+    cursor: grab;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    background: var(--card-bg);
+    transition: background 0.1s;
+}
+
+.plan-ticket-row:last-child {
+    border-bottom: none;
+}
+
+.plan-ticket-row:hover {
+    background: var(--hover, #f0f0f0);
+}
+
+.plan-ticket-row.dragging {
+    opacity: 0.35;
+}
+
+.plan-ticket-key {
+    color: var(--fg-muted);
+    font-size: 0.75rem;
+    min-width: 4rem;
+    flex-shrink: 0;
+}
+
+.plan-empty {
+    color: var(--fg-muted);
+    font-size: 0.875rem;
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.admin-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+
+.admin-summary-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.item-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
+}
+
+.item-row:last-child {
+    border-bottom: none;
+}
+
+.item-name {
+    flex: 1;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.item-meta {
+    color: var(--fg-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.btn-sm {
+    padding: 2px 8px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
