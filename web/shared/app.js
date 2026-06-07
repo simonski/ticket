@@ -3246,9 +3246,15 @@
             }
             els.agentList.innerHTML = state.agents.map((agent) => {
                 const active = agent.id === state.selectedAgentID ? " active" : "";
+                const role = agent.agent_role || "";
+                const roleChip = role ? "<span class=\"chip\">" + escapeHTML(role) + "</span> " : "";
+                const statusChip = agent.enabled
+                    ? "<span class=\"chip chip-success\">enabled</span>"
+                    : "<span class=\"chip chip-danger\">disabled</span>";
+                const name = escapeHTML(agent.username || agent.id);
                 return "<div class=\"entity-card" + active + "\" data-agent-id=\"" + escapeHTML(agent.id) + "\">" +
-                    "<h4>" + escapeHTML(agent.id) + "</h4>" +
-                    "<p>" + escapeHTML(agent.enabled ? "enabled" : "disabled") + "</p>" +
+                    "<h4>" + name + "</h4>" +
+                    "<p>" + roleChip + statusChip + "</p>" +
                     "</div>";
             }).join("");
         }
