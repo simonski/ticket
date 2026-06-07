@@ -1263,3 +1263,156 @@ select {
     font-size: 0.78rem;
     white-space: nowrap;
 }
+
+/* ── Agent bar ─────────────────────────────────────────────────────────── */
+.project-agent-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-subtle, var(--bg));
+    flex-wrap: wrap;
+}
+
+.agent-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 50%;
+    background: var(--bg-code, #f0f0f0);
+    border: 2px solid var(--border);
+    cursor: pointer;
+    transition: border-color 0.2s;
+    font-size: 1rem;
+    user-select: none;
+}
+.agent-icon:hover { border-color: var(--accent); }
+.agent-icon[data-status="working"] { border-color: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.18); }
+.agent-icon[data-status="idle"]    { border-color: var(--border); }
+.agent-icon[data-status="soliciting"] { border-color: #3b82f6; }
+.agent-icon[data-status="disabled"],
+.agent-icon[data-status="offline"] { opacity: 0.45; }
+
+.agent-icon-badge {
+    position: absolute;
+    top: -3px; right: -3px;
+    width: 1rem; height: 1rem;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.6rem;
+    font-weight: 700;
+    border: 1.5px solid var(--bg);
+    line-height: 1;
+}
+.agent-badge-working  { background: #22c55e; color: #fff; }
+.agent-badge-idle     { background: #94a3b8; color: #fff; }
+.agent-badge-offline  { background: #ef4444; color: #fff; }
+.agent-badge-question { background: #f59e0b; color: #fff; }
+
+.agent-icon-label {
+    font-size: 0.7rem;
+    color: var(--fg-muted);
+    margin-top: 0.2rem;
+}
+
+.agent-bar-label {
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* ── Agent popup (CSS-driven, shown on click) ───────────────────────────── */
+.agent-popup {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    min-width: 11rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.13);
+    padding: 0.6rem 0.75rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    pointer-events: none;
+}
+.agent-popup::before {
+    content: "";
+    position: absolute;
+    top: -5px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 8px; height: 8px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+}
+.agent-icon.agent-popup-open .agent-popup { display: block; }
+.agent-popup-name {
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    color: var(--fg);
+}
+.agent-popup-row {
+    display: flex;
+    gap: 0.4rem;
+    line-height: 1.6;
+}
+.agent-popup-key {
+    color: var(--fg-muted);
+    min-width: 4.5rem;
+}
+.agent-popup-val { color: var(--fg); }
+.agent-popup-status[data-status="working"] { color: #22c55e; font-weight: 600; }
+.agent-popup-status[data-status="idle"]    { color: var(--fg-muted); }
+.agent-popup-status[data-status="offline"],
+.agent-popup-status[data-status="disabled"] { color: #ef4444; }
+
+/* ── Ticket active-agent indicator ─────────────────────────────────────── */
+.ticket-agent-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem; height: 1.1rem;
+    border-radius: 50%;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    margin-right: 0.25rem;
+}
+.ticket-agent-dot.working  { color: #22c55e; animation: agent-pulse 2s infinite; }
+.ticket-agent-dot.idle     { color: var(--fg-muted); }
+
+@keyframes agent-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.35; }
+}
+
+/* ── Recommend ready banner ─────────────────────────────────────────────── */
+.recommend-ready-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    background: rgba(34,197,94,0.1);
+    border: 1px solid rgba(34,197,94,0.35);
+    border-radius: var(--radius, 6px);
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+}
+.recommend-ready-banner .rr-icon { font-size: 1.1rem; }
+.recommend-ready-banner .rr-msg  { flex: 1; }
+
+/* ── PR notification ────────────────────────────────────────────────────── */
+.notif-pr-ready {
+    border-left: 3px solid #22c55e;
+}
+.notif-pr-ready .notif-icon { color: #22c55e; }

@@ -3418,9 +3418,7 @@
         function agentStatusIcon(agent) {
             const status = agent.status || "idle";
             const role = agent.agent_role || "";
-            // Emoji icon by role
             const roleIcon = role === "refiner" ? "🔍" : role === "developer" ? "💻" : role === "tester" ? "🧪" : "🤖";
-            // Badge content and class
             let badge = "", badgeClass = "";
             if (!agent.enabled) {
                 badge = "✕"; badgeClass = "agent-badge-offline";
@@ -3433,10 +3431,20 @@
             }
             const badgeHTML = badge ? "<span class=\"agent-icon-badge " + badgeClass + "\">" + badge + "</span>" : "";
             const label = escapeHTML(agent.username || agent.user_id || "agent");
-            const title = label + " (" + status + ")" + (role ? " — " + role : "");
             const ticketKey = agent.ticket_key || "";
-            return "<div class=\"agent-icon\" data-status=\"" + status + "\" data-agent-id=\"" + escapeHTML(agent.user_id || "") + "\" title=\"" + escapeHTML(title) + "\"" + (ticketKey ? " data-ticket-key=\"" + escapeHTML(ticketKey) + "\"" : "") + ">" +
-                roleIcon + badgeHTML + "</div>";
+            const ticketLine = ticketKey
+                ? "<div class=\"agent-popup-row\"><span class=\"agent-popup-key\">Ticket</span><span class=\"agent-popup-val\">" + escapeHTML(ticketKey) + "</span></div>"
+                : "";
+            const lastSeen = escapeHTML(agent.last_seen || "never");
+            const popupHTML = "<div class=\"agent-popup\">" +
+                "<div class=\"agent-popup-name\">" + roleIcon + " " + label + "</div>" +
+                "<div class=\"agent-popup-row\"><span class=\"agent-popup-key\">Role</span><span class=\"agent-popup-val\">" + escapeHTML(role || "—") + "</span></div>" +
+                "<div class=\"agent-popup-row\"><span class=\"agent-popup-key\">Status</span><span class=\"agent-popup-val agent-popup-status\" data-status=\"" + escapeHTML(status) + "\">" + escapeHTML(status) + "</span></div>" +
+                ticketLine +
+                "<div class=\"agent-popup-row\"><span class=\"agent-popup-key\">Last seen</span><span class=\"agent-popup-val\">" + lastSeen + "</span></div>" +
+                "</div>";
+            return "<div class=\"agent-icon\" data-status=\"" + status + "\" data-agent-id=\"" + escapeHTML(agent.user_id || "") + "\"" + (ticketKey ? " data-ticket-key=\"" + escapeHTML(ticketKey) + "\"" : "") + ">" +
+                roleIcon + badgeHTML + popupHTML + "</div>";
         }
 
         function renderProjectAgentBar() {
@@ -6724,20 +6732,17 @@
             bar.addEventListener("click", (event) => {
                 const icon = event.target.closest(".agent-icon");
                 if (!icon) return;
-                const agentID = icon.dataset.agentId;
-                const ticketKey = icon.dataset.ticketKey;
-                const statuses = state.projectAgents || [];
-                const s = statuses.find((s) => (s.agent || s).user_id === agentID);
-                if (!s) return;
-                const a = s.agent || s;
-                const lines = [
-                    "Agent: " + (a.username || a.user_id),
-                    "Role: " + (a.agent_role || "—"),
-                    "Status: " + (a.status || "unknown"),
-                    ticketKey ? "Working on: " + ticketKey : "No ticket assigned",
-                    "Last seen: " + (a.last_seen || "never"),
-                ];
-                alert(lines.join("\n"));
+                const isOpen = icon.classList.contains("agent-popup-open");
+                // Close any open popups
+                bar.querySelectorAll(".agent-popup-open").forEach((el) => el.classList.remove("agent-popup-open"));
+                if (!isOpen) {
+                    icon.classList.add("agent-popup-open");
+                }
+                event.stopPropagation();
+            });
+            // Close popup when clicking outside
+            document.addEventListener("click", () => {
+                if (bar) bar.querySelectorAll(".agent-popup-open").forEach((el) => el.classList.remove("agent-popup-open"));
             });
         }
 
