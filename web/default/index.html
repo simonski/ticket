@@ -11,7 +11,10 @@
         if (s === 'dark' || (!s && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             document.documentElement.classList.add('dark');
         }
-        document.documentElement.classList.add('landing-active');
+        try {
+            var _sa = JSON.parse(sessionStorage.getItem('site2.auth') || 'null');
+            if (!_sa || !_sa.token) { document.documentElement.classList.add('landing-active'); }
+        } catch(e) { document.documentElement.classList.add('landing-active'); }
         document.addEventListener('DOMContentLoaded', function () {
             function toggle() {
                 var d = document.documentElement.classList.toggle('dark');
@@ -1124,6 +1127,48 @@
             <button id="dialog-cancel" class="btn btn-ghost" type="button">Cancel</button>
             <button id="dialog-ok" class="btn btn-primary" type="button">OK</button>
         </div>
+    </div>
+</div>
+
+<!-- ── User modal ───────────────────────────────────────────────── -->
+<div id="user-modal" class="modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-box modal-box-sm">
+        <div class="modal-header">
+            <h2 id="user-modal-title">Create user</h2>
+            <button id="close-user-modal" class="icon-btn" type="button" aria-label="Close">&#10005;</button>
+        </div>
+        <form id="user-form" style="padding:16px">
+            <div class="field">
+                <label for="user-modal-username">Username</label>
+                <input id="user-modal-username" name="username" autocomplete="off" required>
+            </div>
+            <div class="field">
+                <label for="user-modal-email">Email</label>
+                <input id="user-modal-email" name="email" type="email" autocomplete="off" placeholder="optional">
+            </div>
+            <div class="field">
+                <label for="user-modal-password">Password</label>
+                <input id="user-modal-password" name="password" type="password" autocomplete="new-password" placeholder="leave blank to generate">
+            </div>
+            <div class="field">
+                <label for="user-modal-role">Role</label>
+                <select id="user-modal-role">
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                </select>
+            </div>
+            <div id="user-modal-status-row" class="field hidden">
+                <label class="checkbox-label"><input id="user-modal-enabled" type="checkbox" checked> Enabled</label>
+            </div>
+            <div id="user-modal-error" class="auth-error"></div>
+            <div class="form-actions" style="padding-top:12px">
+                <button id="user-modal-save" class="btn btn-primary" type="submit">Create user</button>
+                <button id="user-modal-reset-pw" class="btn hidden" type="button">Reset password</button>
+                <button id="user-modal-delete" class="btn btn-danger hidden" type="button">Delete</button>
+            </div>
+            <div id="user-modal-generated-pw" class="auth-error hidden" style="color:var(--fg-2);margin-top:10px"></div>
+        </form>
     </div>
 </div>
 

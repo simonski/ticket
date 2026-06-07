@@ -162,6 +162,20 @@
             adminNav: document.getElementById("admin-nav"),
             userList: document.getElementById("user-list"),
             newUserButton: document.getElementById("new-user-button"),
+            userModal: document.getElementById("user-modal"),
+            userModalTitle: document.getElementById("user-modal-title"),
+            userForm: document.getElementById("user-form"),
+            userModalUsername: document.getElementById("user-modal-username"),
+            userModalEmail: document.getElementById("user-modal-email"),
+            userModalPassword: document.getElementById("user-modal-password"),
+            userModalRole: document.getElementById("user-modal-role"),
+            userModalStatusRow: document.getElementById("user-modal-status-row"),
+            userModalEnabled: document.getElementById("user-modal-enabled"),
+            userModalError: document.getElementById("user-modal-error"),
+            userModalSave: document.getElementById("user-modal-save"),
+            userModalResetPw: document.getElementById("user-modal-reset-pw"),
+            userModalDelete: document.getElementById("user-modal-delete"),
+            userModalGeneratedPw: document.getElementById("user-modal-generated-pw"),
             teamMemberList: document.getElementById("team-member-list"),
             teamInviteUserSelect: document.getElementById("team-invite-user-select"),
             teamInviteRole: document.getElementById("team-invite-role"),
@@ -1476,9 +1490,9 @@
             els.projectMenuList.innerHTML = otherProjects.length
                 ? otherProjects.map((project) => {
                     const label = project.title + " (" + project.prefix + ")" + (defaultProjectID === project.id ? " · default" : "");
-                    return "<button type=\"button\" class=\"menu-item\" data-project-switch=\"" + project.id + "\">" + escapeHTML(label) + "</button>";
+                    return "<button type=\"button\" class=\"dropdown-item\" data-project-switch=\"" + project.id + "\">" + escapeHTML(label) + "</button>";
                 }).join("")
-                : "<div class=\"account-name\">No other projects</div>";
+                : "<div class=\"dropdown-label\">No other projects</div>";
         }
 
         async function selectProject(projectID) {
@@ -5612,6 +5626,107 @@
             });
         }
 
+        function bindUsersHandlers() {
+            let editingUsername = null;
+
+            function openUserModal(user) {
+                editingUsername = user ? user.username : null;
+                els.userModalTitle.textContent = user ? "Edit user: " + user.username : "Create user";
+                els.userModalUsername.value = user ? user.username : "";
+                els.userModalUsername.readOnly = !!user;
+                els.userModalEmail.value = user ? (user.email || "") : "";
+                els.userModalPassword.value = "";
+                els.userModalPassword.placeholder = user ? "leave blank to keep existing" : "leave blank to generate";
+                els.userModalRole.value = user ? (user.role || "user") : "user";
+                els.userModalStatusRow.classList.toggle("hidden", !user);
+                if (user) { els.userModalEnabled.checked = user.enabled !== false; }
+                els.userModalSave.textContent = user ? "Save" : "Create user";
+                els.userModalResetPw.classList.toggle("hidden", !user);
+                els.userModalDelete.classList.toggle("hidden", !user);
+                els.userModalError.textContent = "";
+                els.userModalGeneratedPw.classList.add("hidden");
+                els.userModalGeneratedPw.textContent = "";
+                els.userModal.classList.add("open");
+                els.userModalUsername.focus();
+            }
+
+            function closeUserModal() {
+                els.userModal.classList.remove("open");
+                editingUsername = null;
+            }
+
+            document.getElementById("close-user-modal").addEventListener("click", closeUserModal);
+            els.userModal.querySelector(".modal-backdrop").addEventListener("click", closeUserModal);
+
+            els.newUserButton.addEventListener("click", () => openUserModal(null));
+
+            els.userList.addEventListener("click", (event) => {
+                const card = event.target.closest("[data-user-id]");
+                if (!card) return;
+                const user = (state.users || []).find((u) => String(u.id || u.username) === card.dataset.userId);
+                if (user) openUserModal(user);
+            });
+
+            els.userForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                els.userModalError.textContent = "";
+                const username = els.userModalUsername.value.trim();
+                const email = els.userModalEmail.value.trim();
+                const password = els.userModalPassword.value;
+                const role = els.userModalRole.value;
+                try {
+                    if (!editingUsername) {
+                        const result = await apiClient.createUser(username, password, email, role);
+                        if (result.password) {
+                            els.userModalGeneratedPw.textContent = "Generated password: " + result.password;
+                            els.userModalGeneratedPw.classList.remove("hidden");
+                        }
+                        closeUserModal();
+                    } else {
+                        const current = (state.users || []).find((u) => u.username === editingUsername);
+                        if (current && (current.enabled !== false) !== els.userModalEnabled.checked) {
+                            if (els.userModalEnabled.checked) {
+                                await apiClient.enableUser(editingUsername);
+                            } else {
+                                await apiClient.disableUser(editingUsername);
+                            }
+                        }
+                        closeUserModal();
+                    }
+                    await fetchUsers();
+                    setNotice(editingUsername ? "User updated." : "User created.");
+                } catch (error) {
+                    els.userModalError.textContent = error.message || "An error occurred.";
+                }
+            });
+
+            els.userModalResetPw.addEventListener("click", async () => {
+                if (!editingUsername) return;
+                const pw = await openDialog("New password for " + editingUsername + ":", { confirm: true, input: true, okText: "Reset", cancelText: "Cancel" });
+                if (pw === null || !pw.trim()) return;
+                try {
+                    await apiClient.resetUserPassword(editingUsername, pw.trim());
+                    setNotice("Password reset.");
+                } catch (error) {
+                    els.userModalError.textContent = error.message || "Failed to reset password.";
+                }
+            });
+
+            els.userModalDelete.addEventListener("click", async () => {
+                if (!editingUsername) return;
+                const confirmed = await uiConfirm("Delete user \"" + editingUsername + "\"? This cannot be undone.", "Delete");
+                if (!confirmed) return;
+                try {
+                    await apiClient.deleteUser(editingUsername);
+                    closeUserModal();
+                    await fetchUsers();
+                    setNotice("User deleted.");
+                } catch (error) {
+                    els.userModalError.textContent = error.message || "Failed to delete user.";
+                }
+            });
+        }
+
         function bindTeamsHandlers() {
             els.teamList.addEventListener("click", (event) => {
                 const card = event.target.closest("[data-team-id]");
@@ -6808,6 +6923,7 @@
         bindWorkflowHandlers();
         bindRolesHandlers();
         bindAgentsHandlers();
+        bindUsersHandlers();
         bindTeamsHandlers();
         bindTicketsHandlers();
         bindMiscHandlers();

@@ -976,7 +976,8 @@ select {
 .workflow-settings-panel > summary:hover { color: var(--fg); }
 
 /* ── Document drop ───────────────────────────────────────────────── */
-.doc-drop-zone { position: relative; pointer-events: none; }
+#view-documents { position: relative; }
+.doc-drop-zone { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
 .doc-drop-zone.document-drop-active {
     position: fixed; inset: 0; z-index: 150;
     display: flex; align-items: center; justify-content: center;

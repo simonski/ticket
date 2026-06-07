@@ -335,6 +335,26 @@
             return get("/api/users");
         }
 
+        function createUser(username, password, email, role) {
+            return post("/api/users", { username, password: password || "", email: email || "", role: role || "user" });
+        }
+
+        function enableUser(username) {
+            return post("/api/users/" + encodeURIComponent(username) + "/enable", {});
+        }
+
+        function disableUser(username) {
+            return post("/api/users/" + encodeURIComponent(username) + "/disable", {});
+        }
+
+        function deleteUser(username) {
+            return del("/api/users/" + encodeURIComponent(username));
+        }
+
+        function resetUserPassword(username, password) {
+            return post("/api/users/" + encodeURIComponent(username) + "/reset-password", { password });
+        }
+
         function getTeamMembers(teamID) {
             return get("/api/teams/" + encodeURIComponent(teamID) + "/users");
         }
@@ -382,6 +402,11 @@
             setRegistrationPolicy: setRegistrationPolicy,
             fetchDocumentFile: fetchDocumentFile,
             listUsers: listUsers,
+            createUser: createUser,
+            enableUser: enableUser,
+            disableUser: disableUser,
+            deleteUser: deleteUser,
+            resetUserPassword: resetUserPassword,
             getTeamMembers: getTeamMembers,
             addTeamMember: addTeamMember,
             removeTeamMember: removeTeamMember,
