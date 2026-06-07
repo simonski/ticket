@@ -362,6 +362,10 @@ html.landing-active .app-shell { display: none; }
     flex: 1; min-width: 0;
 }
 
+/* Settings view sub-panels */
+.settings-panel { display: none; flex: 1; min-height: 0; flex-direction: column; }
+.settings-panel.active { display: flex; }
+
 /* ── View header ────────────────────────────────────────────────── */
 .view-header {
     display: flex; align-items: flex-start;

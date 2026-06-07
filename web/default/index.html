@@ -150,102 +150,267 @@
                     <div id="ticket-plan-view" class="ticket-plan-view hidden"></div>
                 </section>
 
-                <!-- Providers -->
-                <section id="view-providers" class="view">
-                    <div class="card">
-                        <div class="card-header">
-                            <h2>AI Providers</h2>
-                            <button id="new-provider-config-button" class="btn btn-primary" type="button">New config</button>
-                        </div>
-                        <div class="form-stack">
-                            <div class="field">
-                                <label for="provider-config-select">Select configuration</label>
-                                <select id="provider-config-select" class="select-sm"></select>
+                <!-- Settings (merged: Organisation, AI Providers, Plans, Config) -->
+                <section id="view-settings" class="view">
+                    <div class="view-header">
+                        <div><h1>Settings</h1><p class="meta">Organisation, AI providers, plans, and system configuration.</p></div>
+                        <div class="view-actions">
+                            <div class="segmented" id="settings-subnav">
+                                <button type="button" class="seg-btn active" data-settings-tab="organisation">Organisation</button>
+                                <button type="button" class="seg-btn" data-settings-tab="providers">AI Providers</button>
+                                <button type="button" class="seg-btn" data-settings-tab="plans">Plans</button>
+                                <button type="button" class="seg-btn" data-settings-tab="settings">Settings</button>
                             </div>
                         </div>
-                        <form id="provider-config-form" class="form-stack">
-                            <div class="field-row">
-                                <div class="field">
-                                    <label for="provider-config-id">ID</label>
-                                    <input id="provider-config-id" placeholder="copilot-default">
-                                </div>
-                                <div class="field">
-                                    <label for="provider-config-label">Label</label>
-                                    <input id="provider-config-label" placeholder="GitHub Copilot default">
-                                </div>
-                            </div>
-                            <div class="field">
-                                <label for="provider-config-model">Default model</label>
-                                <input id="provider-config-model" placeholder="gpt-5.3-codex">
-                            </div>
-                            <div class="field">
-                                <label for="provider-config-url">Base URL</label>
-                                <input id="provider-config-url" placeholder="https://api.example.com">
-                            </div>
-                            <div class="field-row">
-                                <div class="field">
-                                    <label for="provider-config-auth-type">Auth type</label>
-                                    <select id="provider-config-auth-type">
-                                        <option value="bearer">bearer</option>
-                                        <option value="basic">basic</option>
-                                        <option value="none">none</option>
-                                    </select>
-                                </div>
-                                <div class="field">
-                                    <label for="provider-config-requires-url">Requires URL</label>
-                                    <select id="provider-config-requires-url">
-                                        <option value="true">yes</option>
-                                        <option value="false">no</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="field">
-                                <label for="provider-config-api-key">API key</label>
-                                <input id="provider-config-api-key" type="password" placeholder="optional if auth_type=none">
-                            </div>
-                            <div class="field">
-                                <label for="provider-config-models">Available models (one per line)</label>
-                                <textarea id="provider-config-models" placeholder="gpt-5.3-codex&#10;gpt-5"></textarea>
-                            </div>
-                            <div class="form-actions">
-                                <button id="save-provider-config-button" class="btn btn-primary" type="submit">Save config</button>
-                                <button id="delete-provider-config-button" class="btn btn-danger" type="button">Delete config</button>
-                            </div>
-                        </form>
                     </div>
-                </section>
 
-                <!-- Config -->
-                <section id="view-config" class="view split">
-                    <div class="card">
-                        <div class="card-header">
-                            <div>
-                                <h2>Configuration</h2>
-                                <div id="config-settings-summary" class="meta"></div>
-                            </div>
-                            <button id="new-config-setting-button" class="btn btn-primary" type="button">New key</button>
+                    <div class="settings-panel active" data-settings-panel="organisation">
+                        <div class="card" style="max-width:600px">
+                            <div class="card-header"><h2>Details</h2></div>
+                            <form id="org-form" class="form-stack">
+                                <div class="field"><label for="org-name">Name</label><input id="org-name" required></div>
+                                <div class="field"><label for="org-domain">Domain</label><input id="org-domain" placeholder="example.com"></div>
+                                <div class="field"><label for="org-description">Description</label><textarea id="org-description"></textarea></div>
+                                <div class="field"><label for="org-logo">Logo URL</label><input id="org-logo" placeholder="https://..."></div>
+                                <div class="form-actions">
+                                    <button id="save-org-button" class="btn btn-primary" type="submit">Save</button>
+                                </div>
+                            </form>
                         </div>
-                        <div id="config-settings-list" class="item-list"></div>
                     </div>
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 id="config-setting-editor-title">Config editor</h2>
+
+                    <div class="settings-panel" data-settings-panel="providers">
+                        <div class="card">
+                            <div class="card-header">
+                                <h2>AI Providers</h2>
+                                <button id="new-provider-config-button" class="btn btn-primary" type="button">New config</button>
+                            </div>
+                            <div class="form-stack">
+                                <div class="field">
+                                    <label for="provider-config-select">Select configuration</label>
+                                    <select id="provider-config-select" class="select-sm"></select>
+                                </div>
+                            </div>
+                            <form id="provider-config-form" class="form-stack">
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="provider-config-id">ID</label>
+                                        <input id="provider-config-id" placeholder="copilot-default">
+                                    </div>
+                                    <div class="field">
+                                        <label for="provider-config-label">Label</label>
+                                        <input id="provider-config-label" placeholder="GitHub Copilot default">
+                                    </div>
+                                </div>
+                                <div class="field">
+                                    <label for="provider-config-model">Default model</label>
+                                    <input id="provider-config-model" placeholder="gpt-5.3-codex">
+                                </div>
+                                <div class="field">
+                                    <label for="provider-config-url">Base URL</label>
+                                    <input id="provider-config-url" placeholder="https://api.example.com">
+                                </div>
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="provider-config-auth-type">Auth type</label>
+                                        <select id="provider-config-auth-type">
+                                            <option value="bearer">bearer</option>
+                                            <option value="basic">basic</option>
+                                            <option value="none">none</option>
+                                        </select>
+                                    </div>
+                                    <div class="field">
+                                        <label for="provider-config-requires-url">Requires URL</label>
+                                        <select id="provider-config-requires-url">
+                                            <option value="true">yes</option>
+                                            <option value="false">no</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="field">
+                                    <label for="provider-config-api-key">API key</label>
+                                    <input id="provider-config-api-key" type="password" placeholder="optional if auth_type=none">
+                                </div>
+                                <div class="field">
+                                    <label for="provider-config-models">Available models (one per line)</label>
+                                    <textarea id="provider-config-models" placeholder="gpt-5.3-codex&#10;gpt-5"></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button id="save-provider-config-button" class="btn btn-primary" type="submit">Save config</button>
+                                    <button id="delete-provider-config-button" class="btn btn-danger" type="button">Delete config</button>
+                                </div>
+                            </form>
                         </div>
-                        <form id="config-setting-form" class="form-stack">
-                            <div class="field">
-                                <label for="config-setting-key">Key</label>
-                                <input id="config-setting-key" placeholder="registration_enabled" autocomplete="off" required>
+                    </div>
+
+                    <div class="settings-panel" data-settings-panel="plans">
+                        <div class="view-split">
+                            <div class="card">
+                                <div class="card-header">
+                                    <div>
+                                        <h2>Plans</h2>
+                                        <p class="meta">Manage limits and onboarding.</p>
+                                    </div>
+                                    <button id="new-plan-button" class="btn btn-primary" type="button">New plan</button>
+                                </div>
+                                <div id="plan-list" class="item-list"></div>
                             </div>
-                            <div class="field">
-                                <label for="config-setting-value">Value</label>
-                                <textarea id="config-setting-value" class="mono" placeholder="1"></textarea>
+                            <div class="card">
+                                <div id="plan-admin-panel" class="card-section">
+                                    <div class="card-section-head">
+                                        <h3>Onboarding policy</h3>
+                                        <p class="meta">Default plan and registration behavior.</p>
+                                    </div>
+                                    <div class="form-stack" style="padding-top:0">
+                                        <div class="field-row">
+                                            <div class="field">
+                                                <label for="default-plan-select">Default plan</label>
+                                                <select id="default-plan-select"></select>
+                                            </div>
+                                            <div class="field">
+                                                <label for="registration-enabled-select">Registration</label>
+                                                <select id="registration-enabled-select">
+                                                    <option value="true">enabled</option>
+                                                    <option value="false">disabled</option>
+                                                </select>
+                                            </div>
+                                            <div class="field">
+                                                <label for="registration-auto-approve-select">Auto-approve</label>
+                                                <select id="registration-auto-approve-select">
+                                                    <option value="true">enabled</option>
+                                                    <option value="false">manual approval</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="form-actions">
+                                            <button id="save-plan-admin-button" class="btn btn-primary" type="button">Save onboarding policy</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-header">
+                                    <div>
+                                        <h2 id="plan-editor-title">Plan editor</h2>
+                                        <span class="meta">Quotas and automatic membership actions.</span>
+                                    </div>
+                                </div>
+                                <form id="plan-form" class="form-stack">
+                                    <div class="field-row">
+                                        <div class="field">
+                                            <label for="plan-slug">Slug</label>
+                                            <input id="plan-slug" required>
+                                        </div>
+                                        <div class="field">
+                                            <label for="plan-name">Name</label>
+                                            <input id="plan-name" required>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label for="plan-description">Description</label>
+                                        <textarea id="plan-description"></textarea>
+                                    </div>
+                                    <div class="field-row">
+                                        <div class="field">
+                                            <label for="plan-max-projects">Max projects</label>
+                                            <input id="plan-max-projects" type="number" min="0">
+                                        </div>
+                                        <div class="field">
+                                            <label for="plan-max-private-projects">Max private</label>
+                                            <input id="plan-max-private-projects" type="number" min="0">
+                                        </div>
+                                        <div class="field">
+                                            <label for="plan-max-tickets">Max tickets</label>
+                                            <input id="plan-max-tickets" type="number" min="0">
+                                        </div>
+                                    </div>
+                                    <div class="field-row">
+                                        <div class="field">
+                                            <label for="plan-max-tickets-per-project">Per project</label>
+                                            <input id="plan-max-tickets-per-project" type="number" min="0">
+                                        </div>
+                                        <div class="field">
+                                            <label for="plan-max-team-memberships">Memberships</label>
+                                            <input id="plan-max-team-memberships" type="number" min="0">
+                                        </div>
+                                        <div class="field">
+                                            <label for="plan-max-api-calls-per-day">API calls/day</label>
+                                            <input id="plan-max-api-calls-per-day" type="number" min="0">
+                                        </div>
+                                    </div>
+                                    <div class="field-row">
+                                        <div class="field">
+                                            <label for="plan-default-project-alias">Default project</label>
+                                            <select id="plan-default-project-alias">
+                                                <option value="public">public</option>
+                                                <option value="private">private</option>
+                                            </select>
+                                        </div>
+                                        <div class="field">
+                                            <label for="plan-auto-assign-public-team">Auto public team</label>
+                                            <select id="plan-auto-assign-public-team">
+                                                <option value="true">enabled</option>
+                                                <option value="false">disabled</option>
+                                            </select>
+                                        </div>
+                                        <div class="field">
+                                            <label for="plan-auto-create-private-project">Auto private project</label>
+                                            <select id="plan-auto-create-private-project">
+                                                <option value="true">enabled</option>
+                                                <option value="false">disabled</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="field-row">
+                                        <div class="field">
+                                            <label for="plan-auto-create-private-team">Auto private team</label>
+                                            <select id="plan-auto-create-private-team">
+                                                <option value="true">enabled</option>
+                                                <option value="false">disabled</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-actions">
+                                        <button id="save-plan-button" class="btn btn-primary" type="submit">Save plan</button>
+                                        <button id="delete-plan-button" class="btn btn-danger" type="button">Delete</button>
+                                        <button id="reset-plan-button" class="btn btn-ghost" type="button">Clear</button>
+                                    </div>
+                                </form>
                             </div>
-                            <div class="form-actions">
-                                <button id="save-config-setting-button" class="btn btn-primary" type="submit">Save setting</button>
-                                <button id="delete-config-setting-button" class="btn btn-danger" type="button">Delete</button>
-                                <button id="reset-config-setting-button" class="btn btn-ghost" type="button">Clear</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel" data-settings-panel="settings">
+                        <div class="view-split">
+                            <div class="card">
+                                <div class="card-header">
+                                    <div>
+                                        <h2>Configuration</h2>
+                                        <div id="config-settings-summary" class="meta"></div>
+                                    </div>
+                                    <button id="new-config-setting-button" class="btn btn-primary" type="button">New key</button>
+                                </div>
+                                <div id="config-settings-list" class="item-list"></div>
                             </div>
-                        </form>
+                            <div class="card">
+                                <div class="card-header">
+                                    <h2 id="config-setting-editor-title">Config editor</h2>
+                                </div>
+                                <form id="config-setting-form" class="form-stack">
+                                    <div class="field">
+                                        <label for="config-setting-key">Key</label>
+                                        <input id="config-setting-key" placeholder="registration_enabled" autocomplete="off" required>
+                                    </div>
+                                    <div class="field">
+                                        <label for="config-setting-value">Value</label>
+                                        <textarea id="config-setting-value" class="mono" placeholder="1"></textarea>
+                                    </div>
+                                    <div class="form-actions">
+                                        <button id="save-config-setting-button" class="btn btn-primary" type="submit">Save setting</button>
+                                        <button id="delete-config-setting-button" class="btn btn-danger" type="button">Delete</button>
+                                        <button id="reset-config-setting-button" class="btn btn-ghost" type="button">Clear</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -468,140 +633,6 @@
                     </div><!-- /view-split -->
                 </section>
 
-                <!-- Plans -->
-                <section id="view-plans" class="view split">
-                    <div class="card">
-                        <div class="card-header">
-                            <div>
-                                <h2>Plans</h2>
-                                <p class="meta">Manage limits and onboarding.</p>
-                            </div>
-                            <button id="new-plan-button" class="btn btn-primary" type="button">New plan</button>
-                        </div>
-                        <div id="plan-list" class="item-list"></div>
-                    </div>
-                    <div class="card">
-                        <div id="plan-admin-panel" class="card-section">
-                            <div class="card-section-head">
-                                <h3>Onboarding policy</h3>
-                                <p class="meta">Default plan and registration behavior.</p>
-                            </div>
-                            <div class="form-stack" style="padding-top:0">
-                                <div class="field-row">
-                                    <div class="field">
-                                        <label for="default-plan-select">Default plan</label>
-                                        <select id="default-plan-select"></select>
-                                    </div>
-                                    <div class="field">
-                                        <label for="registration-enabled-select">Registration</label>
-                                        <select id="registration-enabled-select">
-                                            <option value="true">enabled</option>
-                                            <option value="false">disabled</option>
-                                        </select>
-                                    </div>
-                                    <div class="field">
-                                        <label for="registration-auto-approve-select">Auto-approve</label>
-                                        <select id="registration-auto-approve-select">
-                                            <option value="true">enabled</option>
-                                            <option value="false">manual approval</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="form-actions">
-                                    <button id="save-plan-admin-button" class="btn btn-primary" type="button">Save onboarding policy</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card-header">
-                            <div>
-                                <h2 id="plan-editor-title">Plan editor</h2>
-                                <span class="meta">Quotas and automatic membership actions.</span>
-                            </div>
-                        </div>
-                        <form id="plan-form" class="form-stack">
-                            <div class="field-row">
-                                <div class="field">
-                                    <label for="plan-slug">Slug</label>
-                                    <input id="plan-slug" required>
-                                </div>
-                                <div class="field">
-                                    <label for="plan-name">Name</label>
-                                    <input id="plan-name" required>
-                                </div>
-                            </div>
-                            <div class="field">
-                                <label for="plan-description">Description</label>
-                                <textarea id="plan-description"></textarea>
-                            </div>
-                            <div class="field-row">
-                                <div class="field">
-                                    <label for="plan-max-projects">Max projects</label>
-                                    <input id="plan-max-projects" type="number" min="0">
-                                </div>
-                                <div class="field">
-                                    <label for="plan-max-private-projects">Max private</label>
-                                    <input id="plan-max-private-projects" type="number" min="0">
-                                </div>
-                                <div class="field">
-                                    <label for="plan-max-tickets">Max tickets</label>
-                                    <input id="plan-max-tickets" type="number" min="0">
-                                </div>
-                            </div>
-                            <div class="field-row">
-                                <div class="field">
-                                    <label for="plan-max-tickets-per-project">Per project</label>
-                                    <input id="plan-max-tickets-per-project" type="number" min="0">
-                                </div>
-                                <div class="field">
-                                    <label for="plan-max-team-memberships">Memberships</label>
-                                    <input id="plan-max-team-memberships" type="number" min="0">
-                                </div>
-                                <div class="field">
-                                    <label for="plan-max-api-calls-per-day">API calls/day</label>
-                                    <input id="plan-max-api-calls-per-day" type="number" min="0">
-                                </div>
-                            </div>
-                            <div class="field-row">
-                                <div class="field">
-                                    <label for="plan-default-project-alias">Default project</label>
-                                    <select id="plan-default-project-alias">
-                                        <option value="public">public</option>
-                                        <option value="private">private</option>
-                                    </select>
-                                </div>
-                                <div class="field">
-                                    <label for="plan-auto-assign-public-team">Auto public team</label>
-                                    <select id="plan-auto-assign-public-team">
-                                        <option value="true">enabled</option>
-                                        <option value="false">disabled</option>
-                                    </select>
-                                </div>
-                                <div class="field">
-                                    <label for="plan-auto-create-private-project">Auto private project</label>
-                                    <select id="plan-auto-create-private-project">
-                                        <option value="true">enabled</option>
-                                        <option value="false">disabled</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="field-row">
-                                <div class="field">
-                                    <label for="plan-auto-create-private-team">Auto private team</label>
-                                    <select id="plan-auto-create-private-team">
-                                        <option value="true">enabled</option>
-                                        <option value="false">disabled</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-actions">
-                                <button id="save-plan-button" class="btn btn-primary" type="submit">Save plan</button>
-                                <button id="delete-plan-button" class="btn btn-danger" type="button">Delete</button>
-                                <button id="reset-plan-button" class="btn btn-ghost" type="button">Clear</button>
-                            </div>
-                        </form>
-                    </div>
-                </section>
-
                 <!-- Workflows -->
                 <section id="view-workflows" class="view">
                     <div class="view-header">
@@ -702,25 +733,6 @@
                         <div><h1>Summary</h1><p class="meta">System overview for administrators.</p></div>
                     </div>
                     <div id="admin-summary-content" class="admin-summary-grid"></div>
-                </section>
-
-                <!-- Organisation (admin only) -->
-                <section id="view-org" class="view">
-                    <div class="view-header">
-                        <div><h1>Organisation</h1><p class="meta">Company identity and settings.</p></div>
-                    </div>
-                    <div class="card" style="max-width:600px">
-                        <div class="card-header"><h2>Details</h2></div>
-                        <form id="org-form" class="form-stack">
-                            <div class="field"><label for="org-name">Name</label><input id="org-name" required></div>
-                            <div class="field"><label for="org-domain">Domain</label><input id="org-domain" placeholder="example.com"></div>
-                            <div class="field"><label for="org-description">Description</label><textarea id="org-description"></textarea></div>
-                            <div class="field"><label for="org-logo">Logo URL</label><input id="org-logo" placeholder="https://..."></div>
-                            <div class="form-actions">
-                                <button id="save-org-button" class="btn btn-primary" type="submit">Save</button>
-                            </div>
-                        </form>
-                    </div>
                 </section>
 
                 <!-- Programmes (admin only) -->

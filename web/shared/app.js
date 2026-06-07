@@ -107,11 +107,8 @@
             { view: "workflows", label: "Workflows", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
             { view: "roles", label: "Roles", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8a3 3 0 1 0 0.001 0\"></path><path d=\"M17 16a3 3 0 1 0 0.001 0\"></path><path d=\"M9.5 10.5l5 3\"></path></svg>" },
             { view: "teams", label: "Teams", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 11a2.5 2.5 0 1 0 0.001 0\"></path><path d=\"M16 9a2 2 0 1 0 0.001 0\"></path><path d=\"M4 19a4 4 0 0 1 8 0\"></path><path d=\"M14 19a3 3 0 0 1 6 0\"></path></svg>" },
-            { view: "org", label: "Organisation", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 21h18\"/><path d=\"M5 21V7l7-4 7 4v14\"/><path d=\"M9 21v-4h6v4\"/></svg>" },
             { view: "programmes", label: "Programmes", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 3h7v7H3z\"/><path d=\"M14 3h7v7h-7z\"/><path d=\"M3 14h7v7H3z\"/><path d=\"M14 14h7v7h-7z\"/></svg>" },
-            { view: "config", label: "Config", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M12 17v4\"></path><path d=\"M4.9 6.3l2.8 2\"></path><path d=\"M16.3 15.7l2.8 2\"></path><path d=\"M3 12h4\"></path><path d=\"M17 12h4\"></path><path d=\"M4.9 17.7l2.8-2\"></path><path d=\"M16.3 8.3l2.8-2\"></path><circle cx=\"12\" cy=\"12\" r=\"3.5\"></circle></svg>" },
-            { view: "providers", label: "Providers", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2l3 3-3 3-3-3z\"></path><path d=\"M4 11l3-3 3 3-3 3z\"></path><path d=\"M20 11l-3-3-3 3 3 3z\"></path><path d=\"M12 20l-3-3 3-3 3 3z\"></path></svg>" },
-            { view: "plans", label: "Plans", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 4h12v16H6z\"></path><path d=\"M9 8h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 16h4\"></path></svg>" },
+            { view: "settings", label: "Settings", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M12 17v4\"></path><path d=\"M4.9 6.3l2.8 2\"></path><path d=\"M16.3 15.7l2.8 2\"></path><path d=\"M3 12h4\"></path><path d=\"M17 12h4\"></path><path d=\"M4.9 17.7l2.8-2\"></path><path d=\"M16.3 8.3l2.8-2\"></path><circle cx=\"12\" cy=\"12\" r=\"3.5\"></circle></svg>" },
             { view: "agents", label: "Agents", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M8 8a4 4 0 1 1 8 0\"></path><path d=\"M7 13h10v7H7z\"></path></svg>" },
             { view: "users", label: "Users", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"></path><circle cx=\"9\" cy=\"7\" r=\"4\"></circle><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"></path><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"></path></svg>" },
             { view: "admin-summary", label: "Summary", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\"/></svg>" },
@@ -1394,6 +1391,13 @@
                     switchView(button.dataset.view);
                 });
             }
+            const settingsSubnav = document.getElementById("settings-subnav");
+            if (settingsSubnav) {
+                settingsSubnav.addEventListener("click", (event) => {
+                    const btn = event.target.closest("[data-settings-tab]");
+                    if (btn) switchSettingsTab(btn.dataset.settingsTab);
+                });
+            }
             els.mainNav.addEventListener("dragstart", (event) => {
                 const button = event.target.closest("button[data-view]");
                 if (!button) {
@@ -1475,6 +1479,22 @@
             if (viewName === "admin-summary") {
                 renderAdminSummary();
             }
+            if (viewName === "settings") {
+                let tab = "organisation";
+                try { tab = localStorage.getItem("site2.settingsTab") || "organisation"; } catch (e) { /* ignore */ }
+                switchSettingsTab(tab);
+            }
+        }
+
+        function switchSettingsTab(tabName) {
+            const name = String(tabName || "organisation");
+            document.querySelectorAll("#settings-subnav .seg-btn").forEach((btn) => {
+                btn.classList.toggle("active", btn.dataset.settingsTab === name);
+            });
+            document.querySelectorAll("#view-settings .settings-panel").forEach((panel) => {
+                panel.classList.toggle("active", panel.dataset.settingsPanel === name);
+            });
+            try { localStorage.setItem("site2.settingsTab", name); } catch (e) { /* ignore */ }
         }
 
         function programmeLabelForProject(project) {
@@ -2459,7 +2479,7 @@
                 return;
             }
             const admin = isAdmin();
-            const configView = document.getElementById("view-config");
+            const configView = document.getElementById("view-settings");
             if (configView) {
                 configView.classList.toggle("hidden", !admin);
             }
@@ -6968,7 +6988,7 @@
             if (els.accountOpenConfigButton) {
                 els.accountOpenConfigButton.addEventListener("click", () => {
                     closeAccountModal();
-                    switchView("config");
+                    switchView("settings");
                 });
             }
 
