@@ -3456,21 +3456,26 @@
             if (!els.boardSprintSelect) {
                 return;
             }
-            const sprints = state.sprints || [];
+            const allSprints = state.sprints || [];
             const sel = state.selectedSprintID;
-            const options = [
-                "<option value=\"\">All</option>",
-                "<option value=\"backlog\">Backlog</option>",
-            ].concat(sprints.map((s) => {
-                const label = "Sprint " + s.number + (s.title ? ": " + s.title : "") + " (" + s.stage + ")";
+
+            // Order: active first, then closed descending by number, then design/future
+            const active = allSprints.filter((s) => s.stage === "active");
+            const closed = allSprints.filter((s) => s.stage === "closed").slice().sort((a, b) => b.number - a.number);
+            const future = allSprints.filter((s) => s.stage !== "active" && s.stage !== "closed");
+            const ordered = [...active, ...closed, ...future];
+
+            const sprintOption = (s) => {
+                const label = "Sprint " + s.number + (s.title ? ": " + s.title : "");
                 const selected = String(s.id) === String(sel) ? " selected" : "";
                 return "<option value=\"" + s.id + "\"" + selected + ">" + escapeHTML(label) + "</option>";
-            }));
-            if (sel === "") {
-                options[0] = "<option value=\"\" selected>All</option>";
-            } else if (sel === "backlog") {
-                options[1] = "<option value=\"backlog\" selected>Backlog</option>";
-            }
+            };
+
+            const backlogSelected = sel === "backlog" ? " selected" : "";
+            const options = [
+                "<option value=\"backlog\"" + backlogSelected + ">Backlog</option>",
+            ].concat(ordered.map(sprintOption));
+
             els.boardSprintSelect.innerHTML = options.join("");
         }
 

@@ -705,58 +705,51 @@ func runDemo(args []string) error {
 			var stage, state string
 			isBacklog := false
 			if targetSprintGlobalIdx == activeSprintIdx {
-				// Sprint 5 (active): send every other ticket to the backlog instead.
+				// Active sprint: half go to the backlog, half into the sprint.
 				if sprint5AssignCount%2 == 1 {
 					isBacklog = true
-					stage, state = "design", "idle" // not yet started but designed
+					switch localIdx % 3 {
+					case 0:
+						stage, state = store.StageIdea, store.StateIdle
+					case 1:
+						stage, state = store.StageRefine, store.StateIdle
+					default:
+						stage, state = store.StageReady, store.StateIdle
+					}
 				} else {
-					// In-sprint: tickets are past the backlog (ready for dev)
+					// In active sprint: ready → develop → complete/reject
 					switch localIdx % 10 {
 					case 0, 1:
-						stage, state = "design", "idle"
+						stage, state = store.StageReady, store.StateIdle
 					case 2, 3, 4:
-						stage, state = "develop", "idle"
-					case 5, 6, 7:
-						stage, state = "develop", "active"
-					case 8:
-						stage, state = "review", "idle"
+						stage, state = store.StageDevelop, store.StateIdle
+					case 5, 6:
+						stage, state = store.StageDevelop, store.StateActive
+					case 7, 8:
+						stage, state = store.StageComplete, store.StateSuccess
 					default:
-						stage, state = "review", "active"
+						stage, state = store.StageReject, store.StateSuccess
 					}
 				}
 				sprint5AssignCount++
 			} else if targetSprintGlobalIdx > activeSprintIdx {
-				// Future design sprint: tickets are in design stage with various states
-				stage = "design"
+				// Future sprint: put tickets in backlog (idea/refine/ready)
+				isBacklog = true
 				switch localIdx % 3 {
 				case 0:
-					state = "idle"
+					stage, state = store.StageIdea, store.StateIdle
 				case 1:
-					state = "active"
+					stage, state = store.StageRefine, store.StateIdle
 				default:
-					state = "idle"
-				}
-				// ~30% have no assignee yet
-				if localIdx%3 == 2 {
-					assignee = ""
+					stage, state = store.StageReady, store.StateIdle
 				}
 			} else {
-				// Past (closed) sprint: most tickets done, some in various stages
-				switch localIdx % 20 {
-				case 0, 1, 2:
-					stage, state = store.StageReady, "idle"
-				case 3, 4, 5:
-					stage, state = "design", "idle"
-				case 6, 7, 8, 9:
-					stage, state = "develop", "idle"
-				case 10, 11, 12, 13:
-					stage, state = "develop", "active"
-				case 14, 15, 16:
-					stage, state = "review", "idle"
-				case 17:
-					stage, state = "review", "active"
-				default: // 18, 19 — 10% done
-					stage, state = "done", "success"
+				// Past (closed) sprint: 80% complete, 20% rejected
+				switch localIdx % 10 {
+				case 0, 1, 2, 3, 4, 5, 6, 7:
+					stage, state = store.StageComplete, store.StateSuccess
+				default:
+					stage, state = store.StageReject, store.StateSuccess
 				}
 			}
 
@@ -833,8 +826,8 @@ func runDemo(args []string) error {
 			halfDur := dur / 2
 			createOffset := time.Duration(rand.Int63n(int64(halfDur)))
 			createdAt = sqlTS(start.Add(createOffset))
-			if tm.stage == "done" && si < activeSprintIdx {
-				// Completed in the second half of the sprint
+			if (tm.stage == store.StageComplete || tm.stage == store.StageReject) && si < activeSprintIdx {
+				// Completed/rejected in the second half of the sprint
 				doneOffset := halfDur + time.Duration(rand.Int63n(int64(halfDur)))
 				updatedAt = sqlTS(start.Add(doneOffset))
 			} else if si == activeSprintIdx {
