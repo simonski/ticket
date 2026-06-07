@@ -305,6 +305,8 @@ func run(args []string) error {
 		return runTypedTicketCreate("bug", trimmedArgs[1:])
 	case "epic":
 		return runEpic(trimmedArgs[1:])
+	case "demo":
+		return runDemo(trimmedArgs[1:])
 	default:
 		return fmt.Errorf("no such command %q", trimmedArgs[0])
 	}

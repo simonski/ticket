@@ -1,0 +1,766 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"math/rand"
+	"os"
+	"strings"
+
+	"github.com/simonski/ticket/internal/store"
+)
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+// --- Content pools ---
+
+var frontendTitles = []string{
+	"Implement responsive task list with virtual scrolling",
+	"Add keyboard shortcut system for power users",
+	"Fix task card hover state regression on Safari 17",
+	"Build drag-and-drop task reordering with animation",
+	"Implement optimistic UI updates for task completion",
+	"Design and build empty state illustrations",
+	"Add task priority colour indicators to board view",
+	"Implement infinite scroll for projects with large task lists",
+	"Fix focus management in task creation modal",
+	"Add markdown rendering in task description fields",
+	"Build real-time task search with debounced filtering",
+	"Implement task due date picker with timezone support",
+	"Fix animation jank when toggling task status",
+	"Add unread notification badge to sidebar",
+	"Build bulk action toolbar for multi-selected tasks",
+	"Implement user avatar stack for task assignees",
+	"Fix CSS grid layout regression introduced in last sprint",
+	"Add loading skeleton screens for initial page render",
+	"Build notification centre with read/unread management",
+	"Implement task archive workflow with undo action",
+	"Add project colour picker to project settings",
+	"Fix memory leak in WebSocket reconnection handler",
+	"Build onboarding tour for new user registration",
+	"Implement task template library for common workflows",
+	"Add export to CSV and JSON from task list view",
+	"Fix contrast ratio failures flagged in accessibility audit",
+	"Build task comment threading with inline replies",
+	"Implement mention autocomplete in comment editor",
+	"Add task watcher subscription system",
+	"Fix tooltip positioning in compact board view",
+}
+
+var backendTitles = []string{
+	"Implement paginated task list endpoint with cursor support",
+	"Add JWT refresh token rotation with sliding expiry",
+	"Build webhook delivery system with retry and dead-letter queue",
+	"Implement task assignment notification emails via SendGrid",
+	"Add PostgreSQL full-text search index for tasks",
+	"Fix N+1 query in project members list endpoint",
+	"Implement per-user API rate limiting with token bucket",
+	"Build task export endpoint supporting CSV and JSON",
+	"Add soft delete and restore for tasks and projects",
+	"Implement task activity audit log with pagination",
+	"Fix race condition in concurrent task status updates",
+	"Add input sanitisation middleware for all write endpoints",
+	"Build batch task update endpoint for bulk status changes",
+	"Implement GraphQL schema alongside existing REST API",
+	"Add GDPR data export endpoint for user account data",
+	"Build project statistics aggregation with caching",
+	"Fix memory leak in long-running WebSocket goroutines",
+	"Implement task comment system with threading support",
+	"Add API versioning with header-based negotiation",
+	"Build task recurrence engine for repeating tasks",
+	"Implement OAuth2 provider integration (Google, GitHub)",
+	"Add multi-tenancy isolation at the database query layer",
+	"Fix timezone handling in due date serialisation",
+	"Build event sourcing log for task state transitions",
+	"Implement task dependency graph with cycle detection",
+	"Add structured logging with trace ID propagation",
+	"Build idempotency key support for POST endpoints",
+	"Implement server-sent events for lightweight real-time updates",
+	"Fix connection pool exhaustion under high concurrency load",
+	"Add request signing for outbound webhook calls",
+}
+
+var infraTitles = []string{
+	"Set up GitHub Actions CI pipeline with matrix build",
+	"Configure pgBouncer connection pooling in front of PostgreSQL",
+	"Add Redis cluster for session cache and rate limit counters",
+	"Write Kubernetes deployment manifests for all services",
+	"Configure automated database backup to S3 with point-in-time restore",
+	"Add Prometheus metrics endpoint and scrape config",
+	"Build Grafana dashboard for API latency percentiles",
+	"Configure automated SSL certificate renewal via cert-manager",
+	"Optimise Docker multi-stage build to reduce image size by 60%",
+	"Set up staging environment with anonymised production dataset",
+	"Configure Loki log aggregation with Grafana dashboard",
+	"Implement blue-green deployment strategy with traffic shifting",
+	"Document database schema migration rollback procedures",
+	"Configure CloudFront CDN for static asset delivery",
+	"Set up PagerDuty alerting for error rate threshold breaches",
+	"Add k6 load test suite to CI pipeline",
+	"Configure HashiCorp Vault for secrets management",
+	"Set up Renovate for automated dependency updates",
+	"Write Terraform modules for VPC, RDS, and ECS infrastructure",
+	"Add OpenTelemetry distributed tracing across all services",
+	"Configure horizontal pod autoscaling based on request rate",
+	"Write runbook for on-call incident response procedures",
+	"Set up chaos engineering tests with Chaos Monkey",
+	"Add SBOM generation to release pipeline",
+	"Configure network policies to enforce service mesh isolation",
+	"Implement GitOps workflow with ArgoCD",
+	"Add database query analyser job for slow query detection",
+	"Configure multi-region failover with Route 53 health checks",
+	"Set up security scanning with Trivy in CI",
+	"Document disaster recovery procedure with RTO/RPO targets",
+}
+
+var bugTitles = []string{
+	"Tasks marked complete reappear after browser refresh",
+	"API returns 500 on task creation when title contains emoji",
+	"Drag and drop breaks when more than 50 tasks are visible",
+	"Notification emails sent with wrong timezone offset",
+	"Search returns stale results after task is deleted",
+	"Rate limit headers missing from OPTIONS preflight responses",
+	"Mobile keyboard pushes task modal off screen on iOS 17",
+	"Database connection leaks after failed authentication attempt",
+	"Task sort order resets to zero after project rename",
+	"Webhook delivery silently drops payloads over 64KB",
+	"Dark mode colours inverted on task priority chips",
+	"Sprint dates not preserved after daylight saving change",
+	"Bulk delete removes tasks in wrong project when filter active",
+	"WebSocket disconnects after exactly 30 minutes idle",
+	"Avatar images not loading behind corporate proxy",
+	"Team member removal does not revoke active API tokens",
+	"Export CSV contains duplicate rows for tasks with multiple labels",
+	"Password reset link expires too quickly on slow email clients",
+	"Board view performance degrades with more than 200 open tasks",
+	"Comment timestamps show UTC instead of user local time",
+}
+
+var choreTitles = []string{
+	"Upgrade React to v19 and fix breaking API changes",
+	"Replace deprecated crypto.createHash calls in token generator",
+	"Migrate ESLint config from .eslintrc to flat config format",
+	"Remove unused feature flags from configuration system",
+	"Update Go dependencies to latest stable versions",
+	"Refactor task store to use repository pattern",
+	"Add missing OpenAPI documentation for webhook endpoints",
+	"Replace polling with WebSocket in dashboard stats widget",
+	"Clean up dead code paths in task state machine",
+	"Standardise error response format across all API endpoints",
+}
+
+var descTemplates = []string{
+	"This %s needs to be addressed as part of the ongoing %s work. The current implementation has several shortcomings that have been flagged by the team during the last sprint review. We should prioritise this to unblock downstream work.",
+	"Following the technical design session on %s, we agreed to implement this as a standalone %s. Acceptance criteria have been defined in collaboration with the product team and QA. See linked Figma designs for visual reference.",
+	"Reported by multiple users during beta testing of the %s feature. Reproducible on %s consistently. Root cause has been narrowed down but full fix requires refactoring the affected module.",
+	"Part of the %s epic. This subtask covers the %s layer implementation. Depends on the authentication work landing first — coordinate with the relevant assignee before starting.",
+	"Technical debt item identified during the %s architecture review. Leaving this unresolved increases the risk of production incidents. Estimated effort is low but the impact on system stability is high.",
+	"Spike to investigate the best approach for %s. We need to evaluate at least two options and document the trade-offs before committing to an implementation. Output should be a short design doc.",
+	"Customer-reported issue affecting all users on the %s plan. Priority raised after three separate support tickets this week. Needs a hotfix candidate before the next release window.",
+	"Performance regression introduced in the %s refactor last sprint. The %s endpoint is now 3× slower under load. Profiling data attached in the linked document.",
+}
+
+var commentTemplates = []string{
+	"Took a look at this — the issue is in the %s layer. Will have a fix up for review by end of day.",
+	"Left a few comments on the draft PR. Main concern is around error handling for the edge case where the %s is nil.",
+	"QA has verified the fix on staging. No regressions found in the related test suite. Good to go for the next release.",
+	"Blocked on the %s dependency — reaching out to that team now. Should have an update by tomorrow.",
+	"Design review complete. The approach looks solid. One suggestion: consider extracting the %s logic into a separate helper to make testing easier.",
+	"This is now merged and deployed to staging. Monitoring dashboards look clean. Will promote to production during Thursday's release window.",
+	"Reproduced locally. The failure only happens when %s is enabled. Adding a regression test now.",
+	"Updated the PR based on review feedback. Changed the approach to use %s instead — this avoids the locking issues we saw in the previous attempt.",
+	"Sync'd with the product team — they're okay with the simplified scope for now. We can revisit the full feature set in the next sprint.",
+	"Added comprehensive unit tests covering the happy path and three edge cases. Coverage for this module is now at 87%%.",
+	"Performance numbers after the fix: p95 latency down from 340ms to 42ms. The bottleneck was exactly where we suspected.",
+	"Flagging a scope creep risk here — the original estimate did not account for the %s requirement. May need to split into a follow-up ticket.",
+}
+
+var commentFillins = []string{
+	"authentication", "data access", "validation", "caching", "rendering",
+	"API", "database", "frontend", "backend", "storage",
+	"session handling", "rate limiting", "WebSocket", "notification",
+	"permission", "migration", "deployment", "monitoring", "logging",
+}
+
+// persona pool
+type persona struct {
+	username    string
+	email       string
+	displayName string
+}
+
+var personaPool = []persona{
+	{"sarah.chen", "sarah.chen@example.com", "Sarah Chen (Lead Engineer)"},
+	{"marcus.wright", "marcus.wright@example.com", "Marcus Wright (Backend)"},
+	{"priya.patel", "priya.patel@example.com", "Priya Patel (Frontend)"},
+	{"james.okoye", "james.okoye@example.com", "James Okoye (DevOps)"},
+	{"lisa.nakamura", "lisa.nakamura@example.com", "Lisa Nakamura (QA Lead)"},
+	{"tom.harrison", "tom.harrison@example.com", "Tom Harrison (Product)"},
+	{"elena.vasquez", "elena.vasquez@example.com", "Elena Vasquez (Full Stack)"},
+	{"ryan.cooper", "ryan.cooper@example.com", "Ryan Cooper (Junior Dev)"},
+}
+
+type projectDef struct {
+	prefix      string
+	title       string
+	description string
+	pool        string // "frontend", "backend", "infra", "mixed"
+}
+
+var projectPool = []projectDef{
+	{
+		prefix:      "TDA",
+		title:       "TodoApp Web",
+		description: "React/TypeScript frontend application providing the user interface for the TodoApp platform. Includes task management, project views, real-time updates, and responsive design for mobile and desktop.",
+		pool:        "frontend",
+	},
+	{
+		prefix:      "API",
+		title:       "TodoApp API",
+		description: "Go-based REST API server powering the TodoApp backend. Handles authentication, task CRUD operations, team management, webhook delivery, and real-time notifications via WebSockets.",
+		pool:        "backend",
+	},
+	{
+		prefix:      "INF",
+		title:       "TodoApp Infrastructure",
+		description: "Kubernetes, CI/CD pipelines, PostgreSQL, Redis, and observability stack. Manages deployment, scaling, secrets, backups, and monitoring for the entire TodoApp platform.",
+		pool:        "infra",
+	},
+	{
+		prefix:      "MOB",
+		title:       "TodoApp Mobile",
+		description: "React Native mobile application for iOS and Android. Shares business logic with the web frontend while providing native navigation, push notifications, and offline support.",
+		pool:        "frontend",
+	},
+	{
+		prefix:      "SDK",
+		title:       "TodoApp SDK",
+		description: "TypeScript client SDK for third-party integrations. Provides typed wrappers around the REST API, webhook handling utilities, and example integrations.",
+		pool:        "frontend",
+	},
+}
+
+func runDemo(args []string) error {
+	fs := flag.NewFlagSet("demo", flag.ContinueOnError)
+	dbPath := fs.String("db", "./demo.db", "database file path")
+	n := fs.Int("n", 500, "approximate total item count")
+	force := fs.Bool("force", false, "delete existing database before seeding")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Scale model
+	numTickets := int(float64(*n) * 0.65)
+	numComments := int(float64(*n) * 0.25)
+	numTimeEntries := int(float64(*n) * 0.10)
+	numUsers := clamp(*n/50, 5, 100)
+	numTeams := clamp(*n/200, 2, 30)
+	numProjects := clamp(*n/200, 2, 20)
+	numSprintsPerProj := clamp(numTickets/(numProjects*30), 3, 60)
+
+	fmt.Printf("Creating demo database at %s (~%d items)...\n", *dbPath, *n)
+
+	// Handle existing DB
+	if *dbPath != ":memory:" {
+		if _, err := os.Stat(*dbPath); err == nil {
+			if !*force {
+				return fmt.Errorf("database already exists at %s (use --force to overwrite)", *dbPath)
+			}
+			if err := os.Remove(*dbPath); err != nil {
+				return fmt.Errorf("removing existing database: %w", err)
+			}
+		}
+	}
+
+	// Initialize DB
+	if err := store.Init(*dbPath, "admin", "Admin123456"); err != nil {
+		return fmt.Errorf("initializing database: %w", err)
+	}
+
+	db, err := store.Open(*dbPath)
+	if err != nil {
+		return fmt.Errorf("opening database: %w", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+
+	fmt.Println("  ✓ Initialized database")
+
+	// Get admin user
+	adminUser, err := store.GetUserByUsername(ctx, db, "admin")
+	if err != nil {
+		return fmt.Errorf("getting admin user: %w", err)
+	}
+
+	// Create workflow
+	wf, err := store.CreateWorkflow(ctx, db, "Product Development",
+		"Standard software development lifecycle from discovery to delivery")
+	if err != nil {
+		return fmt.Errorf("creating workflow: %w", err)
+	}
+
+	stages := []struct {
+		name string
+		desc string
+	}{
+		{"discovery", "Explore the problem, write user stories, define acceptance criteria"},
+		{"design", "Architect the solution, create technical design documents"},
+		{"develop", "Implement the feature or fix"},
+		{"review", "Code review, QA testing, and stakeholder sign-off"},
+		{"done", "Shipped to production"},
+	}
+
+	createdStages := make([]store.WorkflowStage, 0, len(stages))
+	for i, s := range stages {
+		ws, err := store.AddWorkflowStage(ctx, db, wf.ID, s.name, s.desc, "", i)
+		if err != nil {
+			return fmt.Errorf("adding workflow stage %s: %w", s.name, err)
+		}
+		createdStages = append(createdStages, ws)
+	}
+
+	// Add linear transitions: discovery→design, design→develop, develop→review, review→done
+	for i := 0; i < len(createdStages)-1; i++ {
+		if err := store.SetWorkflowStageTransitions(ctx, db, wf.ID, createdStages[i].ID, []int64{createdStages[i+1].ID}); err != nil {
+			return fmt.Errorf("setting workflow transitions: %w", err)
+		}
+	}
+
+	wfFull, err := store.GetWorkflow(ctx, db, wf.ID)
+	if err != nil {
+		return fmt.Errorf("getting workflow: %w", err)
+	}
+	_ = wfFull
+
+	fmt.Printf("  ✓ Created workflow %q (%d stages)\n", wf.Name, len(stages))
+
+	// Create users
+	users := make([]store.User, 0, numUsers)
+
+	// Create persona users (up to 8 from the pool, then synthetic)
+	for i := 0; i < numUsers; i++ {
+		var u store.User
+		var err error
+		if i < len(personaPool) {
+			p := personaPool[i]
+			u, err = store.CreateUserWithParams(ctx, db, store.UserCreateParams{
+				Username:               p.username,
+				Email:                  p.email,
+				PlainPassword:          "Demo123456",
+				Role:                   "user",
+				Enabled:                true,
+				SkipPasswordValidation: true,
+			})
+			if err != nil {
+				return fmt.Errorf("creating user %s: %w", p.username, err)
+			}
+			// Update display name via direct SQL
+			if _, sqlErr := db.ExecContext(ctx, `UPDATE users SET display_name = ? WHERE user_id = ?`, p.displayName, u.ID); sqlErr != nil {
+				return fmt.Errorf("updating display name for %s: %w", p.username, sqlErr)
+			}
+			u.DisplayName = p.displayName
+		} else {
+			username := fmt.Sprintf("dev%02d", i-len(personaPool)+1)
+			email := fmt.Sprintf("dev%02d@example.com", i-len(personaPool)+1)
+			u, err = store.CreateUserWithParams(ctx, db, store.UserCreateParams{
+				Username:               username,
+				Email:                  email,
+				PlainPassword:          "Demo123456",
+				Role:                   "user",
+				Enabled:                true,
+				SkipPasswordValidation: true,
+			})
+			if err != nil {
+				return fmt.Errorf("creating user %s: %w", username, err)
+			}
+		}
+		users = append(users, u)
+	}
+
+	fmt.Printf("  ✓ Created %d users\n", len(users))
+
+	// Create teams
+	engTeam, err := store.CreateTeam(ctx, db, "Engineering", nil)
+	if err != nil {
+		return fmt.Errorf("creating Engineering team: %w", err)
+	}
+	// Add engineering members: sarah, marcus, priya, elena, ryan (indices 0,1,2,6,7)
+	engIndices := []int{0, 1, 2, 6, 7}
+	for _, idx := range engIndices {
+		if idx < len(users) {
+			if _, err := store.AddTeamMember(ctx, db, engTeam.ID, users[idx].ID, "member", ""); err != nil {
+				// ignore duplicate errors
+				_ = err
+			}
+		}
+	}
+	// Add synthetic devs to engineering
+	for i := len(personaPool); i < len(users); i++ {
+		if _, err := store.AddTeamMember(ctx, db, engTeam.ID, users[i].ID, "member", ""); err != nil {
+			_ = err
+		}
+	}
+
+	pqTeam, err := store.CreateTeam(ctx, db, "Product & QA", nil)
+	if err != nil {
+		return fmt.Errorf("creating Product & QA team: %w", err)
+	}
+	// tom=5, lisa=4
+	for _, idx := range []int{4, 5} {
+		if idx < len(users) {
+			if _, err := store.AddTeamMember(ctx, db, pqTeam.ID, users[idx].ID, "member", ""); err != nil {
+				_ = err
+			}
+		}
+	}
+
+	teamsCreated := 2
+	var devopsTeam store.Team
+	if numTeams > 2 {
+		devopsTeam, err = store.CreateTeam(ctx, db, "DevOps & Infrastructure", nil)
+		if err != nil {
+			return fmt.Errorf("creating DevOps team: %w", err)
+		}
+		// james=3
+		if 3 < len(users) {
+			if _, err := store.AddTeamMember(ctx, db, devopsTeam.ID, users[3].ID, "member", ""); err != nil {
+				_ = err
+			}
+		}
+		teamsCreated = 3
+	}
+	_ = devopsTeam
+
+	fmt.Printf("  ✓ Created %d teams\n", teamsCreated)
+
+	// Create projects
+	projects := make([]store.Project, 0, numProjects)
+	for i := 0; i < numProjects; i++ {
+		var def projectDef
+		if i < len(projectPool) {
+			def = projectPool[i]
+		} else {
+			def = projectDef{
+				prefix:      fmt.Sprintf("M%02d", i+1),
+				title:       fmt.Sprintf("Module %d", i+1),
+				description: fmt.Sprintf("Additional module %d for the TodoApp platform.", i+1),
+				pool:        "mixed",
+			}
+		}
+		proj, err := store.CreateProjectWithParams(ctx, db, store.ProjectCreateParams{
+			Prefix:      def.prefix,
+			Title:       def.title,
+			Description: def.description,
+			CreatedBy:   adminUser.ID,
+			WorkflowID:  &wf.ID,
+		})
+		if err != nil {
+			return fmt.Errorf("creating project %s: %w", def.title, err)
+		}
+		projects = append(projects, proj)
+	}
+
+	fmt.Printf("  ✓ Created %d projects\n", len(projects))
+
+	// Create sprints per project
+	type projectSprints struct {
+		project store.Project
+		sprints []store.Sprint
+		pool    string
+	}
+	projectData := make([]projectSprints, len(projects))
+	totalSprints := 0
+
+	for pi, proj := range projects {
+		pool := "mixed"
+		if pi < len(projectPool) {
+			pool = projectPool[pi].pool
+		}
+		sprints := make([]store.Sprint, 0, numSprintsPerProj)
+		for si := 0; si < numSprintsPerProj; si++ {
+			sp, err := store.CreateSprint(ctx, db, int(proj.ID), "")
+			if err != nil {
+				return fmt.Errorf("creating sprint %d for project %s: %w", si+1, proj.Title, err)
+			}
+			// Determine stage
+			var stage string
+			switch {
+			case si < numSprintsPerProj-2:
+				stage = "closed"
+			case si == numSprintsPerProj-2:
+				stage = "active"
+			default:
+				stage = "design"
+			}
+			sp, err = store.UpdateSprint(ctx, db, sp.ID, sp.Title, stage)
+			if err != nil {
+				return fmt.Errorf("updating sprint stage: %w", err)
+			}
+			sprints = append(sprints, sp)
+		}
+		projectData[pi] = projectSprints{project: proj, sprints: sprints, pool: pool}
+		totalSprints += len(sprints)
+	}
+
+	fmt.Printf("  ✓ Created %d sprints\n", totalSprints)
+
+	// Create tickets
+	fmt.Printf("  Creating %d tickets...", numTickets)
+
+	// Distribute tickets across projects
+	ticketsPerProject := numTickets / len(projects)
+	extraTickets := numTickets % len(projects)
+
+	ticketIndex := 0
+	sprintAssignCutoff := int(float64(numTickets) * 0.75)
+
+	for pi, pd := range projectData {
+		count := ticketsPerProject
+		if pi < extraTickets {
+			count++
+		}
+
+		// Pick title pool for this project
+		var titlePool []string
+		switch pd.pool {
+		case "frontend":
+			titlePool = frontendTitles
+		case "backend":
+			titlePool = backendTitles
+		case "infra":
+			titlePool = infraTitles
+		default:
+			// mixed: combine all
+			titlePool = append(titlePool, frontendTitles...)
+			titlePool = append(titlePool, backendTitles...)
+			titlePool = append(titlePool, bugTitles...)
+		}
+
+		sprintIdx := 0
+
+		for ti := 0; ti < count; ti++ {
+			localIdx := ticketIndex
+
+			// Pick type by distribution (ticketIndex % 20)
+			mod20 := localIdx % 20
+			var ticketType string
+			switch {
+			case mod20 < 10: // 50% task
+				ticketType = "task"
+			case mod20 < 15: // 25% bug
+				ticketType = "bug"
+			case mod20 < 18: // 15% chore
+				ticketType = "chore"
+			default: // 10% epic
+				ticketType = "epic"
+			}
+
+			// Pick title
+			var title string
+			switch ticketType {
+			case "bug":
+				title = bugTitles[localIdx%len(bugTitles)]
+			case "chore":
+				title = choreTitles[localIdx%len(choreTitles)]
+			default:
+				title = titlePool[localIdx%len(titlePool)]
+			}
+
+			// Pick description
+			descTmpl := descTemplates[localIdx%len(descTemplates)]
+			// fill in %s with title words and project name
+			words := strings.Fields(title)
+			word1 := "feature"
+			if len(words) > 0 {
+				word1 = words[0]
+			}
+			word2 := pd.project.Title
+			var description string
+			// Count format verbs in template
+			verbCount := strings.Count(descTmpl, "%s")
+			switch verbCount {
+			case 0:
+				description = descTmpl
+			case 1:
+				description = fmt.Sprintf(descTmpl, word1)
+			default:
+				description = fmt.Sprintf(descTmpl, word1, word2)
+			}
+
+			// Pick assignee
+			assignee := users[localIdx%len(users)].Username
+			author := users[(localIdx+1)%len(users)].Username
+
+			// Pick priority (1-5)
+			priority := (localIdx%5) + 1
+
+			// Determine stage and state
+			var stage, state string
+			switch localIdx % 20 {
+			case 0, 1, 2:
+				stage, state = "discovery", "idle"
+			case 3, 4, 5:
+				stage, state = "design", "idle"
+			case 6, 7, 8, 9:
+				stage, state = "develop", "idle"
+			case 10, 11, 12, 13:
+				stage, state = "develop", "active"
+			case 14, 15, 16:
+				stage, state = "review", "idle"
+			case 17:
+				stage, state = "review", "active"
+			default: // 18, 19
+				stage, state = "done", "success"
+			}
+
+			t, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
+				ProjectID:   pd.project.ID,
+				Type:        ticketType,
+				Title:       title,
+				Description: description,
+				Priority:    priority,
+				Assignee:    assignee,
+				Author:      author,
+				CreatedBy:   adminUser.ID,
+				State:       "idle",
+			})
+			if err != nil {
+				return fmt.Errorf("creating ticket %d: %w", localIdx, err)
+			}
+
+			// Update stage/state if not default
+			if stage != "discovery" || state != "idle" {
+				_, _ = store.UpdateTicket(ctx, db, t.ID, store.TicketUpdateParams{
+					Title:       t.Title,
+					Description: t.Description,
+					Stage:       stage,
+					State:       state,
+					Priority:    t.Priority,
+					Assignee:    t.Assignee,
+					UpdatedBy:   adminUser.Username,
+				})
+			}
+
+			// Assign to sprint
+			if localIdx < sprintAssignCutoff && len(pd.sprints) > 0 {
+				spID := pd.sprints[sprintIdx%len(pd.sprints)].ID
+				_ = store.SetTicketSprint(ctx, db, t.ID, &spID)
+				sprintIdx++
+			}
+
+			ticketIndex++
+
+			if ticketIndex%1000 == 0 {
+				fmt.Printf(" [%d/%d]", ticketIndex, numTickets)
+			}
+		}
+	}
+	fmt.Println(" done")
+
+	// Create comments
+	fmt.Printf("  Creating %d comments...", numComments)
+
+	// Collect ticket IDs that can receive comments (not complete/archived)
+	// We'll just attempt to add comments and skip failures (ticket closed)
+	commentIdx := 0
+	for commentIdx < numComments {
+		// Pick a random ticket by index
+		ticketLocalIdx := rand.Intn(numTickets)
+		// Determine project and local ticket index
+		pi := ticketLocalIdx % len(projects)
+		pd := projectData[pi]
+
+		// We'll pick a comment template
+		tmpl := commentTemplates[commentIdx%len(commentTemplates)]
+		fillIn := commentFillins[commentIdx%len(commentFillins)]
+		var commentText string
+		verbCount := strings.Count(tmpl, "%")
+		if verbCount > 0 && strings.Contains(tmpl, "%s") {
+			commentText = fmt.Sprintf(tmpl, fillIn)
+		} else if strings.Contains(tmpl, "%%") {
+			commentText = fmt.Sprintf(tmpl, fillIn)
+		} else {
+			commentText = tmpl
+		}
+		_ = pd
+
+		commenter := users[commentIdx%len(users)]
+
+		// Build a synthetic ticket ID to attempt — we'll iterate through what we have
+		// Since we can't easily get all ticket IDs, we use the project + offset approach.
+		// Try to get tickets for a project
+		listParams := store.TicketListParams{
+			ProjectID: projectData[pi].project.ID,
+			Limit:     1,
+			Offset:    ticketLocalIdx / len(projects),
+		}
+		tickets, _ := store.ListTickets(ctx, db, listParams)
+		if len(tickets) > 0 {
+			_, _ = store.AddComment(ctx, db, tickets[0].ID, commenter.ID, commentText)
+		}
+		commentIdx++
+
+		if commentIdx%1000 == 0 {
+			fmt.Printf(" [%d/%d]", commentIdx, numComments)
+		}
+	}
+	fmt.Println(" done")
+
+	// Create time entries
+	fmt.Printf("  Creating %d time entries...", numTimeEntries)
+
+	minuteOptions := []int{30, 60, 90, 120, 240}
+	noteOptions := []string{"Implementation work", "Code review", "Testing", "Bug investigation", "Deployment"}
+
+	for teIdx := 0; teIdx < numTimeEntries; teIdx++ {
+		pi := teIdx % len(projects)
+		listParams := store.TicketListParams{
+			ProjectID: projectData[pi].project.ID,
+			Limit:     1,
+			Offset:    teIdx / len(projects),
+		}
+		tickets, _ := store.ListTickets(ctx, db, listParams)
+		if len(tickets) > 0 {
+			user := users[teIdx%len(users)]
+			minutes := minuteOptions[teIdx%len(minuteOptions)]
+			note := noteOptions[teIdx%len(noteOptions)]
+			_, _ = store.LogTime(ctx, db, tickets[0].ID, user.ID, minutes, note)
+		}
+
+		if teIdx%1000 == 0 && teIdx > 0 {
+			fmt.Printf(" [%d/%d]", teIdx, numTimeEntries)
+		}
+	}
+	fmt.Println(" done")
+
+	// Print summary
+	fmt.Printf("\nDemo database ready: %s\n", *dbPath)
+	fmt.Printf("  Login:   admin / Admin123456\n")
+	fmt.Printf("  Server:  tk serve --db %s (then open https://localhost:8443)\n", *dbPath)
+
+	// Build user list for display
+	usernames := make([]string, 0, len(users))
+	for i, u := range users {
+		if i >= 5 {
+			break
+		}
+		usernames = append(usernames, u.Username)
+	}
+	suffix := ""
+	if len(users) > 5 {
+		suffix = ", ..."
+	}
+	fmt.Printf("  Users:   %s%s (password: Demo123456)\n", strings.Join(usernames, ", "), suffix)
+
+	return nil
+}
