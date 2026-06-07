@@ -49,10 +49,11 @@ type User struct {
 	Status           string `json:"status,omitempty"`
 	LastSeen         string `json:"last_seen,omitempty"`
 	UpdatedAt        string `json:"updated_at,omitempty"`
+	AgentRole        string `json:"agent_role,omitempty"`
 }
 
 // userSelectColumns is the standard column list for scanning a User.
-const userSelectColumns = `user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), role, default_project_id, display_name, enabled, created_at, COALESCE(user_type, 'user'), COALESCE(description, ''), COALESCE(status, ''), COALESCE(last_seen, ''), COALESCE(updated_at, '')`
+const userSelectColumns = `user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), role, default_project_id, display_name, enabled, created_at, COALESCE(user_type, 'user'), COALESCE(description, ''), COALESCE(status, ''), COALESCE(last_seen, ''), COALESCE(updated_at, ''), COALESCE(agent_role, '')`
 
 // scanUser scans a row into a User. The column order must match userSelectColumns.
 func scanUser(scan func(dest ...any) error) (User, error) {
@@ -63,7 +64,7 @@ func scanUser(scan func(dest ...any) error) (User, error) {
 		&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt,
 		&user.Role, &defaultProjectID, &user.DisplayName, &enabled, &user.CreatedAt,
 		&user.UserType, &user.Description, &user.Status,
-		&user.LastSeen, &user.UpdatedAt,
+		&user.LastSeen, &user.UpdatedAt, &user.AgentRole,
 	); err != nil {
 		return User{}, err
 	}
@@ -209,7 +210,7 @@ func AuthenticateUser(ctx context.Context, db *sql.DB, username, plainPassword s
 		&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt,
 		&user.Role, &defaultProjectID, &user.DisplayName, &enabled, &user.CreatedAt,
 		&user.UserType, &user.Description, &user.Status,
-		&user.LastSeen, &user.UpdatedAt,
+		&user.LastSeen, &user.UpdatedAt, &user.AgentRole,
 		&hash, &failedAttempts, &lockedUntil,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -307,7 +308,7 @@ func GetUserByToken(ctx context.Context, db *sql.DB, token string) (User, error)
 	}
 
 	row := db.QueryRowContext(ctx, `
-		SELECT u.user_id, u.username, COALESCE(u.email, ''), COALESCE(u.email_confirmed_at, ''), u.role, u.default_project_id, u.display_name, u.enabled, u.created_at, COALESCE(u.user_type, 'user'), COALESCE(u.description, ''), COALESCE(u.status, ''), COALESCE(u.last_seen, ''), COALESCE(u.updated_at, '')
+		SELECT u.user_id, u.username, COALESCE(u.email, ''), COALESCE(u.email_confirmed_at, ''), u.role, u.default_project_id, u.display_name, u.enabled, u.created_at, COALESCE(u.user_type, 'user'), COALESCE(u.description, ''), COALESCE(u.status, ''), COALESCE(u.last_seen, ''), COALESCE(u.updated_at, ''), COALESCE(u.agent_role, '')
 		FROM sessions s
 		JOIN users u ON u.user_id = s.user_id
 		WHERE s.token = ?

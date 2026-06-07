@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	ErrSprintNotFound   = errors.New("sprint not found")
-	ErrSprintClosed     = errors.New("sprint is closed — tickets cannot be moved in or out")
-	ErrSprintNotReady   = errors.New("sprint cannot be made active: some tickets are not yet ready for development (still in discovery stage)")
+	ErrSprintNotFound          = errors.New("sprint not found")
+	ErrSprintClosed            = errors.New("sprint is closed — tickets cannot be moved in or out")
+	ErrSprintNotReady          = errors.New("sprint cannot be made active: some tickets have not reached the ready stage (still in idea or refine)")
+	ErrTicketNotReadyForSprint = errors.New("ticket must be in ready stage before it can be added to a sprint")
 )
 
 type Sprint struct {
@@ -75,11 +76,12 @@ func CreateSprint(ctx context.Context, db *sql.DB, projectID int, title string) 
 }
 
 func UpdateSprint(ctx context.Context, db *sql.DB, id int, title, stage string) (Sprint, error) {
-	// Guard: cannot set active if any tickets are still in discovery stage.
+	// Guard: cannot activate a sprint if any tickets are still in the backlog
+	// pre-ready stages (idea or refine). "ready" tickets are acceptable.
 	if stage == "active" {
 		var notReadyCount int
 		if err := db.QueryRowContext(ctx, `
-			SELECT COUNT(*) FROM tickets WHERE sprint_id = ? AND stage = 'discovery'
+			SELECT COUNT(*) FROM tickets WHERE sprint_id = ? AND stage IN ('idea', 'refine')
 		`, id).Scan(&notReadyCount); err != nil {
 			return Sprint{}, err
 		}
@@ -125,7 +127,8 @@ func DeleteSprint(ctx context.Context, db *sql.DB, id int) error {
 func SetTicketSprint(ctx context.Context, db *sql.DB, ticketID string, sprintID *int) error {
 	// Guard: if the ticket is currently in a closed sprint, block the move.
 	var currentSprintID sql.NullInt64
-	if err := db.QueryRowContext(ctx, `SELECT sprint_id FROM tickets WHERE ticket_id = ?`, ticketID).Scan(&currentSprintID); err != nil {
+	var ticketStage string
+	if err := db.QueryRowContext(ctx, `SELECT sprint_id, stage FROM tickets WHERE ticket_id = ?`, ticketID).Scan(&currentSprintID, &ticketStage); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return errors.New("ticket not found")
 		}
@@ -137,8 +140,11 @@ func SetTicketSprint(ctx context.Context, db *sql.DB, ticketID string, sprintID 
 			return ErrSprintClosed
 		}
 	}
-	// Guard: if moving into a sprint, that sprint must not be closed.
+	// Guard: if moving into a sprint, the ticket must be in the "ready" stage.
 	if sprintID != nil {
+		if ticketStage != StageReady {
+			return ErrTicketNotReadyForSprint
+		}
 		var targetStage string
 		if err := db.QueryRowContext(ctx, `SELECT stage FROM sprints WHERE id = ?`, *sprintID).Scan(&targetStage); err == nil && targetStage == "closed" {
 			return ErrSprintClosed

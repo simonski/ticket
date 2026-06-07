@@ -1633,6 +1633,32 @@ func (r *router) registerTicketHandlers() {
 	}
 	mux.HandleFunc("/api/tickets/", handleTicketByRef("/api/tickets/"))
 
+	// POST /api/tickets/{id}/mark-ready — human approves refiner recommendation.
+	mux.HandleFunc("/api/tickets-action/mark-ready/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		user, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		id := strings.TrimPrefix(r.URL.Path, "/api/tickets-action/mark-ready/")
+		id = strings.Trim(id, "/")
+		if id == "" {
+			writeError(w, http.StatusBadRequest, "ticket id required")
+			return
+		}
+		updated, err := store.MarkTicketReady(r.Context(), db, id, user.Username, user.ID)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		notify("ticket_updated", updated.ProjectID, updated.ID)
+		writeJSON(w, http.StatusOK, updated)
+	})
+
 	mux.HandleFunc("/api/labels/", func(w http.ResponseWriter, r *http.Request) {
 		_, err := requireUser(db, r)
 		if err != nil {

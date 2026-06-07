@@ -143,6 +143,7 @@
                             <button id="new-ticket-button" class="btn btn-primary" type="button">New ticket</button>
                         </div>
                     </div>
+                    <div id="project-agent-bar" class="project-agent-bar hidden"></div>
                     <div id="ticket-board" class="board"></div>
                     <div id="ticket-list-view" class="ticket-list-view hidden"></div>
                     <div id="ticket-plan-view" class="ticket-plan-view hidden"></div>
@@ -1052,6 +1053,12 @@
                         <select id="ticket-stage"></select>
                     </div>
                 </div>
+                <div id="ticket-recommend-ready-banner" class="recommend-ready-banner hidden">
+                    <span class="rr-icon">✅</span>
+                    <span class="rr-msg"><strong>Refiner recommends ready for development.</strong> Review and approve to move this ticket to the development queue.</span>
+                    <button id="ticket-mark-ready-btn" class="btn btn-primary btn-sm" type="button">Mark Ready</button>
+                </div>
+                <div id="ticket-pr-url" class="hidden" style="font-size:0.85rem;margin-bottom:0.5rem;"></div>
                 <div class="field" style="margin-bottom:10px">
                     <label for="ticket-title">Title</label>
                     <input id="ticket-title" required>

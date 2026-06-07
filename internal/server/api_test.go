@@ -5049,10 +5049,13 @@ func TestAgentWorkflowAPI(t *testing.T) {
 	var ticket store.Ticket
 	decodeResponse(t, ticketResp, &ticket)
 
-	// Mark ticket ready so it can be claimed.
-	readyResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/ready", nil, token)
-	if readyResp.Code != http.StatusOK {
-		t.Fatalf("ready ticket status = %d body=%s", readyResp.Code, readyResp.Body.String())
+	// Move ticket to develop stage (draft=false) so the agent can claim it.
+	// In production this would require progressing through the backlog stages
+	// and sprint assignment, but for this test we set the stage directly.
+	if _, err := db.ExecContext(context.Background(),
+		`UPDATE tickets SET stage = 'develop', state = 'idle', draft = 0, status = 'develop/idle' WHERE ticket_id = ?`,
+		ticket.ID); err != nil {
+		t.Fatalf("set develop stage: %v", err)
 	}
 
 	// POST /api/agents/request (basic auth)

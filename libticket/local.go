@@ -598,6 +598,18 @@ func (s *LocalService) AgentUpdateTicket(ctx context.Context, id string, request
 	return updated, nil
 }
 
+func (s *LocalService) AgentRecommendReady(ctx context.Context, agentID, password, ticketID string) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	agent, err := store.AuthenticateAgent(ctx, db, agentID, password)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetRecommendedReady(ctx, db, ticketID, true, agent.Username, agent.ID)
+}
+
 func (s *LocalService) CreateProject(ctx context.Context, request ProjectCreateRequest) (store.Project, error) {
 	db, err := s.openDB()
 	if err != nil {

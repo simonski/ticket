@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/simonski/ticket/internal/store"
@@ -123,6 +124,24 @@ func (r *router) registerProjectHandlers() {
 			if handled := handleProjectProgrammeRoute(w, r, db, parts[0]); handled {
 				return
 			}
+		}
+		if len(parts) == 2 && parts[1] == "agents" {
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			projectID, err := strconv.ParseInt(parts[0], 10, 64)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid project id")
+				return
+			}
+			statuses, err := store.ListAgentStatusesForProject(r.Context(), db, projectID)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, statuses)
+			return
 		}
 		if len(parts) == 2 && parts[1] == "sprints" {
 			if handled := handleProjectSprintsRoute(w, r, db, parts[0]); handled {

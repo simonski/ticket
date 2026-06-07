@@ -203,10 +203,11 @@ func runAgent(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("[agent] REGISTER response: agent_id=%s username=%s status=%s enabled=%v\n", agent.ID, agent.Username, agent.Status, agent.Enabled)
+		fmt.Printf("[agent] REGISTER response: agent_id=%s username=%s role=%s status=%s enabled=%v\n", agent.ID, agent.Username, agent.AgentRole, agent.Status, agent.Enabled)
 		if !outputJSON {
-			fmt.Printf("agent %s registered\n", agentIDVal)
+			fmt.Printf("agent %s (%s) registered\n", agentIDVal, agent.AgentRole)
 		}
+		agentRole := agent.AgentRole
 		modelCommand := strings.TrimSpace(*llmCommand)
 		if modelCommand == "" {
 			modelCommand = "claude"
@@ -288,9 +289,15 @@ func runAgent(args []string) error {
 			}
 			ticket := response.Ticket
 			if agentVerbose {
-				fmt.Printf("[agent] processing %s %q\n", ticketLabel(*ticket), ticket.Title)
+				fmt.Printf("[agent] processing %s %q (role=%s)\n", ticketLabel(*ticket), ticket.Title, agentRole)
 			}
-			prompt := buildAgentPrompt(response)
+
+			var prompt string
+			if agentRole == "refiner" {
+				prompt = buildRefinerPrompt(response)
+			} else {
+				prompt = buildAgentPrompt(response)
+			}
 
 			// Start a background heartbeat while the LLM is working.
 			heartbeatStop := make(chan struct{})
@@ -322,6 +329,20 @@ func runAgent(args []string) error {
 			if agentVerbose {
 				fmt.Printf("[agent] submitting result for %s (%d bytes)\n", ticketLabel(*ticket), len(result))
 			}
+
+			if agentRole == "refiner" {
+				// Post refinement feedback as a comment, then signal ready.
+				if _, commentErr := svc.AddComment(context.Background(), ticket.ID, strings.TrimSpace(result)); commentErr != nil {
+					fmt.Printf("[agent] warning: could not post refinement comment: %v\n", commentErr)
+				}
+				if _, recErr := svc.AgentRecommendReady(context.Background(), agentIDVal, agentPassword, ticket.ID); recErr != nil {
+					fmt.Printf("[agent] warning: could not set recommended_ready: %v\n", recErr)
+				} else {
+					fmt.Printf("refined %s — recommended ready for development\n", ticketLabel(*ticket))
+				}
+				continue
+			}
+
 			updated, err := svc.AgentUpdateTicket(context.Background(), ticket.ID, libticket.AgentTicketUpdateRequest{
 				ID:       agentIDVal,
 				Password: agentPassword,
@@ -506,6 +527,38 @@ func runAgent(args []string) error {
 	default:
 		return fmt.Errorf("unknown agent command %q; see: ticket agent help", args[0])
 	}
+}
+
+func buildRefinerPrompt(resp libticket.AgentWorkResponse) string {
+	var b strings.Builder
+	b.WriteString("You are a product manager / business analyst refining a development ticket.\n")
+	b.WriteString("Your job is to review the ticket and ensure it is clear, actionable, and ready for a developer to pick up.\n\n")
+	b.WriteString("Check and improve:\n")
+	b.WriteString("- Title: is it clear and specific?\n")
+	b.WriteString("- Description: does it explain what, why, and any context?\n")
+	b.WriteString("- Acceptance Criteria: are they testable and complete?\n\n")
+	b.WriteString("Output your refinement suggestions as concise bullet points. End with either:\n")
+	b.WriteString("  RECOMMENDATION: READY — if the ticket is good enough for a developer to start\n")
+	b.WriteString("  RECOMMENDATION: NOT READY — if more information is needed (explain what is missing)\n\n")
+	if resp.Project != nil {
+		b.WriteString(fmt.Sprintf("Project: %s — %s\n\n", resp.Project.Prefix, resp.Project.Title))
+	}
+	if resp.Ticket != nil {
+		ticket := resp.Ticket
+		b.WriteString(fmt.Sprintf("Ticket: %s\n", ticket.ID))
+		b.WriteString(fmt.Sprintf("Title: %s\n", strings.TrimSpace(ticket.Title)))
+		if strings.TrimSpace(ticket.Description) != "" {
+			b.WriteString("Description:\n")
+			b.WriteString(strings.TrimSpace(ticket.Description))
+			b.WriteString("\n")
+		}
+		if strings.TrimSpace(ticket.AcceptanceCriteria) != "" {
+			b.WriteString("Acceptance Criteria:\n")
+			b.WriteString(strings.TrimSpace(ticket.AcceptanceCriteria))
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func buildAgentPrompt(resp libticket.AgentWorkResponse) string {

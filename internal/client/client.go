@@ -847,6 +847,23 @@ func (c *Client) AgentUpdateTicket(ctx context.Context, id string, request Agent
 	return ticket, err
 }
 
+func (c *Client) AgentRecommendReady(ctx context.Context, agentID, password, ticketID string) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		agent, err := store.AuthenticateAgent(ctx, db, agentID, password)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		return store.SetRecommendedReady(ctx, db, ticketID, true, agent.Username, agent.ID)
+	}
+	var ticket store.Ticket
+	err := c.doJSONBasicAuth(ctx, http.MethodPost, fmt.Sprintf("/api/agents/tickets/%s/recommend-ready", ticketID), agentID, password, nil, &ticket)
+	return ticket, err
+}
+
 func (c *Client) CreateProject(ctx context.Context, request ProjectCreateRequest) (store.Project, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

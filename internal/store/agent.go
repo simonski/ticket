@@ -183,7 +183,7 @@ func AuthenticateAgent(ctx context.Context, db *sql.DB, agentID, plainPassword s
 		&a.ID, &a.Username, &a.Email, &a.EmailConfirmedAt,
 		&a.Role, &defaultProjectID, &a.DisplayName, &enabled, &a.CreatedAt,
 		&a.UserType, &a.Description, &a.Status,
-		&a.LastSeen, &a.UpdatedAt,
+		&a.LastSeen, &a.UpdatedAt, &a.AgentRole,
 		&hash,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -332,6 +332,43 @@ func ListAgentStatuses(ctx context.Context, db *sql.DB) ([]AgentStatus, error) {
 	return statuses, nil
 }
 
+// ListAgentStatusesForProject returns agents whose config project_id matches the given project.
+func ListAgentStatusesForProject(ctx context.Context, db *sql.DB, projectID int64) ([]AgentStatus, error) {
+	all, err := ListAgentStatuses(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	// Filter to agents whose agent_config has project_id == projectID,
+	// or who are currently assigned to a ticket in this project.
+	var result []AgentStatus
+	projectIDStr := fmt.Sprintf("%d", projectID)
+	for _, s := range all {
+		if s.ProjectName != "" && s.TicketKey != nil {
+			// Check if the assigned ticket belongs to this project.
+			cfg, _ := GetAgentConfigMap(ctx, db, s.Agent.ID)
+			if cfg["project_id"] == projectIDStr {
+				result = append(result, s)
+				continue
+			}
+			// Also include if currently working on a ticket in this project.
+			var ticketProjectID int64
+			if scanErr := db.QueryRowContext(ctx, `SELECT project_id FROM tickets WHERE ticket_id = ?`, *s.TicketKey).Scan(&ticketProjectID); scanErr == nil && ticketProjectID == projectID {
+				result = append(result, s)
+				continue
+			}
+		} else {
+			cfg, _ := GetAgentConfigMap(ctx, db, s.Agent.ID)
+			if cfg["project_id"] == projectIDStr {
+				result = append(result, s)
+			}
+		}
+	}
+	if result == nil {
+		result = []AgentStatus{}
+	}
+	return result, nil
+}
+
 // ─── agent config ─────────────────────────────────────────────────────────────
 
 // Predefined agent config keys
@@ -401,6 +438,71 @@ func GetAgentConfigMap(ctx context.Context, db *sql.DB, agentID string) (map[str
 		configMap[e.Key] = e.Value
 	}
 	return configMap, nil
+}
+
+// SetAgentRole sets the agent_role field on the agent's user record.
+func SetAgentRole(ctx context.Context, db *sql.DB, agentID, role string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE users SET agent_role = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND user_type = 'agent'
+	`, strings.TrimSpace(role), agentID)
+	return err
+}
+
+// RequestRefineTicket finds a draft ticket suitable for a refiner agent and claims it.
+// It looks for draft=1, state=idle, no assignee, not complete/archived/deleted.
+func RequestRefineTicket(ctx context.Context, db *sql.DB, projectID int64, username, userID string) (Ticket, string, error) {
+	if projectID == 0 {
+		return Ticket{}, "NO-WORK", nil
+	}
+	// Check if already assigned to a draft ticket being refined.
+	row := db.QueryRowContext(ctx, `
+		SELECT ticket_id FROM tickets
+		WHERE assignee = ? AND draft = 1 AND complete = 0 AND archived = 0 AND deleted = 0 AND state = 'active'
+		ORDER BY created_at, ticket_id LIMIT 1
+	`, username)
+	var existingID string
+	if err := row.Scan(&existingID); err == nil && existingID != "" {
+		t, err := GetTicket(ctx, db, existingID)
+		if err != nil {
+			return Ticket{}, "", err
+		}
+		return t, "ASSIGNED", nil
+	}
+	// Find a claimable draft ticket.
+	row = db.QueryRowContext(ctx, `
+		SELECT ticket_id FROM tickets
+		WHERE project_id = ? AND draft = 1 AND complete = 0 AND archived = 0 AND deleted = 0
+		  AND state = 'idle' AND TRIM(COALESCE(assignee, '')) = ''
+		ORDER BY priority DESC, created_at, ticket_id LIMIT 1
+	`, projectID)
+	var ticketID string
+	if err := row.Scan(&ticketID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Ticket{}, "NO-WORK", nil
+		}
+		return Ticket{}, "", err
+	}
+	t, err := GetTicket(ctx, db, ticketID)
+	if err != nil {
+		return Ticket{}, "", err
+	}
+	updated, err := UpdateTicket(ctx, db, t.ID, TicketUpdateParams{
+		Title:              t.Title,
+		Description:        t.Description,
+		AcceptanceCriteria: t.AcceptanceCriteria,
+		ParentID:           t.ParentID,
+		Assignee:           username,
+		State:              StateActive,
+		Priority:           t.Priority,
+		Order:              t.Order,
+		UpdatedBy:          userID,
+		ActorUsername:      username,
+		ActorRole:          "admin",
+	})
+	if err != nil {
+		return Ticket{}, "", err
+	}
+	return updated, "ASSIGNED", nil
 }
 
 // GetAgentConfigUpdatedAt returns the most recent updated_at timestamp from agent_config.

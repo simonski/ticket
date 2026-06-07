@@ -86,7 +86,7 @@ func TestCountEverything(t *testing.T) {
 	if projectOnly.Types[1].Type != "task" || projectOnly.Types[1].Total != 2 {
 		t.Fatalf("CountEverything(project).Types[1] = %#v", projectOnly.Types[1])
 	}
-	if projectOnly.Types[1].Statuses["develop/success"] != 1 || projectOnly.Types[1].Statuses["develop/idle"] != 1 {
+	if projectOnly.Types[1].Statuses["idea/success"] != 1 || projectOnly.Types[1].Statuses["idea/idle"] != 1 {
 		t.Fatalf("CountEverything(project).Types[1].Statuses = %#v", projectOnly.Types[1].Statuses)
 	}
 }

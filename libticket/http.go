@@ -202,6 +202,10 @@ func (s *HTTPService) AgentUpdateTicket(ctx context.Context, id string, request 
 	return s.client.AgentUpdateTicket(ctx, id, client.AgentTicketUpdateRequest(request))
 }
 
+func (s *HTTPService) AgentRecommendReady(ctx context.Context, agentID, password, ticketID string) (store.Ticket, error) {
+	return s.client.AgentRecommendReady(ctx, agentID, password, ticketID)
+}
+
 func (s *HTTPService) CreateProject(ctx context.Context, request ProjectCreateRequest) (store.Project, error) {
 	return s.client.CreateProject(ctx, client.ProjectCreateRequest(request))
 }

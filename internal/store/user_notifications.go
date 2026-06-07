@@ -12,6 +12,8 @@ import (
 const (
 	UserNotificationKindProjectAccessApproved = "project_access_approved"
 	UserNotificationKindProjectAccessRejected = "project_access_rejected"
+	UserNotificationKindPRReady               = "pr_ready_for_review"
+	UserNotificationKindRefinerRecommended    = "refiner_recommended_ready"
 
 	UserNotificationStatusUnread = "unread"
 	UserNotificationStatusRead   = "read"
