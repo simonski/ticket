@@ -3231,10 +3231,15 @@
                 return;
             }
 
-            els.ticketBoard.innerHTML = lanes.map((lane) => {
+            // "hide done" removes the done column entirely, not just its cards.
+            const visibleLanes = hideDone
+                ? lanes.filter((lane) => String(lane.name || "").toLowerCase() !== "done")
+                : lanes;
+
+            els.ticketBoard.innerHTML = visibleLanes.map((lane) => {
+                const fallbackLane = visibleLanes.length ? visibleLanes[0].name : "";
                 const cards = sprintFilterTickets(state.tickets)
-                    .filter((ticket) => (ticket.stage || lanes[0].name) === lane.name)
-                    .filter((ticket) => !hideDone || String(ticket.stage || "").toLowerCase() !== "done")
+                    .filter((ticket) => (ticket.stage || fallbackLane) === lane.name)
                     .filter((ticket) => !searchText || String(ticket.title || "").toLowerCase().includes(searchText) || String(ticket.key || ticket.id || "").toLowerCase().includes(searchText))
                     .sort((a, b) => (a.order || 0) - (b.order || 0))
                     .map((ticket) => renderTicketCard(ticket))
