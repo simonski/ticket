@@ -1399,15 +1399,32 @@ select {
 }
 
 /* ── Agent bar ─────────────────────────────────────────────────────────── */
+/* Agent icons live in the topbar, to the right of the project selector. */
 .project-agent-bar {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.4rem 1rem;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-subtle, var(--bg));
-    flex-wrap: wrap;
+    gap: 5px;
+    flex-wrap: nowrap;
+    overflow: visible;
 }
+.project-agent-bar:not(.hidden) {
+    margin-left: 4px;
+    padding-left: 10px;
+    border-left: 1px solid var(--tb-border);
+}
+/* Compact the round agent icons so they sit comfortably in the 52px topbar. */
+.topbar .agent-icon {
+    width: 1.9rem; height: 1.9rem;
+    font-size: 0.85rem;
+    border-width: 2px;
+}
+.topbar .agent-icon-badge {
+    width: 0.85rem; height: 0.85rem;
+    font-size: 0.55rem;
+    top: -2px; right: -2px;
+}
+/* The "Agents" text label is redundant beside the robot icons in the topbar. */
+.topbar .agent-bar-label { display: none; }
 
 .agent-icon {
     position: relative;
