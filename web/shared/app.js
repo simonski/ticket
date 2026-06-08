@@ -6964,16 +6964,26 @@
                 }
             }
 
-            // Initial status cue (the WS open/working events refine it live).
-            if (refinementIsThinking(ticket)) {
-                setRefinementStatus("Refiner is working…", true);
+            // A refiner reply is in flight for this ticket (we sent a turn, or the WS
+            // is streaming/thinking). Don't reset the status to "Your turn" or reload
+            // the thread — that would stomp the thinking animation and wipe the live
+            // streaming bubble. The WS events drive the UI until message_done.
+            const awaitingRefiner = String(state.refinementBusyTicketId || "") === String(ticket.id);
+            const thinking = refinementIsThinking(ticket) || awaitingRefiner;
+
+            if (thinking) {
+                setRefinementStatus("Refiner is thinking…", true);
             } else if (ticket.recommended_ready) {
                 setRefinementStatus("Refiner proposed a refinement — review & approve", false);
             } else {
                 setRefinementStatus("Your turn — send a message to refine this story", false);
             }
 
-            loadRefinementThread(ticket.id, refinementIsThinking(ticket)).catch((error) => {
+            if (awaitingRefiner) {
+                // Live stream owns the thread right now; leave it alone.
+                return;
+            }
+            loadRefinementThread(ticket.id, thinking).catch((error) => {
                 const thread = document.getElementById("refinement-thread");
                 if (thread) thread.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
             });
@@ -7000,6 +7010,7 @@
             state.refinementTicketId = null;
             state.refinementPendingSend = null;
             state.refinementLastHumanText = null;
+            state.refinementBusyTicketId = null;
             if (socket) {
                 try {
                     socket.onclose = null;
@@ -7135,6 +7146,10 @@
                 case "refinement_connected":
                     if (payload.llm_available === false) {
                         showRefinementNoLLM(payload.llm_advice, payload.llm_command);
+                    } else if (String(state.refinementBusyTicketId || "") === String(ticketId)) {
+                        // A reply is in flight (e.g. reconnect after idle to resend) —
+                        // keep the thinking cue rather than flashing "your turn".
+                        setRefinementStatus("Refiner is thinking…", true);
                     } else {
                         setRefinementStatus("Connected — your turn", false);
                     }
@@ -7153,6 +7168,7 @@
                     return;
                 }
                 case "refinement_thinking": {
+                    state.refinementBusyTicketId = String(ticketId);
                     setRefinementStatus("Refiner is thinking…", true);
                     const thread = refinementThreadEl();
                     if (!thread) return;
@@ -7169,6 +7185,7 @@
                     return;
                 }
                 case "chunk": {
+                    state.refinementBusyTicketId = String(ticketId);
                     setRefinementStatus("Refiner is responding…", true);
                     const node = ensureRefinementStreamingBubble();
                     if (node) {
@@ -7184,25 +7201,30 @@
                     return;
                 }
                 case "message_done": {
+                    state.refinementBusyTicketId = null;
                     removeRefinementStreamingBubble();
                     setRefinementStatus("Refiner replied — your turn", false);
                     refreshOpenRefinement(ticketId);
                     return;
                 }
                 case "refinement_busy":
+                    state.refinementBusyTicketId = String(ticketId);
                     setRefinementStatus("Refiner is still responding…", true);
                     setNotice("Refiner is still responding…");
                     return;
                 case "refinement_no_llm":
+                    state.refinementBusyTicketId = null;
                     removeRefinementStreamingBubble();
                     showRefinementNoLLM(payload.advice, payload.command);
                     return;
                 case "refinement_error":
+                    state.refinementBusyTicketId = null;
                     removeRefinementStreamingBubble();
                     setRefinementStatus("Error: " + (payload.error || "refinement failed"), false);
                     setNotice(payload.error || "Refinement error", true);
                     return;
                 case "refinement_idle_closed": {
+                    state.refinementBusyTicketId = null;
                     const thread = refinementThreadEl();
                     if (thread) {
                         const note = document.createElement("div");
@@ -7235,8 +7257,9 @@
                 } catch (_) {
                     return false;
                 }
+                state.refinementBusyTicketId = String(ticketId);
                 appendRefinementHumanBubble("you", text);
-                setRefinementStatus("Waiting for the refiner…", true);
+                setRefinementStatus("Refiner is thinking…", true);
                 return true;
             }
             // Socket closed (e.g. idle) or absent: reconnect and queue the send.
@@ -7245,8 +7268,9 @@
                 state.refinementPendingSend = text;
                 connectRefinementSocket(ticketId);
                 if (state.refinementSocket) {
+                    state.refinementBusyTicketId = String(ticketId);
                     appendRefinementHumanBubble("you", text);
-                    setRefinementStatus("Waiting for the refiner…", true);
+                    setRefinementStatus("Refiner is thinking…", true);
                     return true;
                 }
                 state.refinementPendingSend = null;
