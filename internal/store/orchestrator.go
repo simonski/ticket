@@ -143,6 +143,10 @@ type OrchestratorTicket struct {
 	Priority         int
 	AssigneeLastSeen string
 	AssigneeIsAgent  bool // true only when the assignee is a known agent user
+	// RefinementAgentTurn is true when a refine-stage ticket is waiting for the
+	// refiner agent to respond (the latest comment is the human's, or there are no
+	// comments yet). False means the dialogue is waiting on the human.
+	RefinementAgentTurn bool
 }
 
 // SprintSealed reports whether this ticket's sprint is sealed (active).
@@ -167,7 +171,13 @@ func ListOrchestratorCandidates(ctx context.Context, db *sql.DB, projectID int64
 		       t.sprint_id, COALESCE(sp.stage, ''),
 		       t.priority,
 		       COALESCE(au.last_seen, ''),
-		       CASE WHEN au.user_id IS NOT NULL THEN 1 ELSE 0 END
+		       CASE WHEN au.user_id IS NOT NULL THEN 1 ELSE 0 END,
+		       CASE
+		         WHEN NOT EXISTS (SELECT 1 FROM comments cc WHERE cc.item_id = t.ticket_id) THEN 1
+		         WHEN (SELECT cu.user_type FROM comments c JOIN users cu ON cu.user_id = c.user_id
+		               WHERE c.item_id = t.ticket_id ORDER BY c.id DESC LIMIT 1) = 'agent' THEN 0
+		         ELSE 1
+		       END AS refinement_agent_turn
 		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
 		LEFT JOIN roles r ON r.role_id = t.role_id
@@ -194,15 +204,16 @@ func ListOrchestratorCandidates(ctx context.Context, db *sql.DB, projectID int64
 	var out []OrchestratorTicket
 	for rows.Next() {
 		var t OrchestratorTicket
-		var draft, hasChildren, isAgent int
+		var draft, hasChildren, isAgent, agentTurn int
 		var sprintID sql.NullInt64
 		if scanErr := rows.Scan(&t.TicketID, &t.ProjectID, &t.Stage, &t.State,
 			&t.RoleID, &t.RoleTitle, &t.Assignee, &draft, &hasChildren,
 			&t.WorkflowStageID, &sprintID, &t.SprintStage, &t.Priority,
-			&t.AssigneeLastSeen, &isAgent); scanErr != nil {
+			&t.AssigneeLastSeen, &isAgent, &agentTurn); scanErr != nil {
 			return nil, scanErr
 		}
 		t.AssigneeIsAgent = isAgent != 0
+		t.RefinementAgentTurn = agentTurn != 0
 		t.Draft = draft != 0
 		t.HasChildren = hasChildren != 0
 		if sprintID.Valid {

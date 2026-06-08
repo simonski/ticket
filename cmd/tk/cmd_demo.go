@@ -412,6 +412,7 @@ func runDemo(args []string) error {
 		{username: "ba-agent", role: "Business Analyst"},
 		{username: "eng-agent", role: "Engineer"},
 		{username: "qa-agent", role: "QA Engineer"},
+		{username: "refiner-agent", role: "refiner"},
 	}
 	for i, da := range demoAgents {
 		agent, _, err := store.CreateAgent(ctx, db, "password")
@@ -784,6 +785,30 @@ func runDemo(args []string) error {
 		}
 	}
 	fmt.Println(" done")
+
+	// A few backlog ideas sitting in the refine stage so the orchestrator's
+	// preparation loop has work: the refiner agent is assigned these and opens the
+	// idea→refinement dialogue (Phase 6).
+	if len(projects) > 0 {
+		refineIdeas := []struct{ title, desc string }{
+			{"Let users export their data as a portable archive", "A user has asked to download everything they've created. Scope is unclear: which entities, which formats, how big."},
+			{"Add a weekly digest email summarising activity", "Stakeholders want a recap. Unclear what to include, cadence, and opt-out."},
+			{"Support single sign-on for enterprise customers", "Large prospect needs SSO. Which protocols and providers are in scope is undecided."},
+		}
+		for _, idea := range refineIdeas {
+			it, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
+				ProjectID: projects[0].ID, Type: "idea", Title: idea.title, Description: idea.desc,
+				Author: adminUser.Username, CreatedBy: adminUser.ID, State: "idle",
+			})
+			if err != nil {
+				return fmt.Errorf("creating refine idea: %w", err)
+			}
+			if _, err := db.ExecContext(ctx, `UPDATE tickets SET stage = 'refine', state = 'idle', status = 'refine/idle' WHERE ticket_id = ?`, it.ID); err != nil {
+				return fmt.Errorf("moving idea to refine: %w", err)
+			}
+		}
+		fmt.Printf("  ✓ Seeded %d refine-stage ideas for the orchestrator's preparation loop\n", len(refineIdeas))
+	}
 
 	// Backdate ticket timestamps based on their sprint assignment.
 	fmt.Printf("  Backdating %d tickets...", len(allTicketMeta))

@@ -60,6 +60,30 @@ func TestDecideSkipsWhenNoMatchingAgent(t *testing.T) {
 	}
 }
 
+func TestDecideAssignsRefinerOnAgentTurn(t *testing.T) {
+	pool := newAgentPool([]store.OrchestratorAgent{{Username: "refiner-bot", Roles: []string{"refiner"}}})
+	tk := store.OrchestratorTicket{
+		TicketID: "IDEA-1", ProjectID: 1, Stage: store.StageRefine, State: store.StateIdle,
+		Draft: true, RefinementAgentTurn: true,
+	}
+	d := decide(tk, pool, time.Now().UTC(), time.Minute, true)
+	if d.Kind != ActionAssign || d.Agent != "refiner-bot" {
+		t.Fatalf("decision = %+v, want assign to refiner-bot", d)
+	}
+}
+
+func TestDecideSkipsRefineAwaitingHuman(t *testing.T) {
+	pool := newAgentPool([]store.OrchestratorAgent{{Username: "refiner-bot", Roles: []string{"refiner"}}})
+	tk := store.OrchestratorTicket{
+		TicketID: "IDEA-2", ProjectID: 1, Stage: store.StageRefine, State: store.StateIdle,
+		Draft: true, RefinementAgentTurn: false, // latest message is the agent's
+	}
+	d := decide(tk, pool, time.Now().UTC(), time.Minute, true)
+	if d.Kind != ActionSkip {
+		t.Fatalf("Kind = %q, want skip (awaiting human)", d.Kind)
+	}
+}
+
 func TestDecideAdvancesSuccess(t *testing.T) {
 	pool := newAgentPool(nil)
 	tk := store.OrchestratorTicket{

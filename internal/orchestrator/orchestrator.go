@@ -176,6 +176,31 @@ func decideIdle(t store.OrchestratorTicket, pool *agentPool, d Decision) Decisio
 		d.Detail = "idle but already has an assignee"
 		return d
 	}
+
+	// Backlog preparation loop (Phase 6): refine-stage tickets are driven by a
+	// refiner agent in a turn-based dialogue with the human. The orchestrator
+	// assigns a refiner only when it is the agent's turn; otherwise the dialogue is
+	// waiting on the human (reply or approval).
+	if t.Stage == store.StageRefine {
+		if !t.RefinementAgentTurn {
+			d.Detail = "refine — awaiting human reply or approval"
+			return d
+		}
+		if !t.IsLeaf() {
+			d.Detail = "refine — broken down into stories, awaiting human approval"
+			return d
+		}
+		agent := pool.pick("refiner")
+		if agent == nil {
+			d.Detail = "refine — no available refiner agent"
+			return d
+		}
+		d.Kind = ActionAssign
+		d.Agent = agent.Username
+		d.Detail = fmt.Sprintf("assign refinement to refiner agent %q", agent.Username)
+		return d
+	}
+
 	if t.Draft {
 		d.Detail = "draft — not yet ready for work"
 		return d
@@ -184,11 +209,10 @@ func decideIdle(t store.OrchestratorTicket, pool *agentPool, d Decision) Decisio
 		d.Detail = "has children — only leaf stories are worked"
 		return d
 	}
-	// Execution loop only (Phase 1): the orchestrator assigns work that sits in a
-	// sealed (active) sprint. Backlog preparation (idea/refine/ready) is the
-	// interactive prep loop, deferred to a later phase.
+	// Other backlog stages (idea, ready) are not auto-worked: idea is pre-refinement
+	// (a human submits it for refinement), ready waits for a sprint.
 	if store.IsBacklogStage(t.Stage) {
-		d.Detail = "backlog stage — preparation loop not yet automated"
+		d.Detail = "backlog stage — not auto-worked (submit to refine, or seal a sprint)"
 		return d
 	}
 	if !t.SprintSealed() {

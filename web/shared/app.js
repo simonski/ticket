@@ -6088,6 +6088,56 @@
                 });
             }
 
+            const refinementSendBtn = document.getElementById("refinement-send");
+            const refinementInput = document.getElementById("refinement-input");
+            if (refinementSendBtn && refinementInput) {
+                refinementSendBtn.addEventListener("click", async () => {
+                    const ticket = state.activeTicket;
+                    if (!ticket || !ticket.id) return;
+                    const comment = String(refinementInput.value || "").trim();
+                    if (!comment) {
+                        setNotice("Reply is required.", true);
+                        return;
+                    }
+                    refinementSendBtn.disabled = true;
+                    try {
+                        await api("/api/tickets/" + ticket.id + "/comments", {
+                            method: "POST",
+                            body: JSON.stringify({ comment: comment }),
+                        });
+                        refinementInput.value = "";
+                        await loadRefinementThread(ticket.id);
+                    } catch (e) {
+                        setNotice(e.message || "Failed to send reply", true);
+                    } finally {
+                        refinementSendBtn.disabled = false;
+                    }
+                });
+            }
+
+            const refinementApproveBtn = document.getElementById("refinement-approve");
+            if (refinementApproveBtn) {
+                refinementApproveBtn.addEventListener("click", async () => {
+                    const ticket = state.activeTicket;
+                    if (!ticket || !ticket.id) return;
+                    refinementApproveBtn.disabled = true;
+                    try {
+                        await api("/api/tickets/" + ticket.id + "/refinement/approve", {
+                            method: "POST",
+                            body: JSON.stringify({}),
+                        });
+                        await Promise.all([loadTickets(), loadProjectAgents()]);
+                        renderAll();
+                        closeTicketModal();
+                        setNotice("Refinement approved.");
+                    } catch (e) {
+                        setNotice(e.message || "Failed to approve refinement", true);
+                    } finally {
+                        refinementApproveBtn.disabled = false;
+                    }
+                });
+            }
+
             els.projectMenuButton.addEventListener("click", (event) => {
                 event.stopPropagation();
                 els.accountMenuDropdown.classList.remove("open");
@@ -6433,6 +6483,7 @@
             loadTicketTime(ticket.id).catch((error) => {
                 els.ticketTimeEntries.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
             });
+            renderRefinementPanel(state.activeTicket);
         }
 
         function closeTicketModal() {
@@ -6492,6 +6543,77 @@
             }
             state.ticketComments = await api("/api/tickets/" + ticketID + "/comments");
             renderTicketComments();
+        }
+
+        function agentUsernameSet() {
+            const names = new Set();
+            (state.projectAgents || []).map((s) => s.agent || s).forEach((a) => {
+                if (a && a.username) names.add(String(a.username).toLowerCase());
+            });
+            return names;
+        }
+
+        function renderRefinementThread(comments) {
+            const thread = document.getElementById("refinement-thread");
+            if (!thread) return;
+            if (!Array.isArray(comments) || !comments.length) {
+                thread.innerHTML = "<div class=\"empty\">No refinement dialogue yet.</div>";
+                return;
+            }
+            const agents = agentUsernameSet();
+            thread.innerHTML = comments.map((item) => {
+                const author = item.author || "user";
+                const isAgent = agents.has(String(author).toLowerCase()) || /refin/i.test(author);
+                const side = isAgent ? "agent" : "human";
+                return "<div class=\"refinement-bubble refinement-bubble-" + side + "\">" +
+                    "<div class=\"refinement-author\">" + escapeHTML(author) + "</div>" +
+                    "<div class=\"refinement-text\">" + escapeHTML(item.text || item.comment || "") + "</div>" +
+                    (item.date ? "<div class=\"refinement-date\">" + escapeHTML(item.date) + "</div>" : "") +
+                    "</div>";
+            }).join("");
+        }
+
+        async function loadRefinementThread(ticketID) {
+            if (!ticketID) return;
+            const comments = await api("/api/tickets/" + ticketID + "/comments");
+            renderRefinementThread(comments);
+        }
+
+        function renderRefinementPanel(ticket) {
+            const panel = document.getElementById("refinement-panel");
+            if (!panel) return;
+            if (!ticket || ticket.stage !== "refine") {
+                panel.classList.add("hidden");
+                return;
+            }
+            panel.classList.remove("hidden");
+
+            const approveBox = document.getElementById("refinement-approve-box");
+            const breakdown = document.getElementById("refinement-breakdown");
+            if (approveBox && breakdown) {
+                if (ticket.recommended_ready) {
+                    approveBox.classList.remove("hidden");
+                    const children = (state.tickets || []).filter((t) => t.parent_id === ticket.id);
+                    if (children.length) {
+                        breakdown.innerHTML = "<div class=\"refinement-subheading\">Proposed breakdown</div>" +
+                            children.map((c) =>
+                                "<div class=\"refinement-child\"><strong>" + escapeHTML(c.title || "(untitled)") + "</strong>" +
+                                (c.description ? "<div class=\"meta\">" + escapeHTML(c.description) + "</div>" : "") +
+                                "</div>"
+                            ).join("");
+                    } else {
+                        breakdown.innerHTML = "";
+                    }
+                } else {
+                    approveBox.classList.add("hidden");
+                    breakdown.innerHTML = "";
+                }
+            }
+
+            loadRefinementThread(ticket.id).catch((error) => {
+                const thread = document.getElementById("refinement-thread");
+                if (thread) thread.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
+            });
         }
 
         function renderTicketLabels() {

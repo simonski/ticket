@@ -519,6 +519,20 @@ func (r *router) registerTicketHandlers() {
 				writeJSON(w, http.StatusOK, signoff)
 				return
 			}
+			if len(parts) == 3 && parts[1] == "refinement" && parts[2] == "approve" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				approved, err := store.ApproveRefinement(r.Context(), db, id, user.Username, user.ID)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				notify("ticket_updated", approved.ProjectID, approved.ID)
+				writeJSON(w, http.StatusOK, approved)
+				return
+			}
 			if len(parts) == 2 && parts[1] == "inbox" && r.Method == http.MethodGet {
 				if !canViewInterventions(role) {
 					writeAuthError(w, store.ErrForbidden)

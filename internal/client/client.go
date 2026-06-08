@@ -864,6 +864,37 @@ func (c *Client) AgentRecommendReady(ctx context.Context, agentID, password, tic
 	return ticket, err
 }
 
+func (c *Client) AgentRefineTicket(ctx context.Context, id string, request AgentRefineRequest) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		agent, err := store.AuthenticateAgent(ctx, db, request.ID, request.Password)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		stories := make([]store.RefinementStory, 0, len(request.Stories))
+		for _, st := range request.Stories {
+			stories = append(stories, store.RefinementStory{Title: st.Title, Description: st.Description, AcceptanceCriteria: st.AcceptanceCriteria})
+		}
+		return store.ApplyRefinementTurn(ctx, db, id, agent.Username, agent.ID, store.RefinementTurnParams{
+			Message: request.Message, ProposalKind: request.ProposalKind,
+			Description: request.Description, AcceptanceCriteria: request.AcceptanceCriteria, Stories: stories,
+		})
+	}
+	body := map[string]any{
+		"message":             request.Message,
+		"proposal_kind":       request.ProposalKind,
+		"description":         request.Description,
+		"acceptance_criteria": request.AcceptanceCriteria,
+		"stories":             request.Stories,
+	}
+	var ticket store.Ticket
+	err := c.doJSONBasicAuth(ctx, http.MethodPost, fmt.Sprintf("/api/agents/tickets/%s/refine", id), request.ID, request.Password, body, &ticket)
+	return ticket, err
+}
+
 func (c *Client) CreateProject(ctx context.Context, request ProjectCreateRequest) (store.Project, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

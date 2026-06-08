@@ -1,10 +1,9 @@
 # DESIGN_ORCHESTRATOR.md
 
-> **Status: IMPLEMENTED (Phases 1–5).** The deterministic execution orchestrator is
-> built and tested on the `feature/orchestrator` branch. Phase 6 (the interactive
-> backlog-preparation loop, Decision D / Open Question 9) is deliberately **not**
-> built — its human+LLM refinement design is still open. Sections below kept as the
-> living design record; **✅ RESOLVED** marks agreed decisions.
+> **Status: IMPLEMENTED (Phases 1–6).** The deterministic execution orchestrator
+> AND the interactive backlog-preparation loop are built and tested on the
+> `feature/orchestrator` branch. Sections below are the living design record;
+> **✅ RESOLVED** marks agreed decisions.
 
 ## Implementation status
 
@@ -15,7 +14,37 @@
 | 3 | `tk server -orchestrator` background worker; config (interval, heartbeat timeout, per-project on/off) + API + UI | ✅ |
 | 4 | `tk orchestrator [-id N \| N \| -project_id N] [-apply]` dry-run CLI | ✅ |
 | 5 | Heartbeat during LLM; abandonment guard (stale-result rejection); audit history events | ✅ |
-| 6 | Interactive backlog preparation loop (idea→refinement→breakdown) | ⛔ deferred — design open (Q9) |
+| 6 | Interactive backlog preparation loop (idea→refinement→breakdown) | ✅ refinement dialogue (comments), orchestrator-driven, human approval, idea→epic breakdown |
+
+### Phase 6 — preparation loop (as built)
+
+Decisions (Q9): the refinement **dialogue reuses the ticket comment thread** (the
+refiner and human exchange comments — persisted, ticket-scoped, presented in the UI
+as a dedicated refinement chat); the human ends it with **explicit approval**; on a
+multi-story **breakdown the idea becomes an epic** and its proposed child stories
+become ready; and the **orchestrator pushes refinement** to refiner agents (the
+refiner no longer self-pulls).
+
+Turn-based flow, all driven by the deterministic orchestrator:
+1. A human submits an idea into the `refine` stage.
+2. Each orchestrator pass: if a `refine`-stage ticket is idle and it is the
+   **agent's turn** (the latest comment is the human's, or there are none yet), it
+   assigns a refiner agent (`assignee` + active). `RefinementDialogueTurn` /
+   `ListOrchestratorCandidates.refinement_agent_turn` computes whose turn it is.
+3. The refiner agent reads the idea + thread, posts one reply, and either asks
+   questions, proposes a single ready story (`recommended_ready`, refined
+   description/AC), or proposes a breakdown (creates draft child stories). It then
+   releases the ticket to idle (awaiting the human).
+4. The human replies (continuing the dialogue → agent's turn again) or **approves**
+   (`POST /api/tickets/{id}/refinement/approve`): single → `MarkTicketReady`;
+   breakdown → re-type to epic + children ready.
+
+Key code: `internal/store/refinement.go` (`RefinementDialogueTurn`,
+`ApplyRefinementTurn`, `ApproveRefinement`, `AddRefinementProposalChild`),
+agent action `POST /api/agents/tickets/{id}/refine`, `decideIdle` refine branch,
+agent runtime `buildRefinementPrompt`/`parseRefinementOutput`. History events:
+`refinement_approved_breakdown`. Note: the dialogue medium is the comment thread
+(no new table / schema-version bump), which the refinement UI renders as a chat.
 
 Key files: `internal/orchestrator/orchestrator.go`, `internal/store/orchestrator.go`,
 `internal/server/server.go` (`runOrchestrator`), `internal/server/api_agents.go`
@@ -23,9 +52,10 @@ Key files: `internal/orchestrator/orchestrator.go`, `internal/store/orchestrator
 `orchestrator_assigned`, `orchestrator_advanced`, `orchestrator_recovered`,
 `orchestrator_abandoned`. "Sealed sprint" == a sprint in stage `active`.
 
-Notable interim behaviour: a `refiner` agent still pulls draft work (the prep loop
-is not yet orchestrated), and `tk agent request -id X` still performs an explicit
-manual claim of a named ticket (a human directing work, not the agent self-selecting).
+Notable behaviour: refiner agents are now pushed refinement turns by the
+orchestrator (no more self-pull); `tk agent request -id X` still performs an
+explicit manual claim of a named ticket (a human directing work, not the agent
+self-selecting).
 
 ### Decisions settled so far
 - **A — Assignment is push-only.** Agents do **not** self-claim. The agent poll is

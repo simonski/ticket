@@ -285,9 +285,13 @@ func runAgent(args []string) error {
 			ticket := response.Ticket
 			alog("processing %s %q (role=%s)", ticketLabel(*ticket), ticket.Title, agentRole)
 
+			// Refinement is driven by the ticket's stage, not the agent's role: a
+			// ticket in the refine stage gets one turn of the idea→refinement dialogue.
+			isRefine := strings.EqualFold(strings.TrimSpace(ticket.Stage), "refine")
 			var prompt string
-			if agentRole == "refiner" {
-				prompt = buildRefinerPrompt(response)
+			if isRefine {
+				comments, _ := svc.ListComments(context.Background(), ticket.ID)
+				prompt = buildRefinementPrompt(response, comments)
 			} else {
 				prompt = buildAgentPrompt(response)
 			}
@@ -320,16 +324,22 @@ func runAgent(args []string) error {
 			}
 			alog("submitting result for %s (%d bytes)", ticketLabel(*ticket), len(result))
 
-			if agentRole == "refiner" {
-				// Post refinement feedback as a comment, then signal ready.
-				if _, commentErr := svc.AddComment(context.Background(), ticket.ID, strings.TrimSpace(result)); commentErr != nil {
-					fmt.Printf("[agent] warning: could not post refinement comment: %v\n", commentErr)
+			if isRefine {
+				// Parse the LLM output into a refinement turn: a chat reply plus an
+				// optional proposal (a single ready story, or a breakdown into stories).
+				msg, kind, desc, ac, stories := parseRefinementOutput(result)
+				refineReq := libticket.AgentRefineRequest{
+					ID: agentIDVal, Password: agentPassword,
+					Message: msg, ProposalKind: kind, Description: desc, AcceptanceCriteria: ac,
+					Stories: stories,
 				}
-				if _, recErr := svc.AgentRecommendReady(context.Background(), agentIDVal, agentPassword, ticket.ID); recErr != nil {
-					fmt.Printf("[agent] warning: could not set recommended_ready: %v\n", recErr)
-				} else {
-					fmt.Printf("refined %s — recommended ready for development\n", ticketLabel(*ticket))
+				if _, refErr := svc.AgentRefineTicket(context.Background(), ticket.ID, refineReq); refErr != nil {
+					fmt.Printf("dropping refinement of %s: %v\n", ticketLabel(*ticket), refErr)
+					alog("  refine turn rejected — dropping and re-polling")
+					time.Sleep(idleDelay)
+					continue
 				}
+				fmt.Printf("refinement turn on %s — %s\n", ticketLabel(*ticket), kind)
 				continue
 			}
 
@@ -525,36 +535,119 @@ func runAgent(args []string) error {
 	}
 }
 
-func buildRefinerPrompt(resp libticket.AgentWorkResponse) string {
+// buildRefinementPrompt builds one turn of the idea→refinement dialogue: the idea,
+// the conversation so far, and instructions for how to respond (ask questions, or
+// propose a single ready story, or propose a breakdown into stories).
+func buildRefinementPrompt(resp libticket.AgentWorkResponse, comments []store.Comment) string {
 	var b strings.Builder
-	b.WriteString("You are a product manager / business analyst refining a development ticket.\n")
-	b.WriteString("Your job is to review the ticket and ensure it is clear, actionable, and ready for a developer to pick up.\n\n")
-	b.WriteString("Check and improve:\n")
-	b.WriteString("- Title: is it clear and specific?\n")
-	b.WriteString("- Description: does it explain what, why, and any context?\n")
-	b.WriteString("- Acceptance Criteria: are they testable and complete?\n\n")
-	b.WriteString("Output your refinement suggestions as concise bullet points. End with either:\n")
-	b.WriteString("  RECOMMENDATION: READY — if the ticket is good enough for a developer to start\n")
-	b.WriteString("  RECOMMENDATION: NOT READY — if more information is needed (explain what is missing)\n\n")
+	b.WriteString("You are a product manager refining a backlog idea with a human, turn by turn.\n")
+	b.WriteString("Read the idea and the conversation so far, then take ONE turn.\n\n")
+	b.WriteString("Rules for your reply:\n")
+	b.WriteString("- If anything is ambiguous or missing, ask concise clarifying questions (plain text).\n")
+	b.WriteString("- When the requirement is clear AND small enough for a single story, end your reply with:\n")
+	b.WriteString("    PROPOSE_READY\n")
+	b.WriteString("    DESCRIPTION: <one-paragraph refined description>\n")
+	b.WriteString("    ACCEPTANCE_CRITERIA: <testable criteria, semicolon-separated>\n")
+	b.WriteString("- When the idea is too big and should be split, end your reply with:\n")
+	b.WriteString("    PROPOSE_BREAKDOWN\n")
+	b.WriteString("    STORY: <title> | <one-line description>\n")
+	b.WriteString("    STORY: <title> | <one-line description>\n")
+	b.WriteString("- Otherwise just ask your questions and stop (no marker).\n\n")
 	if resp.Project != nil {
-		b.WriteString(fmt.Sprintf("Project: %s — %s\n\n", resp.Project.Prefix, resp.Project.Title))
+		b.WriteString(fmt.Sprintf("Project: %s — %s\n", resp.Project.Prefix, resp.Project.Title))
 	}
 	if resp.Ticket != nil {
-		ticket := resp.Ticket
-		b.WriteString(fmt.Sprintf("Ticket: %s\n", ticket.ID))
-		b.WriteString(fmt.Sprintf("Title: %s\n", strings.TrimSpace(ticket.Title)))
-		if strings.TrimSpace(ticket.Description) != "" {
-			b.WriteString("Description:\n")
-			b.WriteString(strings.TrimSpace(ticket.Description))
-			b.WriteString("\n")
+		t := resp.Ticket
+		b.WriteString(fmt.Sprintf("Idea: %s — %s\n", t.ID, strings.TrimSpace(t.Title)))
+		if strings.TrimSpace(t.Description) != "" {
+			b.WriteString("Description:\n" + strings.TrimSpace(t.Description) + "\n")
 		}
-		if strings.TrimSpace(ticket.AcceptanceCriteria) != "" {
-			b.WriteString("Acceptance Criteria:\n")
-			b.WriteString(strings.TrimSpace(ticket.AcceptanceCriteria))
-			b.WriteString("\n")
+		if strings.TrimSpace(t.AcceptanceCriteria) != "" {
+			b.WriteString("Acceptance Criteria:\n" + strings.TrimSpace(t.AcceptanceCriteria) + "\n")
 		}
 	}
+	if len(comments) > 0 {
+		b.WriteString("\nConversation so far (oldest first):\n")
+		for _, c := range comments {
+			text := strings.TrimSpace(c.Text)
+			if text == "" {
+				text = strings.TrimSpace(c.Comment)
+			}
+			b.WriteString(fmt.Sprintf("[%s] %s\n", c.Author, text))
+		}
+	}
+	b.WriteString("\nYour turn:")
 	return strings.TrimSpace(b.String())
+}
+
+// parseRefinementOutput interprets the refiner LLM output into a refinement turn:
+// the chat message plus a proposal (question / ready / breakdown).
+func parseRefinementOutput(out string) (message, kind, description, acceptanceCriteria string, stories []libticket.AgentRefineStory) {
+	text := strings.TrimSpace(out)
+	switch {
+	case strings.Contains(text, "PROPOSE_READY"):
+		kind = "ready"
+		idx := strings.Index(text, "PROPOSE_READY")
+		message = strings.TrimSpace(text[:idx])
+		body := text[idx+len("PROPOSE_READY"):]
+		description = extractField(body, "DESCRIPTION:")
+		acceptanceCriteria = extractField(body, "ACCEPTANCE_CRITERIA:")
+		if message == "" {
+			message = "Proposed a refined, ready story."
+		}
+	case strings.Contains(text, "PROPOSE_BREAKDOWN"):
+		kind = "breakdown"
+		idx := strings.Index(text, "PROPOSE_BREAKDOWN")
+		message = strings.TrimSpace(text[:idx])
+		for _, line := range strings.Split(text[idx:], "\n") {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "STORY:") {
+				continue
+			}
+			rest := strings.TrimSpace(strings.TrimPrefix(line, "STORY:"))
+			title, desc := rest, ""
+			if pipe := strings.Index(rest, "|"); pipe >= 0 {
+				title = strings.TrimSpace(rest[:pipe])
+				desc = strings.TrimSpace(rest[pipe+1:])
+			}
+			if title != "" {
+				stories = append(stories, libticket.AgentRefineStory{Title: title, Description: desc})
+			}
+		}
+		if message == "" {
+			message = "Proposed breaking this idea into stories."
+		}
+		if len(stories) == 0 {
+			// No parseable stories — fall back to a question turn.
+			kind = "question"
+			message = text
+		}
+	default:
+		kind = "question"
+		message = text
+	}
+	return message, kind, description, acceptanceCriteria, stories
+}
+
+// extractField pulls the text following a "LABEL:" marker up to the next blank line
+// or recognised marker.
+func extractField(body, label string) string {
+	idx := strings.Index(body, label)
+	if idx < 0 {
+		return ""
+	}
+	rest := body[idx+len(label):]
+	var out []string
+	for _, line := range strings.Split(rest, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if len(out) > 0 && (trimmed == "" || strings.HasPrefix(trimmed, "DESCRIPTION:") ||
+			strings.HasPrefix(trimmed, "ACCEPTANCE_CRITERIA:") || strings.HasPrefix(trimmed, "STORY:") ||
+			strings.HasPrefix(trimmed, "PROPOSE_")) {
+			break
+		}
+		out = append(out, trimmed)
+	}
+	return strings.TrimSpace(strings.Join(out, " "))
 }
 
 func buildAgentPrompt(resp libticket.AgentWorkResponse) string {

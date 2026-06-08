@@ -231,24 +231,9 @@ func (r *router) registerAgentHandlers() {
 			}
 			var ticket store.Ticket
 			var status string
-			isRefiner := false
-			for _, role := range store.SplitAgentRoles(agent.AgentRole) {
-				if strings.EqualFold(role, "refiner") {
-					isRefiner = true
-					break
-				}
-			}
+			// Push model: the agent receives only orchestrator-assigned work (refiner
+			// agents now get refinement turns pushed to them by the orchestrator too).
 			switch {
-			case isRefiner:
-				// Backlog refinement is the not-yet-orchestrated preparation loop
-				// (Decision D / Phase 6). Until the orchestrator drives it, a refiner
-				// agent still pulls draft work to refine.
-				ticket, status, err = store.RequestRefineTicket(r.Context(), db, projectID, agent.Username, agent.ID)
-				if err != nil {
-					vlog("RequestRefineTicket error: %v", err)
-					writeStoreError(w, err)
-					return
-				}
 			case payload.TicketID != nil && strings.TrimSpace(*payload.TicketID) != "":
 				// Explicit claim of a named ticket (a manual operator affordance via
 				// `tk agent request -id X`): a human directing a specific ticket to an
@@ -608,6 +593,47 @@ func (r *router) registerAgentHandlers() {
 			}
 			notify("ticket_updated", updated.ProjectID, updated.ID)
 			writeJSON(w, http.StatusOK, updated)
+
+		case "refine":
+			// One turn of the refinement dialogue (Phase 6): the refiner posts its reply
+			// and an optional proposal (a single ready story or a breakdown into child
+			// stories); the ticket is released back to idle, awaiting the human.
+			var payload struct {
+				Message            string `json:"message"`
+				ProposalKind       string `json:"proposal_kind"`
+				Description        string `json:"description"`
+				AcceptanceCriteria string `json:"acceptance_criteria"`
+				Stories            []struct {
+					Title              string `json:"title"`
+					Description        string `json:"description"`
+					AcceptanceCriteria string `json:"acceptance_criteria"`
+				} `json:"stories"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			stories := make([]store.RefinementStory, 0, len(payload.Stories))
+			for _, st := range payload.Stories {
+				stories = append(stories, store.RefinementStory{Title: st.Title, Description: st.Description, AcceptanceCriteria: st.AcceptanceCriteria})
+			}
+			refined, err := store.ApplyRefinementTurn(r.Context(), db, ticketID, agent.Username, agent.ID, store.RefinementTurnParams{
+				Message: payload.Message, ProposalKind: payload.ProposalKind,
+				Description: payload.Description, AcceptanceCriteria: payload.AcceptanceCriteria, Stories: stories,
+			})
+			if err != nil {
+				if errors.Is(err, store.ErrRefinementNotAssigned) {
+					writeError(w, http.StatusConflict, err.Error())
+					return
+				}
+				writeStoreError(w, err)
+				return
+			}
+			if _, err := store.TouchAgent(r.Context(), db, agent.ID, "soliciting"); err != nil {
+				log.Printf("server: touch agent %s status=soliciting: %v", agent.ID, err)
+			}
+			notify("ticket_updated", refined.ProjectID, refined.ID)
+			writeJSON(w, http.StatusOK, refined)
 
 		default:
 			writeError(w, http.StatusNotFound, "not found")

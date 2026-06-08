@@ -216,6 +216,18 @@ func (s *HTTPService) AgentRecommendReady(ctx context.Context, agentID, password
 	return s.client.AgentRecommendReady(ctx, agentID, password, ticketID)
 }
 
+func (s *HTTPService) AgentRefineTicket(ctx context.Context, id string, request AgentRefineRequest) (store.Ticket, error) {
+	stories := make([]client.AgentRefineStory, 0, len(request.Stories))
+	for _, st := range request.Stories {
+		stories = append(stories, client.AgentRefineStory(st))
+	}
+	return s.client.AgentRefineTicket(ctx, id, client.AgentRefineRequest{
+		ID: request.ID, Password: request.Password, Message: request.Message,
+		ProposalKind: request.ProposalKind, Description: request.Description,
+		AcceptanceCriteria: request.AcceptanceCriteria, Stories: stories,
+	})
+}
+
 func (s *HTTPService) CreateProject(ctx context.Context, request ProjectCreateRequest) (store.Project, error) {
 	return s.client.CreateProject(ctx, client.ProjectCreateRequest(request))
 }

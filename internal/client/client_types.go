@@ -335,3 +335,19 @@ type AgentTicketUpdateRequest struct {
 	Password string `json:"password"`
 	Result   string `json:"result"`
 }
+
+type AgentRefineStory struct {
+	Title              string `json:"title"`
+	Description        string `json:"description"`
+	AcceptanceCriteria string `json:"acceptance_criteria"`
+}
+
+type AgentRefineRequest struct {
+	ID                 string             `json:"id"`
+	Password           string             `json:"password"`
+	Message            string             `json:"message"`
+	ProposalKind       string             `json:"proposal_kind"`
+	Description        string             `json:"description"`
+	AcceptanceCriteria string             `json:"acceptance_criteria"`
+	Stories            []AgentRefineStory `json:"stories"`
+}

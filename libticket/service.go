@@ -72,6 +72,7 @@ type AgentService interface {
 	RequestAgentWork(ctx context.Context, request AgentRequest) (AgentWorkResponse, error)
 	AgentUpdateTicket(ctx context.Context, id string, request AgentTicketUpdateRequest) (store.Ticket, error)
 	AgentRecommendReady(ctx context.Context, agentID, password, ticketID string) (store.Ticket, error)
+	AgentRefineTicket(ctx context.Context, id string, request AgentRefineRequest) (store.Ticket, error)
 }
 
 // ProjectService covers project CRUD, membership, and team association.
