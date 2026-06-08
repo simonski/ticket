@@ -236,9 +236,15 @@ func (r *router) registerSystemHandlers() {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
+			refineIdle, err := store.RefinementIdleMinutes(r.Context(), db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]any{
 				"interval_seconds":          interval,
 				"heartbeat_timeout_seconds": timeout,
+				"refinement_idle_minutes":   refineIdle,
 			})
 		case http.MethodPost:
 			if _, err := requireAdmin(db, r); err != nil {
@@ -248,6 +254,7 @@ func (r *router) registerSystemHandlers() {
 			var payload struct {
 				IntervalSeconds         int `json:"interval_seconds"`
 				HeartbeatTimeoutSeconds int `json:"heartbeat_timeout_seconds"`
+				RefinementIdleMinutes   int `json:"refinement_idle_minutes"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
@@ -261,11 +268,17 @@ func (r *router) registerSystemHandlers() {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
+			if err := store.SetRefinementIdleMinutes(r.Context(), db, payload.RefinementIdleMinutes); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
 			interval, _ := store.OrchestratorIntervalSeconds(r.Context(), db)
 			timeout, _ := store.OrchestratorHeartbeatTimeoutSeconds(r.Context(), db)
+			refineIdle, _ := store.RefinementIdleMinutes(r.Context(), db)
 			writeJSON(w, http.StatusOK, map[string]any{
 				"interval_seconds":          interval,
 				"heartbeat_timeout_seconds": timeout,
+				"refinement_idle_minutes":   refineIdle,
 			})
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")

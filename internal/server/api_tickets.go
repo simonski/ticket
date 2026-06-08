@@ -884,6 +884,11 @@ func (r *router) registerTicketHandlers() {
 							log.Printf("warning: add history event for ticket %s comment %d: %v", ticket.ID, comment.ID, err)
 						}
 						notify("ticket_updated", ticket.ProjectID, ticket.ID)
+						// A human reply into a refine-stage conversation wakes a refiner
+						// immediately, so the dialogue feels near-real-time.
+						if user.UserType != "agent" {
+							maybeTriggerRefinement(db, ticket)
+						}
 					}
 					writeJSON(w, http.StatusCreated, comment)
 				default:

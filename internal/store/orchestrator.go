@@ -29,8 +29,15 @@ const (
 	// go without a heartbeat before its in-flight job is considered abandoned.
 	OrchestratorDefaultHeartbeatTimeoutSeconds = 120
 
+	// RefinementDefaultIdleMinutes is how long a refinement conversation may sit
+	// without activity before its session is considered idle and closed — the
+	// orchestrator stops assigning a refiner to it so refiner agents are not tied
+	// up on dormant conversations when many ideas are being refined.
+	RefinementDefaultIdleMinutes = 15
+
 	settingOrchestratorInterval         = "orchestrator_interval_seconds"
 	settingOrchestratorHeartbeatTimeout = "orchestrator_heartbeat_timeout_seconds"
+	settingRefinementIdleMinutes        = "refinement_idle_minutes"
 	settingOrchestratorEnabledPrefix    = "orchestrator_enabled_project_" // + projectID
 )
 
@@ -80,6 +87,36 @@ func SetOrchestratorHeartbeatTimeoutSeconds(ctx context.Context, db *sql.DB, sec
 		seconds = OrchestratorDefaultHeartbeatTimeoutSeconds
 	}
 	return SetAppSetting(ctx, db, settingOrchestratorHeartbeatTimeout, strconv.Itoa(seconds))
+}
+
+// RefinementIdleMinutes returns how long a refinement conversation may be idle
+// before its session is closed.
+func RefinementIdleMinutes(ctx context.Context, db *sql.DB) (int, error) {
+	return appSettingPositiveInt(ctx, db, settingRefinementIdleMinutes, RefinementDefaultIdleMinutes)
+}
+
+// SetRefinementIdleMinutes sets the refinement idle-session timeout.
+func SetRefinementIdleMinutes(ctx context.Context, db *sql.DB, minutes int) error {
+	if minutes <= 0 {
+		minutes = RefinementDefaultIdleMinutes
+	}
+	return SetAppSetting(ctx, db, settingRefinementIdleMinutes, strconv.Itoa(minutes))
+}
+
+// RefinementSessionIdle reports whether a refinement conversation's last activity
+// is older than the idle window (the session should be considered closed). A first
+// turn (no prior activity recorded) is never treated as idle so the refiner can
+// open the dialogue.
+func RefinementSessionIdle(lastActivity string, now time.Time, idle time.Duration) bool {
+	ls := strings.TrimSpace(lastActivity)
+	if ls == "" || idle <= 0 {
+		return false
+	}
+	parsed, err := time.Parse("2006-01-02 15:04:05", ls)
+	if err != nil {
+		return false
+	}
+	return now.UTC().Sub(parsed) > idle
 }
 
 // OrchestratorEnabledForProject reports whether the orchestrator should manage a
@@ -147,6 +184,10 @@ type OrchestratorTicket struct {
 	// refiner agent to respond (the latest comment is the human's, or there are no
 	// comments yet). False means the dialogue is waiting on the human.
 	RefinementAgentTurn bool
+	// RefinementLastActivity is the timestamp ("2006-01-02 15:04:05") of the most
+	// recent refinement activity (latest comment, else when the ticket was last
+	// updated). Used to close idle refinement sessions.
+	RefinementLastActivity string
 }
 
 // SprintSealed reports whether this ticket's sprint is sealed (active).
@@ -177,7 +218,8 @@ func ListOrchestratorCandidates(ctx context.Context, db *sql.DB, projectID int64
 		         WHEN (SELECT cu.user_type FROM comments c JOIN users cu ON cu.user_id = c.user_id
 		               WHERE c.item_id = t.ticket_id ORDER BY c.id DESC LIMIT 1) = 'agent' THEN 0
 		         ELSE 1
-		       END AS refinement_agent_turn
+		       END AS refinement_agent_turn,
+		       COALESCE((SELECT MAX(c.created_at) FROM comments c WHERE c.item_id = t.ticket_id), t.updated_at) AS refinement_last_activity
 		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
 		LEFT JOIN roles r ON r.role_id = t.role_id
@@ -209,7 +251,7 @@ func ListOrchestratorCandidates(ctx context.Context, db *sql.DB, projectID int64
 		if scanErr := rows.Scan(&t.TicketID, &t.ProjectID, &t.Stage, &t.State,
 			&t.RoleID, &t.RoleTitle, &t.Assignee, &draft, &hasChildren,
 			&t.WorkflowStageID, &sprintID, &t.SprintStage, &t.Priority,
-			&t.AssigneeLastSeen, &isAgent, &agentTurn); scanErr != nil {
+			&t.AssigneeLastSeen, &isAgent, &agentTurn, &t.RefinementLastActivity); scanErr != nil {
 			return nil, scanErr
 		}
 		t.AssigneeIsAgent = isAgent != 0

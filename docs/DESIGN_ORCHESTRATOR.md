@@ -46,6 +46,19 @@ agent runtime `buildRefinementPrompt`/`parseRefinementOutput`. History events:
 `refinement_approved_breakdown`. Note: the dialogue medium is the comment thread
 (no new table / schema-version bump), which the refinement UI renders as a chat.
 
+**Near-real-time + idle session cleanup.** The dialogue feels live without a
+bespoke per-ticket WebSocket: (a) the UI's existing live socket pushes
+`ticket_updated` events, so the refinement transcript and a "refiner is thinking…"
+indicator refresh the instant a message is added or the refiner is assigned;
+(b) a human reply fires an immediate orchestrator pass scoped to that ticket
+(`triggerRefinementPass`), so a refiner is assigned at once rather than at the next
+periodic wake — latency drops to the agent poll + the LLM's own thinking time;
+(c) **idle sessions are closed**: `decideIdle` only assigns a refiner while the
+conversation is recent (`refinement_idle_minutes`, default 15). When many ideas are
+being refined, dormant ones stop consuming refiner agents; the human resumes simply
+by replying, which refreshes the activity timestamp. `RefinementSessionIdle` /
+`RefinementLastActivity` (latest-comment time in the sweep query) implement this.
+
 Key files: `internal/orchestrator/orchestrator.go`, `internal/store/orchestrator.go`,
 `internal/server/server.go` (`runOrchestrator`), `internal/server/api_agents.go`
 (push model + abandonment guard), `cmd/tk/cmd_orchestrator.go`. History event types:

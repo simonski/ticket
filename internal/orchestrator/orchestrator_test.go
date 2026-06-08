@@ -25,7 +25,7 @@ func TestDecideAssignsIdleSealedSprintTicket(t *testing.T) {
 		RoleTitle: "Engineer", WorkflowStageID: 5, SprintID: sealedSprintID(),
 		SprintStage: store.SprintSealedStage,
 	}
-	d := decide(tk, pool, time.Now().UTC(), time.Minute, true)
+	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionAssign {
 		t.Fatalf("Kind = %q, want assign (%s)", d.Kind, d.Detail)
 	}
@@ -41,7 +41,7 @@ func TestDecideSkipsIdleUnsealedSprint(t *testing.T) {
 		RoleTitle: "Engineer", WorkflowStageID: 5, SprintID: sealedSprintID(),
 		SprintStage: "closed", // not sealed
 	}
-	d := decide(tk, pool, time.Now().UTC(), time.Minute, true)
+	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionSkip {
 		t.Fatalf("Kind = %q, want skip", d.Kind)
 	}
@@ -54,7 +54,7 @@ func TestDecideSkipsWhenNoMatchingAgent(t *testing.T) {
 		RoleTitle: "Engineer", WorkflowStageID: 5, SprintID: sealedSprintID(),
 		SprintStage: store.SprintSealedStage,
 	}
-	d := decide(tk, pool, time.Now().UTC(), time.Minute, true)
+	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionSkip {
 		t.Fatalf("Kind = %q, want skip (no matching agent)", d.Kind)
 	}
@@ -66,9 +66,29 @@ func TestDecideAssignsRefinerOnAgentTurn(t *testing.T) {
 		TicketID: "IDEA-1", ProjectID: 1, Stage: store.StageRefine, State: store.StateIdle,
 		Draft: true, RefinementAgentTurn: true,
 	}
-	d := decide(tk, pool, time.Now().UTC(), time.Minute, true)
+	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionAssign || d.Agent != "refiner-bot" {
 		t.Fatalf("decision = %+v, want assign to refiner-bot", d)
+	}
+}
+
+func TestDecideClosesIdleRefineSession(t *testing.T) {
+	pool := newAgentPool([]store.OrchestratorAgent{{Username: "refiner-bot", Roles: []string{"refiner"}}})
+	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
+	tk := store.OrchestratorTicket{
+		TicketID: "IDEA-3", ProjectID: 1, Stage: store.StageRefine, State: store.StateIdle,
+		Draft: true, RefinementAgentTurn: true,
+		RefinementLastActivity: "2026-06-08 11:30:00", // 30 min ago
+	}
+	// Idle window of 15 minutes → the session is dormant → skip (don't tie up a refiner).
+	d := decide(tk, pool, now, time.Minute, 15*time.Minute, true)
+	if d.Kind != ActionSkip {
+		t.Fatalf("Kind = %q, want skip (idle session closed)", d.Kind)
+	}
+	// Fresh activity → assign.
+	tk.RefinementLastActivity = "2026-06-08 11:59:00" // 1 min ago
+	if d := decide(tk, pool, now, time.Minute, 15*time.Minute, true); d.Kind != ActionAssign {
+		t.Fatalf("Kind = %q, want assign (active session)", d.Kind)
 	}
 }
 
@@ -78,7 +98,7 @@ func TestDecideSkipsRefineAwaitingHuman(t *testing.T) {
 		TicketID: "IDEA-2", ProjectID: 1, Stage: store.StageRefine, State: store.StateIdle,
 		Draft: true, RefinementAgentTurn: false, // latest message is the agent's
 	}
-	d := decide(tk, pool, time.Now().UTC(), time.Minute, true)
+	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionSkip {
 		t.Fatalf("Kind = %q, want skip (awaiting human)", d.Kind)
 	}
@@ -90,7 +110,7 @@ func TestDecideAdvancesSuccess(t *testing.T) {
 		TicketID: "DEV-4", ProjectID: 1, Stage: "develop", State: store.StateSuccess,
 		WorkflowStageID: 5, SprintID: sealedSprintID(), SprintStage: store.SprintSealedStage,
 	}
-	d := decide(tk, pool, time.Now().UTC(), time.Minute, true)
+	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionAdvance {
 		t.Fatalf("Kind = %q, want advance", d.Kind)
 	}
@@ -102,7 +122,7 @@ func TestDecideRecoversFail(t *testing.T) {
 		TicketID: "DEV-5", ProjectID: 1, Stage: "develop", State: store.StateFail,
 		WorkflowStageID: 5,
 	}
-	d := decide(tk, pool, time.Now().UTC(), time.Minute, true)
+	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionRecover {
 		t.Fatalf("Kind = %q, want recover", d.Kind)
 	}
@@ -115,7 +135,7 @@ func TestDecideAbandonsStaleActive(t *testing.T) {
 		TicketID: "DEV-6", ProjectID: 1, Stage: "develop", State: store.StateActive,
 		Assignee: "eng-agent", AssigneeIsAgent: true, AssigneeLastSeen: "2026-06-08 11:50:00", // 10 min ago
 	}
-	d := decide(tk, pool, now, 2*time.Minute, true)
+	d := decide(tk, pool, now, 2*time.Minute, 0, true)
 	if d.Kind != ActionAbandon {
 		t.Fatalf("Kind = %q, want abandon", d.Kind)
 	}
@@ -128,7 +148,7 @@ func TestDecideDoesNotAbandonHumanAssigned(t *testing.T) {
 		TicketID: "DEV-6h", ProjectID: 1, Stage: "develop", State: store.StateActive,
 		Assignee: "alice", AssigneeIsAgent: false, AssigneeLastSeen: "", // a human, no heartbeat
 	}
-	d := decide(tk, pool, now, 2*time.Minute, true)
+	d := decide(tk, pool, now, 2*time.Minute, 0, true)
 	if d.Kind != ActionSkip {
 		t.Fatalf("Kind = %q, want skip (human-assigned active is left alone)", d.Kind)
 	}
@@ -141,7 +161,7 @@ func TestDecideLeavesFreshActiveAlone(t *testing.T) {
 		TicketID: "DEV-7", ProjectID: 1, Stage: "develop", State: store.StateActive,
 		Assignee: "eng-agent", AssigneeIsAgent: true, AssigneeLastSeen: "2026-06-08 11:59:30", // 30s ago
 	}
-	d := decide(tk, pool, now, 2*time.Minute, true)
+	d := decide(tk, pool, now, 2*time.Minute, 0, true)
 	if d.Kind != ActionSkip {
 		t.Fatalf("Kind = %q, want skip (fresh heartbeat)", d.Kind)
 	}
@@ -154,7 +174,7 @@ func TestDecideSkipsDisabledProject(t *testing.T) {
 		RoleTitle: "Engineer", WorkflowStageID: 5, SprintID: sealedSprintID(),
 		SprintStage: store.SprintSealedStage,
 	}
-	d := decide(tk, pool, time.Now().UTC(), time.Minute, false /* project disabled */)
+	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, false /* project disabled */)
 	if d.Kind != ActionSkip {
 		t.Fatalf("Kind = %q, want skip (disabled project)", d.Kind)
 	}
@@ -169,12 +189,12 @@ func TestDecideSkipsDraftAndNonLeaf(t *testing.T) {
 	}
 	draft := base
 	draft.Draft = true
-	if d := decide(draft, pool, time.Now().UTC(), time.Minute, true); d.Kind != ActionSkip {
+	if d := decide(draft, pool, time.Now().UTC(), time.Minute, 0, true); d.Kind != ActionSkip {
 		t.Fatalf("draft Kind = %q, want skip", d.Kind)
 	}
 	parent := base
 	parent.HasChildren = true
-	if d := decide(parent, pool, time.Now().UTC(), time.Minute, true); d.Kind != ActionSkip {
+	if d := decide(parent, pool, time.Now().UTC(), time.Minute, 0, true); d.Kind != ActionSkip {
 		t.Fatalf("non-leaf Kind = %q, want skip", d.Kind)
 	}
 }

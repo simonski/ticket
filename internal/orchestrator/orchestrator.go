@@ -57,6 +57,7 @@ type Options struct {
 	ProjectID        int64         // 0 = all projects
 	TicketID         string        // "" = all tickets
 	HeartbeatTimeout time.Duration // 0 = look up from settings
+	RefinementIdle   time.Duration // 0 = look up from settings; refinement session idle window
 	Now              time.Time     // injectable clock for tests; zero = time.Now()
 }
 
@@ -76,6 +77,15 @@ func Pass(ctx context.Context, db *sql.DB, opts Options) ([]Decision, error) {
 			return nil, fmt.Errorf("read heartbeat timeout: %w", err)
 		}
 		timeout = time.Duration(secs) * time.Second
+	}
+
+	refinementIdle := opts.RefinementIdle
+	if refinementIdle <= 0 {
+		mins, err := store.RefinementIdleMinutes(ctx, db)
+		if err != nil {
+			return nil, fmt.Errorf("read refinement idle minutes: %w", err)
+		}
+		refinementIdle = time.Duration(mins) * time.Minute
 	}
 
 	candidates, err := store.ListOrchestratorCandidates(ctx, db, opts.ProjectID, opts.TicketID)
@@ -109,7 +119,7 @@ func Pass(ctx context.Context, db *sql.DB, opts Options) ([]Decision, error) {
 		if err != nil {
 			return nil, fmt.Errorf("project %d enabled: %w", t.ProjectID, err)
 		}
-		d := decide(t, pool, now, timeout, enabled)
+		d := decide(t, pool, now, timeout, refinementIdle, enabled)
 		if !opts.DryRun && d.Kind != ActionSkip {
 			apply(ctx, db, t, &d, pool)
 		}
@@ -119,7 +129,7 @@ func Pass(ctx context.Context, db *sql.DB, opts Options) ([]Decision, error) {
 }
 
 // decide computes (but does not apply) the action for one ticket.
-func decide(t store.OrchestratorTicket, pool *agentPool, now time.Time, timeout time.Duration, projectEnabled bool) Decision {
+func decide(t store.OrchestratorTicket, pool *agentPool, now time.Time, timeout, refinementIdle time.Duration, projectEnabled bool) Decision {
 	d := Decision{
 		TicketID:  t.TicketID,
 		ProjectID: t.ProjectID,
@@ -163,7 +173,7 @@ func decide(t store.OrchestratorTicket, pool *agentPool, now time.Time, timeout 
 		return d
 
 	case store.StateIdle:
-		return decideIdle(t, pool, d)
+		return decideIdle(t, pool, now, refinementIdle, d)
 	}
 
 	d.Detail = "unknown state"
@@ -171,7 +181,7 @@ func decide(t store.OrchestratorTicket, pool *agentPool, now time.Time, timeout 
 }
 
 // decideIdle handles the assignment decision for an idle ticket.
-func decideIdle(t store.OrchestratorTicket, pool *agentPool, d Decision) Decision {
+func decideIdle(t store.OrchestratorTicket, pool *agentPool, now time.Time, refinementIdle time.Duration, d Decision) Decision {
 	if t.Assignee != "" {
 		d.Detail = "idle but already has an assignee"
 		return d
@@ -184,6 +194,13 @@ func decideIdle(t store.OrchestratorTicket, pool *agentPool, d Decision) Decisio
 	if t.Stage == store.StageRefine {
 		if !t.RefinementAgentTurn {
 			d.Detail = "refine — awaiting human reply or approval"
+			return d
+		}
+		// Idle-session cleanup: if the conversation has been dormant past the idle
+		// window, the session is closed — do not tie up a refiner. The human resumes
+		// it simply by replying (which refreshes the activity timestamp).
+		if store.RefinementSessionIdle(t.RefinementLastActivity, now, refinementIdle) {
+			d.Detail = "refine — session idle, closed (reply to resume)"
 			return d
 		}
 		if !t.IsLeaf() {

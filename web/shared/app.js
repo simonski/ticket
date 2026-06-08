@@ -1918,6 +1918,10 @@
             const config = await api("/api/config/orchestrator");
             intervalInput.value = config && config.interval_seconds != null ? config.interval_seconds : "";
             heartbeatInput.value = config && config.heartbeat_timeout_seconds != null ? config.heartbeat_timeout_seconds : "";
+            const idleInput = document.getElementById("orchestrator-refinement-idle");
+            if (idleInput) {
+                idleInput.value = config && config.refinement_idle_minutes != null ? config.refinement_idle_minutes : "";
+            }
         }
 
         async function loadPasskeys() {
@@ -2052,6 +2056,11 @@
                         return;
                     }
                     scheduleLiveRefresh();
+                    // Near-real-time refinement: when the open ticket changes, refresh
+                    // its refinement transcript + thinking indicator immediately.
+                    if (payload.ticket_id) {
+                        refreshOpenRefinement(payload.ticket_id);
+                    }
                 } catch (error) {
                     // Ignore malformed live payloads.
                 }
@@ -4791,9 +4800,11 @@
             if (orchestratorConfigForm) {
                 orchestratorConfigForm.addEventListener("submit", async (event) => {
                     event.preventDefault();
+                    const idleEl = document.getElementById("orchestrator-refinement-idle");
                     const payload = {
                         interval_seconds: Number.parseInt(document.getElementById("orchestrator-interval").value, 10) || 0,
                         heartbeat_timeout_seconds: Number.parseInt(document.getElementById("orchestrator-heartbeat-timeout").value, 10) || 0,
+                        refinement_idle_minutes: idleEl ? (Number.parseInt(idleEl.value, 10) || 0) : 0,
                     };
                     try {
                         await api("/api/config/orchestrator", { method: "POST", body: JSON.stringify(payload) });
@@ -6553,30 +6564,46 @@
             return names;
         }
 
-        function renderRefinementThread(comments) {
+        function renderRefinementThread(comments, thinking) {
             const thread = document.getElementById("refinement-thread");
             if (!thread) return;
-            if (!Array.isArray(comments) || !comments.length) {
-                thread.innerHTML = "<div class=\"empty\">No refinement dialogue yet.</div>";
-                return;
-            }
             const agents = agentUsernameSet();
-            thread.innerHTML = comments.map((item) => {
-                const author = item.author || "user";
-                const isAgent = agents.has(String(author).toLowerCase()) || /refin/i.test(author);
-                const side = isAgent ? "agent" : "human";
-                return "<div class=\"refinement-bubble refinement-bubble-" + side + "\">" +
-                    "<div class=\"refinement-author\">" + escapeHTML(author) + "</div>" +
-                    "<div class=\"refinement-text\">" + escapeHTML(item.text || item.comment || "") + "</div>" +
-                    (item.date ? "<div class=\"refinement-date\">" + escapeHTML(item.date) + "</div>" : "") +
+            let html = "";
+            if (Array.isArray(comments) && comments.length) {
+                html = comments.map((item) => {
+                    const author = item.author || "user";
+                    const isAgent = agents.has(String(author).toLowerCase()) || /refin/i.test(author);
+                    const side = isAgent ? "agent" : "human";
+                    return "<div class=\"refinement-bubble refinement-bubble-" + side + "\">" +
+                        "<div class=\"refinement-author\">" + escapeHTML(author) + "</div>" +
+                        "<div class=\"refinement-text\">" + escapeHTML(item.text || item.comment || "") + "</div>" +
+                        (item.date ? "<div class=\"refinement-date\">" + escapeHTML(item.date) + "</div>" : "") +
+                        "</div>";
+                }).join("");
+            } else if (!thinking) {
+                html = "<div class=\"empty\">No refinement dialogue yet.</div>";
+            }
+            if (thinking) {
+                html += "<div class=\"refinement-bubble refinement-bubble-agent refinement-thinking\">" +
+                    "<div class=\"refinement-author\">refiner</div>" +
+                    "<div class=\"refinement-text\"><span class=\"refinement-typing\"><span></span><span></span><span></span></span> thinking…</div>" +
                     "</div>";
-            }).join("");
+            }
+            thread.innerHTML = html;
+            thread.scrollTop = thread.scrollHeight;
         }
 
-        async function loadRefinementThread(ticketID) {
+        // refinementIsThinking reports whether the refiner agent is actively working
+        // this refine ticket (assigned + active) — drives the "thinking…" indicator.
+        function refinementIsThinking(ticket) {
+            return Boolean(ticket && ticket.stage === "refine" && ticket.state === "active" &&
+                String(ticket.assignee || "").trim() !== "");
+        }
+
+        async function loadRefinementThread(ticketID, thinking) {
             if (!ticketID) return;
             const comments = await api("/api/tickets/" + ticketID + "/comments");
-            renderRefinementThread(comments);
+            renderRefinementThread(comments, thinking);
         }
 
         function renderRefinementPanel(ticket) {
@@ -6610,10 +6637,24 @@
                 }
             }
 
-            loadRefinementThread(ticket.id).catch((error) => {
+            loadRefinementThread(ticket.id, refinementIsThinking(ticket)).catch((error) => {
                 const thread = document.getElementById("refinement-thread");
                 if (thread) thread.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
             });
+        }
+
+        // refreshOpenRefinement re-syncs the open ticket modal's refinement panel from
+        // a live WebSocket event so the dialogue updates in near real time.
+        async function refreshOpenRefinement(ticketID) {
+            if (!state.activeTicket || String(state.activeTicket.id) !== String(ticketID)) return;
+            if (state.activeTicket.stage !== "refine") return;
+            try {
+                const fresh = normalizeTicket(await api("/api/tickets/" + ticketID));
+                state.activeTicket = Object.assign({}, state.activeTicket, fresh);
+                renderRefinementPanel(state.activeTicket);
+            } catch (error) {
+                // Best-effort live refresh; ignore transient errors.
+            }
         }
 
         function renderTicketLabels() {

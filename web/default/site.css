@@ -1598,6 +1598,22 @@ select {
     align-self: flex-end;
     border-top-right-radius: 2px;
 }
+.refinement-thinking { opacity: 0.85; }
+.refinement-typing {
+    display: inline-flex; gap: 3px; vertical-align: middle;
+}
+.refinement-typing span {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--accent);
+    display: inline-block;
+    animation: refinement-blink 1.2s infinite ease-in-out both;
+}
+.refinement-typing span:nth-child(2) { animation-delay: 0.2s; }
+.refinement-typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes refinement-blink {
+    0%, 80%, 100% { opacity: 0.2; }
+    40% { opacity: 1; }
+}
 .refinement-author {
     font-size: 0.72rem;
     font-weight: 600;
