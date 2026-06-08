@@ -685,6 +685,7 @@ func runServer(args []string) error {
 	verbose := fs.Bool("v", false, "print verbose request/response logs to stdout")
 	staticPath := fs.String("path", "", "serve static files from this filesystem path instead of embedded assets")
 	siteName := fs.String("site", web.DefaultSite, "embedded site bundle to serve")
+	enableOrchestrator := fs.Bool("orchestrator", false, "run the deterministic orchestrator that assigns and advances ticket work")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -730,7 +731,7 @@ func runServer(args []string) error {
 		selectedSite = web.DefaultSite
 	}
 
-	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout, *staticPath, selectedSite)
+	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout, *staticPath, selectedSite, *enableOrchestrator)
 	if err != nil {
 		return err
 	}

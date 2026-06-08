@@ -411,6 +411,26 @@
                                 </form>
                             </div>
                         </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h2>Orchestrator</h2>
+                            </div>
+                            <form id="orchestrator-config-form" class="form-stack">
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="orchestrator-interval">Wake interval (seconds)</label>
+                                        <input id="orchestrator-interval" type="number" min="0" autocomplete="off">
+                                    </div>
+                                    <div class="field">
+                                        <label for="orchestrator-heartbeat-timeout">Heartbeat timeout (seconds)</label>
+                                        <input id="orchestrator-heartbeat-timeout" type="number" min="0" autocomplete="off">
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button id="save-orchestrator-config" class="btn btn-primary" type="submit">Save orchestrator settings</button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </section>
 
@@ -556,6 +576,13 @@
                                 <div class="field">
                                     <label for="project-workflow">Default workflow</label>
                                     <select id="project-workflow"></select>
+                                </div>
+                                <div class="field">
+                                    <label for="project-orchestrator-enabled">Orchestrator</label>
+                                    <select id="project-orchestrator-enabled">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
                                 </div>
                             </div>
                             <div class="field">

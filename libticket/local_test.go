@@ -414,7 +414,18 @@ func TestLocalServiceCoversLifecycleAliasesWorkflowStagesAndAgentOps(t *testing.
 	if _, err := svc.RequestAgentWork(ctx, libticket.AgentRequest{ID: agent.ID, Password: password, ProjectID: project.ID, DryRun: true}); err != nil {
 		t.Fatalf("RequestAgentWork() error = %v", err)
 	}
-	if _, err := svc.AgentUpdateTicket(ctx, ticket.ID, libticket.AgentTicketUpdateRequest{ID: agent.ID, Password: password, Result: "done"}); err != nil {
+	// Push model: the orchestrator assigns work; simulate that with a fresh ticket
+	// put at develop/active and assigned to the agent before it reports a result.
+	workTicket, err := svc.CreateTicket(ctx, libticket.TicketCreateRequest{ProjectID: project.ID, Type: "task", Title: "Agent work item"})
+	if err != nil {
+		t.Fatalf("CreateTicket(work) error = %v", err)
+	}
+	if _, err := svc.UpdateTicket(ctx, workTicket.ID, libticket.TicketUpdateRequest{
+		Title: workTicket.Title, Stage: "develop", State: "active", Assignee: agent.Username,
+	}); err != nil {
+		t.Fatalf("assign ticket to agent: %v", err)
+	}
+	if _, err := svc.AgentUpdateTicket(ctx, workTicket.ID, libticket.AgentTicketUpdateRequest{ID: agent.ID, Password: password, Result: "done"}); err != nil {
 		t.Fatalf("AgentUpdateTicket() error = %v", err)
 	}
 }

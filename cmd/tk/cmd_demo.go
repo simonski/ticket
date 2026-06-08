@@ -758,8 +758,10 @@ func runDemo(args []string) error {
 
 			if !isBacklog {
 				// Direct SQL to bypass the closed-sprint guard (valid for seeding only).
+				// Sprint tickets are not drafts — they are ready for the orchestrator
+				// to assign and work.
 				spID := pd.sprints[targetSprintLocalIdx].ID
-				if _, err := db.ExecContext(ctx, `UPDATE tickets SET sprint_id = ? WHERE ticket_id = ?`, spID, t.ID); err != nil {
+				if _, err := db.ExecContext(ctx, `UPDATE tickets SET sprint_id = ?, draft = 0 WHERE ticket_id = ?`, spID, t.ID); err != nil {
 					return fmt.Errorf("assigning sprint to ticket %s: %w", t.ID, err)
 				}
 			}

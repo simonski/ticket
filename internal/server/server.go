@@ -24,16 +24,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/simonski/ticket/internal/orchestrator"
 	"github.com/simonski/ticket/internal/store"
 	web "github.com/simonski/ticket/web"
 )
 
 type Server struct {
-	httpServer *http.Server
-	stopReaper chan struct{}
+	httpServer       *http.Server
+	stopReaper       chan struct{}
+	stopOrchestrator chan struct{}
 }
 
-func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string) (*Server, error) {
+func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string, enableOrchestrator bool) (*Server, error) {
 	handler, err := Handler(db, version, verbose, output, staticPath, siteName)
 	if err != nil {
 		return nil, err
@@ -48,11 +50,59 @@ func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer
 			// long-lived and a write timeout would kill them mid-stream.
 			IdleTimeout: 120 * time.Second,
 		},
-		stopReaper: make(chan struct{}),
+		stopReaper:       make(chan struct{}),
+		stopOrchestrator: make(chan struct{}),
 	}
 	go s.runAgentReaper(db, verbose, output)
 	go s.runRetentionPurge(db, verbose)
+	if enableOrchestrator {
+		go s.runOrchestrator(db, verbose)
+	}
 	return s, nil
+}
+
+// runOrchestrator periodically runs a deterministic orchestration pass: it assigns
+// idle sealed-sprint work to agents, advances/recovers completed stories, and
+// releases work abandoned by silent agents. The wake cadence is read from settings
+// each cycle so it can be changed live. See docs/DESIGN_ORCHESTRATOR.md.
+func (s *Server) runOrchestrator(db *sql.DB, verbose bool) {
+	runOnce := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		decisions, err := orchestrator.Pass(ctx, db, orchestrator.Options{})
+		if err != nil {
+			slog.Error("orchestrator pass error", "error", err)
+			return
+		}
+		if !verbose {
+			return
+		}
+		applied := 0
+		for _, d := range decisions {
+			if d.Applied {
+				applied++
+			}
+		}
+		if applied > 0 {
+			slog.Info("orchestrator pass", "considered", len(decisions), "applied", applied)
+		}
+	}
+
+	runOnce()
+	for {
+		secs, err := store.OrchestratorIntervalSeconds(context.Background(), db)
+		if err != nil || secs <= 0 {
+			secs = store.OrchestratorDefaultIntervalSeconds
+		}
+		timer := time.NewTimer(time.Duration(secs) * time.Second)
+		select {
+		case <-timer.C:
+			runOnce()
+		case <-s.stopOrchestrator:
+			timer.Stop()
+			return
+		}
+	}
 }
 
 // runAgentReaper periodically marks agents as idle if they haven't sent a
@@ -428,6 +478,7 @@ func (s *Server) ListenAndServe() error {
 // Shutdown gracefully shuts down the HTTP server and stops background goroutines.
 func (s *Server) Shutdown(ctx context.Context) error {
 	close(s.stopReaper)
+	close(s.stopOrchestrator)
 	sharedChatRuntime.stopHeartbeat()
 	return s.httpServer.Shutdown(ctx)
 }

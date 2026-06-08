@@ -143,6 +143,42 @@ func (r *router) registerProjectHandlers() {
 			writeJSON(w, http.StatusOK, statuses)
 			return
 		}
+		if len(parts) == 2 && parts[1] == "orchestrator" {
+			projectID, err := strconv.ParseInt(parts[0], 10, 64)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid project id")
+				return
+			}
+			switch r.Method {
+			case http.MethodGet:
+				enabled, err := store.OrchestratorEnabledForProject(r.Context(), db, projectID)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]any{"enabled": enabled})
+			case http.MethodPost:
+				if _, err := requireAdmin(db, r); err != nil {
+					writeAuthError(w, err)
+					return
+				}
+				var payload struct {
+					Enabled bool `json:"enabled"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				if err := store.SetOrchestratorEnabledForProject(r.Context(), db, projectID, payload.Enabled); err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]any{"enabled": payload.Enabled})
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
 		if len(parts) == 2 && parts[1] == "sprints" {
 			if handled := handleProjectSprintsRoute(w, r, db, parts[0]); handled {
 				return

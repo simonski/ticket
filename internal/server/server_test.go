@@ -147,7 +147,7 @@ func TestWriteThrottleMiddlewareUsesPerUserKeys(t *testing.T) {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "", "")
+	srv, err := New(":0", db, "1.2.3", false, nil, "", "", false)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -335,7 +335,7 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 	}
 	defer db.Close()
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "", "")
+	srv, err := New(":0", db, "1.2.3", false, nil, "", "", false)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -400,7 +400,7 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 	}
 	defer db.Close()
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "", web.DefaultSite)
+	srv, err := New(":0", db, "1.2.3", false, nil, "", web.DefaultSite, false)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -478,7 +478,7 @@ func TestServerVerboseLogging(t *testing.T) {
 	defer db.Close()
 
 	var logs strings.Builder
-	srv, err := New(":0", db, "1.2.3", true, &logs, "", "")
+	srv, err := New(":0", db, "1.2.3", true, &logs, "", "", false)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

@@ -238,22 +238,41 @@ func (r *router) registerAgentHandlers() {
 					break
 				}
 			}
-			if isRefiner {
+			switch {
+			case isRefiner:
+				// Backlog refinement is the not-yet-orchestrated preparation loop
+				// (Decision D / Phase 6). Until the orchestrator drives it, a refiner
+				// agent still pulls draft work to refine.
 				ticket, status, err = store.RequestRefineTicket(r.Context(), db, projectID, agent.Username, agent.ID)
-			} else {
+				if err != nil {
+					vlog("RequestRefineTicket error: %v", err)
+					writeStoreError(w, err)
+					return
+				}
+			case payload.TicketID != nil && strings.TrimSpace(*payload.TicketID) != "":
+				// Explicit claim of a named ticket (a manual operator affordance via
+				// `tk agent request -id X`): a human directing a specific ticket to an
+				// agent, not the agent self-selecting, so it stays supported.
 				ticket, status, err = store.RequestTicket(r.Context(), db, store.TicketRequestParams{
 					ProjectID: projectID,
 					TicketID:  payload.TicketID,
 					Username:  agent.Username,
-					UserID:    "",
 					DryRun:    payload.DryRun,
-					AgentRole: agent.AgentRole,
 				})
-			}
-			if err != nil {
-				vlog("RequestTicket error: %v", err)
-				writeStoreError(w, err)
-				return
+				if err != nil {
+					vlog("RequestTicket(explicit) error: %v", err)
+					writeStoreError(w, err)
+					return
+				}
+			default:
+				// Push model (Decision A): the agent does NOT self-claim. Its poll is a
+				// pure "what work is there for me?" query — it only ever receives the
+				// ticket the orchestrator has already assigned to it, else NO-WORK.
+				if hadCurrent {
+					ticket, status = currentAssigned, "ASSIGNED"
+				} else {
+					status = "NO-WORK"
+				}
 			}
 			vlog("RequestTicket result: status=%s ticket_id=%s", status, ticket.ID)
 			var noWorkReasons []string
@@ -275,12 +294,16 @@ func (r *router) registerAgentHandlers() {
 					vlog("ticket rejected: %s", noWorkReasons[0])
 				}
 			case "ASSIGNED", "AVAILABLE":
-				if hadCurrent && currentAssigned.ID == ticket.ID {
+				// In the push model the agent always receives an already-assigned
+				// ticket. It is CURRENT (resume) if the agent is already working;
+				// otherwise it is NEW (first poll after the orchestrator assigned it),
+				// which flips the agent's status to "working".
+				if hadCurrent && currentAssigned.ID == ticket.ID && strings.EqualFold(agent.Status, "working") {
 					agentStatus = "CURRENT"
 					vlog("returning current assignment %s", ticket.ID)
 				} else {
 					agentStatus = "NEW"
-					vlog("assigned new ticket %s %q to agent", ticket.ID, ticket.Title)
+					vlog("delivering assigned ticket %s %q to agent", ticket.ID, ticket.Title)
 				}
 			default:
 				agentStatus = status
@@ -508,6 +531,14 @@ func (r *router) registerAgentHandlers() {
 					return
 				}
 				writeStoreError(w, err)
+				return
+			}
+			// Abandonment guard (push model): the agent may only report a result for a
+			// ticket still assigned to it and still active. If the orchestrator released
+			// the ticket (heartbeat timeout) or it was reassigned while the agent was
+			// working, reject the stale result so the agent drops the work.
+			if !strings.EqualFold(strings.TrimSpace(current.Assignee), agent.Username) || current.State != store.StateActive {
+				writeError(w, http.StatusConflict, "ticket is no longer assigned to you (abandoned or reassigned) — drop this work")
 				return
 			}
 			updated, err := store.UpdateTicket(r.Context(), db, ticketID, store.TicketUpdateParams{

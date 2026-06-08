@@ -219,6 +219,58 @@ func (r *router) registerSystemHandlers() {
 			"chat_max_duration_minutes": payload.MaxDurationMin,
 		})
 	})
+	mux.HandleFunc("/api/config/orchestrator", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if _, err := requireUser(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			interval, err := store.OrchestratorIntervalSeconds(r.Context(), db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			timeout, err := store.OrchestratorHeartbeatTimeoutSeconds(r.Context(), db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"interval_seconds":          interval,
+				"heartbeat_timeout_seconds": timeout,
+			})
+		case http.MethodPost:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload struct {
+				IntervalSeconds         int `json:"interval_seconds"`
+				HeartbeatTimeoutSeconds int `json:"heartbeat_timeout_seconds"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			if err := store.SetOrchestratorIntervalSeconds(r.Context(), db, payload.IntervalSeconds); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if err := store.SetOrchestratorHeartbeatTimeoutSeconds(r.Context(), db, payload.HeartbeatTimeoutSeconds); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			interval, _ := store.OrchestratorIntervalSeconds(r.Context(), db)
+			timeout, _ := store.OrchestratorHeartbeatTimeoutSeconds(r.Context(), db)
+			writeJSON(w, http.StatusOK, map[string]any{
+				"interval_seconds":          interval,
+				"heartbeat_timeout_seconds": timeout,
+			})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
 	mux.HandleFunc("/api/config/chat_enabled", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")

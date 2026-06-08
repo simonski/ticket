@@ -160,6 +160,8 @@ func run(args []string) error {
 		return runAgent(trimmedArgs[1:])
 	case "admin":
 		return runAdmin(trimmedArgs[1:])
+	case "orchestrator":
+		return runOrchestrator(trimmedArgs[1:])
 	case "user":
 		return runUser(trimmedArgs[1:])
 	case "project":
@@ -324,7 +326,7 @@ func shouldRouteToActionNamespace(args []string) bool {
 	}
 	switch command {
 	case "help", "version", "upgrade", "upgrade-database", "status", "whoami",
-		"login", "logout", "register", "init", "initdb", "server",
+		"login", "logout", "register", "init", "initdb", "server", "orchestrator",
 		"config", "project", "workflow", "team", "user", "role", "idea", "decision",
 		"story", "document", "label", "dep", "time", "doctor", "summary",
 		"agent", "work-item", "onboard", "skill", "docker-compose":

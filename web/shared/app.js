@@ -1909,6 +1909,17 @@
             }
         }
 
+        async function loadOrchestratorConfig() {
+            const intervalInput = document.getElementById("orchestrator-interval");
+            const heartbeatInput = document.getElementById("orchestrator-heartbeat-timeout");
+            if (!intervalInput || !heartbeatInput) {
+                return;
+            }
+            const config = await api("/api/config/orchestrator");
+            intervalInput.value = config && config.interval_seconds != null ? config.interval_seconds : "";
+            heartbeatInput.value = config && config.heartbeat_timeout_seconds != null ? config.heartbeat_timeout_seconds : "";
+        }
+
         async function loadPasskeys() {
             if (!state.auth) {
                 state.passkeys = [];
@@ -1929,6 +1940,11 @@
             await loadStatus();
             await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans(), loadPasskeys(), fetchUsers(), loadOrg(), loadProgrammes()]);
             await loadConfigSettings();
+            try {
+                await loadOrchestratorConfig();
+            } catch (error) {
+                /* non-admins cannot read orchestrator config; ignore */
+            }
             renderProjectMenu();
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
@@ -3800,6 +3816,25 @@
             document.getElementById("project-accepts-new-members").value = String(Boolean(project.accepts_new_members));
             document.getElementById("project-default-draft").value = String(Boolean(project.default_draft));
             document.getElementById("project-workflow").value = project.workflow_id || "";
+            const orchestratorSelect = document.getElementById("project-orchestrator-enabled");
+            if (orchestratorSelect) {
+                orchestratorSelect.value = "true";
+                if (project.id) {
+                    const orchestratorProjectID = project.id;
+                    (async () => {
+                        try {
+                            const result = await api("/api/projects/" + orchestratorProjectID + "/orchestrator");
+                            // Ignore if the user switched projects while this was in flight.
+                            const current = state.selectedProjectDraft || emptyProject();
+                            if (current.id === orchestratorProjectID) {
+                                orchestratorSelect.value = String(Boolean(result && result.enabled));
+                            }
+                        } catch (error) {
+                            /* default to "true" on error */
+                        }
+                    })();
+                }
+            }
             document.getElementById("delete-project-button").disabled = !project.id;
             renderProjectAccessRequestsPanel();
             renderProjectHistoryPanel();
@@ -4392,6 +4427,17 @@
                         method: "PUT",
                         body: JSON.stringify({ draft: normalizeBool(document.getElementById("project-default-draft").value) }),
                     });
+                    const orchestratorSelect = document.getElementById("project-orchestrator-enabled");
+                    if (orchestratorSelect) {
+                        try {
+                            await api("/api/projects/" + project.id + "/orchestrator", {
+                                method: "POST",
+                                body: JSON.stringify({ enabled: orchestratorSelect.value === "true" }),
+                            });
+                        } catch (error) {
+                            setNotice("Project saved, but orchestrator setting failed: " + error.message, true);
+                        }
+                    }
                     state.selectedProjectID = project.id;
                     storeSelectedProjectID(state.selectedProjectID);
                     await Promise.all([loadProjects(), loadWorkflows()]);
@@ -4739,6 +4785,22 @@
                 resetConfigSettingButton.addEventListener("click", () => {
                     state.selectedConfigSettingKey = "";
                     setConfigSettingEditor(null);
+                });
+            }
+            const orchestratorConfigForm = document.getElementById("orchestrator-config-form");
+            if (orchestratorConfigForm) {
+                orchestratorConfigForm.addEventListener("submit", async (event) => {
+                    event.preventDefault();
+                    const payload = {
+                        interval_seconds: Number.parseInt(document.getElementById("orchestrator-interval").value, 10) || 0,
+                        heartbeat_timeout_seconds: Number.parseInt(document.getElementById("orchestrator-heartbeat-timeout").value, 10) || 0,
+                    };
+                    try {
+                        await api("/api/config/orchestrator", { method: "POST", body: JSON.stringify(payload) });
+                        setNotice("Orchestrator settings saved.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
                 });
             }
             const newProviderConfigButton = document.getElementById("new-provider-config-button");

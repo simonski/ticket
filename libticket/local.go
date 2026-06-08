@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -504,34 +505,26 @@ func (s *LocalService) RequestAgentWork(ctx context.Context, request AgentReques
 			}
 		}
 	}
+	// Push model (Decision A): the agent never self-claims. Its request is a pure
+	// "what work is there for me?" query — it only receives a ticket the
+	// orchestrator has already assigned to it, else NONE.
 	currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(ctx, db, projectID, agent.Username)
 	if err != nil {
 		return AgentWorkResponse{}, err
 	}
-	ticket, status, err := store.RequestTicket(ctx, db, store.TicketRequestParams{
-		ProjectID: projectID,
-		TicketID:  request.TicketID,
-		Username:  agent.Username,
-		UserID:    "",
-		DryRun:    request.DryRun,
-	})
-	if err != nil {
-		return AgentWorkResponse{}, err
-	}
+	var ticket store.Ticket
 	var agentStatus string
-	switch status {
-	case "NO-WORK", "REJECTED":
-		agentStatus = "NONE"
-	case "ASSIGNED", "AVAILABLE":
-		if hadCurrent && currentAssigned.ID == ticket.ID {
+	if hadCurrent {
+		ticket = currentAssigned
+		if strings.EqualFold(agent.Status, "working") {
 			agentStatus = "CURRENT"
 		} else {
 			agentStatus = "NEW"
 		}
-	default:
-		agentStatus = status
+	} else {
+		agentStatus = "NONE"
 	}
-	if status == "ASSIGNED" && agentStatus == "NEW" {
+	if agentStatus == "NEW" {
 		if _, err := store.TouchAgent(ctx, db, agent.ID, "working"); err != nil {
 			log.Printf("libticket: touch agent %s status=working: %v", agent.ID, err)
 		}
@@ -571,6 +564,12 @@ func (s *LocalService) AgentUpdateTicket(ctx context.Context, id string, request
 	current, err := store.GetTicket(ctx, db, id)
 	if err != nil {
 		return store.Ticket{}, err
+	}
+	// Abandonment guard (push model): only a result for a ticket still assigned to
+	// this agent and still active is accepted; otherwise the orchestrator released
+	// or reassigned it and the agent must drop the stale result.
+	if !strings.EqualFold(strings.TrimSpace(current.Assignee), agent.Username) || current.State != store.StateActive {
+		return store.Ticket{}, fmt.Errorf("ticket %s is no longer assigned to you (abandoned or reassigned)", id)
 	}
 	updated, err := store.UpdateTicket(ctx, db, id, store.TicketUpdateParams{
 		Title:              current.Title,

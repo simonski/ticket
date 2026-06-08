@@ -339,8 +339,14 @@ func runAgent(args []string) error {
 				Result:   strings.TrimSpace(result),
 			})
 			if err != nil {
-				fmt.Printf("failed %s: could not submit result: %v\n", ticketLabel(*ticket), err)
-				return err
+				// The orchestrator may have abandoned this ticket (heartbeat timeout)
+				// or it was reassigned while the agent worked. The server rejects the
+				// stale result; the agent drops the work and keeps polling rather than
+				// crashing.
+				fmt.Printf("dropping %s: result rejected (likely abandoned or reassigned): %v\n", ticketLabel(*ticket), err)
+				alog("  result rejected — dropping work and re-polling")
+				time.Sleep(idleDelay)
+				continue
 			}
 			if outputJSON {
 				if err := printJSON(updated); err != nil {

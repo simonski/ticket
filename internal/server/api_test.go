@@ -4856,13 +4856,13 @@ func TestAgentWorkflowAPI(t *testing.T) {
 	var ticket store.Ticket
 	decodeResponse(t, ticketResp, &ticket)
 
-	// Move ticket to develop stage (draft=false) so the agent can claim it.
-	// In production this would require progressing through the backlog stages
-	// and sprint assignment, but for this test we set the stage directly.
+	// Push model: the orchestrator assigns work; the agent never self-claims.
+	// Simulate the orchestrator assigning this ticket to the agent (assignee set,
+	// state=active) so the agent's poll returns it.
 	if _, err := db.ExecContext(context.Background(),
-		`UPDATE tickets SET stage = 'develop', state = 'idle', draft = 0, status = 'develop/idle' WHERE ticket_id = ?`,
-		ticket.ID); err != nil {
-		t.Fatalf("set develop stage: %v", err)
+		`UPDATE tickets SET stage = 'develop', state = 'active', draft = 0, assignee = ?, status = 'develop/active' WHERE ticket_id = ?`,
+		agentPayload.Agent.Username, ticket.ID); err != nil {
+		t.Fatalf("assign ticket to agent: %v", err)
 	}
 
 	// POST /api/agents/request (basic auth)
@@ -5613,7 +5613,7 @@ func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 		t.Fatalf("Open() error = %v", err)
 	}
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "", "")
+	srv, err := New(":0", db, "1.2.3", false, nil, "", "", false)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
