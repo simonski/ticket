@@ -28,10 +28,12 @@ func triggerRefinementPass(db *sql.DB, ticketID string) {
 	}()
 }
 
-// maybeTriggerRefinement fires an immediate refiner assignment if the ticket is in
-// the refine stage. Safe to call after any human comment.
+// maybeTriggerRefinement fires an immediate refiner assignment when a human
+// comments on a ticket that is being refined. Refinement candidates are drafts (in
+// a backlog stage); the orchestrator pass makes the final decision, so gating on the
+// cheap draft flag here is sufficient.
 func maybeTriggerRefinement(db *sql.DB, ticket store.Ticket) {
-	if ticket.Stage == store.StageRefine {
+	if ticket.Draft {
 		triggerRefinementPass(db, ticket.ID)
 	}
 }

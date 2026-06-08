@@ -188,6 +188,17 @@ type OrchestratorTicket struct {
 	// recent refinement activity (latest comment, else when the ticket was last
 	// updated). Used to close idle refinement sessions.
 	RefinementLastActivity string
+	// StageIsBacklog is true when the ticket's current workflow stage is flagged
+	// is_backlog_stage — i.e. it is in the preparation/refinement phase, whatever
+	// that stage is named in the workflow (design, idea, refine, …).
+	StageIsBacklog bool
+}
+
+// InRefinement reports whether the ticket is in the backlog preparation phase: a
+// draft sitting in a backlog stage. Refinement is an in-place activity on such a
+// ticket, independent of any literal "refine" stage name.
+func (t OrchestratorTicket) InRefinement() bool {
+	return t.Draft && t.StageIsBacklog
 }
 
 // SprintSealed reports whether this ticket's sprint is sealed (active).
@@ -219,12 +230,14 @@ func ListOrchestratorCandidates(ctx context.Context, db *sql.DB, projectID int64
 		               WHERE c.item_id = t.ticket_id ORDER BY c.id DESC LIMIT 1) = 'agent' THEN 0
 		         ELSE 1
 		       END AS refinement_agent_turn,
-		       COALESCE((SELECT MAX(c.created_at) FROM comments c WHERE c.item_id = t.ticket_id), t.updated_at) AS refinement_last_activity
+		       COALESCE((SELECT MAX(c.created_at) FROM comments c WHERE c.item_id = t.ticket_id), t.updated_at) AS refinement_last_activity,
+		       COALESCE(ws.is_backlog_stage, 0) AS stage_is_backlog
 		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
 		LEFT JOIN roles r ON r.role_id = t.role_id
 		LEFT JOIN sprints sp ON sp.id = t.sprint_id
 		LEFT JOIN users au ON au.username = t.assignee AND au.user_type = 'agent'
+		LEFT JOIN workflow_stages ws ON ws.workflow_stage_id = t.workflow_stage_id
 		WHERE t.complete = 0 AND t.archived = 0 AND t.deleted = 0 AND p.status = 'open'`
 	args := []any{}
 	if projectID != 0 {
@@ -246,16 +259,17 @@ func ListOrchestratorCandidates(ctx context.Context, db *sql.DB, projectID int64
 	var out []OrchestratorTicket
 	for rows.Next() {
 		var t OrchestratorTicket
-		var draft, hasChildren, isAgent, agentTurn int
+		var draft, hasChildren, isAgent, agentTurn, stageBacklog int
 		var sprintID sql.NullInt64
 		if scanErr := rows.Scan(&t.TicketID, &t.ProjectID, &t.Stage, &t.State,
 			&t.RoleID, &t.RoleTitle, &t.Assignee, &draft, &hasChildren,
 			&t.WorkflowStageID, &sprintID, &t.SprintStage, &t.Priority,
-			&t.AssigneeLastSeen, &isAgent, &agentTurn, &t.RefinementLastActivity); scanErr != nil {
+			&t.AssigneeLastSeen, &isAgent, &agentTurn, &t.RefinementLastActivity, &stageBacklog); scanErr != nil {
 			return nil, scanErr
 		}
 		t.AssigneeIsAgent = isAgent != 0
 		t.RefinementAgentTurn = agentTurn != 0
+		t.StageIsBacklog = stageBacklog != 0
 		t.Draft = draft != 0
 		t.HasChildren = hasChildren != 0
 		if sprintID.Valid {

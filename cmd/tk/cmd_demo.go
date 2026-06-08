@@ -796,18 +796,16 @@ func runDemo(args []string) error {
 			{"Support single sign-on for enterprise customers", "Large prospect needs SSO. Which protocols and providers are in scope is undecided."},
 		}
 		for _, idea := range refineIdeas {
-			it, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
+			// New ideas start at the workflow's first stage (design = a backlog stage)
+			// as drafts, which is exactly "in refinement" — no special stage needed.
+			if _, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
 				ProjectID: projects[0].ID, Type: "idea", Title: idea.title, Description: idea.desc,
 				Author: adminUser.Username, CreatedBy: adminUser.ID, State: "idle",
-			})
-			if err != nil {
+			}); err != nil {
 				return fmt.Errorf("creating refine idea: %w", err)
 			}
-			if _, err := db.ExecContext(ctx, `UPDATE tickets SET stage = 'refine', state = 'idle', status = 'refine/idle' WHERE ticket_id = ?`, it.ID); err != nil {
-				return fmt.Errorf("moving idea to refine: %w", err)
-			}
 		}
-		fmt.Printf("  ✓ Seeded %d refine-stage ideas for the orchestrator's preparation loop\n", len(refineIdeas))
+		fmt.Printf("  ✓ Seeded %d backlog ideas in refinement for the orchestrator's preparation loop\n", len(refineIdeas))
 	}
 
 	// Backdate ticket timestamps based on their sprint assignment.

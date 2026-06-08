@@ -11,7 +11,7 @@ var (
 	ErrSprintNotFound          = errors.New("sprint not found")
 	ErrSprintClosed            = errors.New("sprint is closed — tickets cannot be moved in or out")
 	ErrSprintNotReady          = errors.New("sprint cannot be made active: some tickets have not reached the ready stage (still in idea or refine)")
-	ErrTicketNotReadyForSprint = errors.New("ticket must be in ready stage before it can be added to a sprint")
+	ErrTicketNotReadyForSprint = errors.New("ticket must be ready (refined and no longer a draft) before it can be added to a sprint")
 )
 
 type Sprint struct {
@@ -127,8 +127,9 @@ func DeleteSprint(ctx context.Context, db *sql.DB, id int) error {
 func SetTicketSprint(ctx context.Context, db *sql.DB, ticketID string, sprintID *int) error {
 	// Guard: if the ticket is currently in a closed sprint, block the move.
 	var currentSprintID sql.NullInt64
+	var ticketDraft int
 	var ticketStage string
-	if err := db.QueryRowContext(ctx, `SELECT sprint_id, stage FROM tickets WHERE ticket_id = ?`, ticketID).Scan(&currentSprintID, &ticketStage); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT sprint_id, draft, stage FROM tickets WHERE ticket_id = ?`, ticketID).Scan(&currentSprintID, &ticketDraft, &ticketStage); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return errors.New("ticket not found")
 		}
@@ -140,9 +141,12 @@ func SetTicketSprint(ctx context.Context, db *sql.DB, ticketID string, sprintID 
 			return ErrSprintClosed
 		}
 	}
-	// Guard: if moving into a sprint, the ticket must be in the "ready" stage.
+	// Guard: a ticket can only be added to a sprint once it is ready. Readiness is
+	// the draft flag clearing (via MarkTicketReady / refinement approval) — which
+	// works for any workflow — OR reaching a literal "ready" stage in workflows that
+	// define one (the idea→refine→ready backlog model).
 	if sprintID != nil {
-		if ticketStage != StageReady {
+		if ticketDraft != 0 && ticketStage != StageReady {
 			return ErrTicketNotReadyForSprint
 		}
 		var targetStage string

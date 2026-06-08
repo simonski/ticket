@@ -63,7 +63,7 @@ func TestDecideSkipsWhenNoMatchingAgent(t *testing.T) {
 func TestDecideAssignsRefinerOnAgentTurn(t *testing.T) {
 	pool := newAgentPool([]store.OrchestratorAgent{{Username: "refiner-bot", Roles: []string{"refiner"}}})
 	tk := store.OrchestratorTicket{
-		TicketID: "IDEA-1", ProjectID: 1, Stage: store.StageRefine, State: store.StateIdle,
+		TicketID: "IDEA-1", ProjectID: 1, Stage: "design", State: store.StateIdle, StageIsBacklog: true,
 		Draft: true, RefinementAgentTurn: true,
 	}
 	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
@@ -76,7 +76,7 @@ func TestDecideClosesIdleRefineSession(t *testing.T) {
 	pool := newAgentPool([]store.OrchestratorAgent{{Username: "refiner-bot", Roles: []string{"refiner"}}})
 	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
 	tk := store.OrchestratorTicket{
-		TicketID: "IDEA-3", ProjectID: 1, Stage: store.StageRefine, State: store.StateIdle,
+		TicketID: "IDEA-3", ProjectID: 1, Stage: "design", State: store.StateIdle, StageIsBacklog: true,
 		Draft: true, RefinementAgentTurn: true,
 		RefinementLastActivity: "2026-06-08 11:30:00", // 30 min ago
 	}
@@ -95,7 +95,7 @@ func TestDecideClosesIdleRefineSession(t *testing.T) {
 func TestDecideSkipsRefineAwaitingHuman(t *testing.T) {
 	pool := newAgentPool([]store.OrchestratorAgent{{Username: "refiner-bot", Roles: []string{"refiner"}}})
 	tk := store.OrchestratorTicket{
-		TicketID: "IDEA-2", ProjectID: 1, Stage: store.StageRefine, State: store.StateIdle,
+		TicketID: "IDEA-2", ProjectID: 1, Stage: "design", State: store.StateIdle, StageIsBacklog: true,
 		Draft: true, RefinementAgentTurn: false, // latest message is the agent's
 	}
 	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)

@@ -1225,6 +1225,27 @@
             return state.workflows.find((item) => item.id === project.workflow_id) || null;
         }
 
+        // ticketStageIsBacklog reports whether a ticket's current stage is a backlog
+        // (preparation/refinement) stage in its project's workflow — design in Agile,
+        // idea/refine/ready in the bootstrap workflow, etc.
+        function ticketStageIsBacklog(ticket) {
+            if (!ticket) return false;
+            const stage = String(ticket.stage || "").toLowerCase();
+            const workflow = getCurrentProjectWorkflow();
+            const st = (workflow && Array.isArray(workflow.stages) ? workflow.stages : [])
+                .find((s) => String(s.name || "").toLowerCase() === stage);
+            if (st) return Boolean(st.is_backlog_stage);
+            // Fall back to the lifecycle backlog stage names when no workflow stage matches.
+            return stage === "idea" || stage === "refine" || stage === "ready";
+        }
+
+        // ticketInRefinement reports whether a story is in the preparation phase: a
+        // draft sitting in a backlog stage. Refinement happens in place on such a
+        // ticket — there is no literal "refine" stage.
+        function ticketInRefinement(ticket) {
+            return Boolean(ticket && ticket.draft && ticketStageIsBacklog(ticket));
+        }
+
         // workflowRequiresReady reports whether a workflow gates work behind a
         // readiness pipeline: it has backlog stages and/or a "ready" stage. Such a
         // workflow indicates a story must be readied (refined) before it is assigned.
@@ -1234,20 +1255,11 @@
                 s.is_backlog_stage || String(s.name || "").toLowerCase() === "ready");
         }
 
-        // ticketIsReadyForAssignment reports whether a story has been readied enough
-        // to be worked: it is non-draft and either in a sprint, at the "ready" stage,
-        // or in a non-backlog (execution) stage. Backlog stages (idea/refine, or any
-        // stage flagged is_backlog_stage other than "ready") are not yet ready.
-        function ticketIsReadyForAssignment(ticket, workflow) {
-            if (!ticket || ticket.draft) return false;
-            const stage = String(ticket.stage || "").toLowerCase();
-            if (ticket.sprint_id) return true;
-            if (stage === "ready") return true;
-            if (stage === "idea" || stage === "refine") return false;
-            const st = (workflow && Array.isArray(workflow.stages) ? workflow.stages : [])
-                .find((s) => String(s.name || "").toLowerCase() === stage);
-            if (st && st.is_backlog_stage) return false;
-            return true;
+        // ticketIsReadyForAssignment reports whether a story has been readied for
+        // work. Readiness is the draft flag clearing (via refinement approval /
+        // MarkTicketReady), not a particular stage.
+        function ticketIsReadyForAssignment(ticket) {
+            return Boolean(ticket && !ticket.draft);
         }
 
         function getCurrentWorkflow() {
@@ -3700,14 +3712,14 @@
             dismissBoardContextMenu();
             const roleName = ticketCurrentRoleName(ticket);
 
-            // A backlog story in the design stage is refined, not assigned: offer
-            // "Refine this story", which moves it into the refinement chat.
-            if (String(ticket.stage || "").toLowerCase() === "design") {
+            // A story in a backlog stage is refined, not assigned: offer "Refine this
+            // story", which opens the refinement chat (in place — no stage change).
+            if (ticketStageIsBacklog(ticket)) {
                 const menu = document.createElement("div");
                 menu.className = "context-menu";
                 menu.setAttribute("role", "menu");
                 menu.innerHTML = "<div class=\"context-menu-header\">" + escapeHTML(ticket.key || ticket.id) +
-                    " <span class=\"context-menu-role\">design</span></div>" +
+                    " <span class=\"context-menu-role\">" + escapeHTML(ticket.stage || "backlog") + "</span></div>" +
                     "<div class=\"context-menu-list\">" +
                     "<button type=\"button\" class=\"context-menu-item is-match\" data-refine-ticket=\"1\">" +
                     "<span class=\"context-menu-check\">✦</span>" +
@@ -3730,7 +3742,7 @@
             // assignment and this one is not ready yet, don't offer assignment — it
             // must be refined/readied first.
             const projectWorkflow = getCurrentProjectWorkflow();
-            if (workflowRequiresReady(projectWorkflow) && !ticketIsReadyForAssignment(ticket, projectWorkflow)) {
+            if (workflowRequiresReady(projectWorkflow) && !ticketIsReadyForAssignment(ticket)) {
                 const menu = document.createElement("div");
                 menu.className = "context-menu";
                 menu.setAttribute("role", "menu");
@@ -3826,29 +3838,19 @@
             }, 0);
         }
 
-        // refineStory moves a design-stage backlog story into the refine stage and
-        // opens its refinement chat.
+        // refineStory puts a backlog story into refinement IN PLACE — it marks the
+        // ticket a draft (the refinement signal) without changing its stage — and
+        // opens the refinement chat. No move to a literal "refine" stage.
         async function refineStory(ticket) {
             try {
-                const payload = {
-                    project_id: ticket.project_id,
-                    type: ticket.type,
-                    title: ticket.title,
-                    description: ticket.description || "",
-                    acceptance_criteria: ticket.acceptance_criteria || "",
-                    parent_id: ticket.parent_id || null,
-                    stage: "refine",
-                    state: "idle",
-                    priority: Number(ticket.priority || 0),
-                    order: Number(ticket.order || 0),
-                    estimate_effort: Number(ticket.estimate_effort || 0),
-                    health: Number(ticket.health || 0),
-                };
-                const updated = normalizeTicket(await api("/api/tickets/" + ticket.id, { method: "PUT", body: JSON.stringify(payload) }));
+                if (!ticket.draft) {
+                    await api("/api/tickets/" + ticket.id + "/draft", { method: "POST" });
+                }
                 await loadTickets();
                 renderTicketBoard();
                 renderTicketListView();
-                openTicketModal(updated);
+                const fresh = state.tickets.find((t) => String(t.id) === String(ticket.id)) || Object.assign({}, ticket, { draft: true });
+                openTicketModal(fresh);
                 setNotice("Refining " + (ticket.key || ticket.id) + " — chat with the refiner below.");
             } catch (error) {
                 setNotice(error.message, true);
@@ -6720,9 +6722,9 @@
         }
 
         // refinementIsThinking reports whether the refiner agent is actively working
-        // this refine ticket (assigned + active) — drives the "thinking…" indicator.
+        // this refinement ticket (assigned + active) — drives the "thinking…" indicator.
         function refinementIsThinking(ticket) {
-            return Boolean(ticket && ticket.stage === "refine" && ticket.state === "active" &&
+            return Boolean(ticket && ticketInRefinement(ticket) && ticket.state === "active" &&
                 String(ticket.assignee || "").trim() !== "");
         }
 
@@ -6735,7 +6737,7 @@
         function renderRefinementPanel(ticket) {
             const panel = document.getElementById("refinement-panel");
             if (!panel) return;
-            if (!ticket || ticket.stage !== "refine") {
+            if (!ticketInRefinement(ticket)) {
                 panel.classList.add("hidden");
                 disconnectRefinementSocket();
                 return;
@@ -6777,7 +6779,6 @@
         // a live WebSocket event so the dialogue updates in near real time.
         async function refreshOpenRefinement(ticketID) {
             if (!state.activeTicket || String(state.activeTicket.id) !== String(ticketID)) return;
-            if (state.activeTicket.stage !== "refine") return;
             try {
                 const fresh = normalizeTicket(await api("/api/tickets/" + ticketID));
                 state.activeTicket = Object.assign({}, state.activeTicket, fresh);

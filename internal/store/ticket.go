@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -747,18 +748,27 @@ func SetRecommendedReady(ctx context.Context, db *sql.DB, id string, recommended
 }
 
 // MarkTicketReady transitions a ticket to the ready stage:
-// sets draft=false, stage=ready, state=idle, clears recommended_ready.
-// The ticket can then be added to a sprint.
+// marks the ticket ready for development: draft=false, state=idle, clears the
+// recommended_ready flag and assignee. Readiness is a flag, not a stage — the
+// ticket stays in its current (backlog) stage UNLESS the workflow defines a literal
+// "ready" stage, in which case it advances there (preserving the idea→refine→ready
+// backlog model for workflows that use it). The ticket can then be added to a sprint.
 func MarkTicketReady(ctx context.Context, db *sql.DB, id, actorUsername, actorID string) (Ticket, error) {
 	current, err := GetTicket(ctx, db, id)
 	if err != nil {
 		return Ticket{}, err
 	}
+	// Move to a literal "ready" stage only when the workflow actually has one;
+	// otherwise readiness is just the draft flag clearing, in place.
+	stage := current.Stage
+	if validStages, sErr := validStagesForTicket(ctx, db, current); sErr == nil && slices.Contains(validStages, StageReady) {
+		stage = StageReady
+	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET draft = 0, stage = 'ready', state = 'idle', recommended_ready = 0, assignee = '', updated_at = CURRENT_TIMESTAMP
+		SET draft = 0, stage = ?, state = 'idle', status = ? || '/idle', recommended_ready = 0, assignee = '', updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, id)
+	`, stage, stage, id)
 	if err != nil {
 		return Ticket{}, err
 	}

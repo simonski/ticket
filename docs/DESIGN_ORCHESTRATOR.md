@@ -18,6 +18,19 @@
 
 ### Phase 6 — preparation loop (as built)
 
+> **Correction (stage model).** Refinement was first built around a literal
+> `refine` stage, but that collides with pluggable workflows: a workflow validates
+> stage names against its own stages (Agile = `design → develop → test → done`,
+> which has no `refine`), so moving a ticket to `refine` was rejected. Refinement is
+> now an **in-place activity on a backlog-stage ticket** — a *draft* sitting in any
+> stage flagged `is_backlog_stage` (design in Agile; idea/refine/ready in the
+> bootstrap workflow). Nothing moves to a literal `refine` stage. **Readiness is a
+> flag** (the draft clearing), not a stage: approval marks the ticket non-draft in
+> place (advancing to a literal `ready` stage only if the workflow defines one), and
+> the sprint-add gate accepts non-draft *or* the `ready` stage. `OrchestratorTicket.
+> InRefinement()` (= draft && `StageIsBacklog`) is the single predicate; the agent's
+> refiner role (not a stage) signals a refinement turn.
+
 Decisions (Q9): the refinement **dialogue reuses the ticket comment thread** (the
 refiner and human exchange comments — persisted, ticket-scoped, presented in the UI
 as a dedicated refinement chat); the human ends it with **explicit approval**; on a

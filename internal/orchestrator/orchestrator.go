@@ -123,10 +123,10 @@ func Pass(ctx context.Context, db *sql.DB, opts Options) ([]Decision, error) {
 		if err != nil {
 			return nil, fmt.Errorf("project %d enabled: %w", t.ProjectID, err)
 		}
-		if opts.SkipRefineTickets[t.TicketID] && t.Stage == store.StageRefine {
+		if opts.SkipRefineTickets[t.TicketID] && t.InRefinement() {
 			decisions = append(decisions, Decision{
 				TicketID: t.TicketID, ProjectID: t.ProjectID, Kind: ActionSkip,
-				From: t.Stage + "/" + t.State, Detail: "refine — live streaming session active",
+				From: t.Stage + "/" + t.State, Detail: "refinement — live streaming session active",
 			})
 			continue
 		}
@@ -198,29 +198,28 @@ func decideIdle(t store.OrchestratorTicket, pool *agentPool, now time.Time, refi
 		return d
 	}
 
-	// Backlog preparation loop (Phase 6): refine-stage tickets are driven by a
-	// refiner agent in a turn-based dialogue with the human. The orchestrator
-	// assigns a refiner only when it is the agent's turn; otherwise the dialogue is
-	// waiting on the human (reply or approval).
-	if t.Stage == store.StageRefine {
+	// Preparation phase: a draft ticket sitting in a backlog stage is refined in
+	// place by a refiner agent, in a turn-based dialogue with the human — regardless
+	// of what that backlog stage is named (design, idea, refine, …). No literal
+	// "refine" stage is required.
+	if t.InRefinement() {
 		if !t.RefinementAgentTurn {
-			d.Detail = "refine — awaiting human reply or approval"
+			d.Detail = "refinement — awaiting human reply or approval"
 			return d
 		}
-		// Idle-session cleanup: if the conversation has been dormant past the idle
-		// window, the session is closed — do not tie up a refiner. The human resumes
-		// it simply by replying (which refreshes the activity timestamp).
+		// Idle-session cleanup: a dormant conversation closes so it doesn't tie up a
+		// refiner. The human resumes it by replying (which refreshes the timestamp).
 		if store.RefinementSessionIdle(t.RefinementLastActivity, now, refinementIdle) {
-			d.Detail = "refine — session idle, closed (reply to resume)"
+			d.Detail = "refinement — session idle, closed (reply to resume)"
 			return d
 		}
 		if !t.IsLeaf() {
-			d.Detail = "refine — broken down into stories, awaiting human approval"
+			d.Detail = "refinement — broken down into stories, awaiting human approval"
 			return d
 		}
 		agent := pool.pick("refiner")
 		if agent == nil {
-			d.Detail = "refine — no available refiner agent"
+			d.Detail = "refinement — no available refiner agent"
 			return d
 		}
 		d.Kind = ActionAssign
@@ -229,6 +228,7 @@ func decideIdle(t store.OrchestratorTicket, pool *agentPool, now time.Time, refi
 		return d
 	}
 
+	// A still-draft ticket that is NOT in a backlog stage is not yet ready for work.
 	if t.Draft {
 		d.Detail = "draft — not yet ready for work"
 		return d
@@ -237,12 +237,8 @@ func decideIdle(t store.OrchestratorTicket, pool *agentPool, now time.Time, refi
 		d.Detail = "has children — only leaf stories are worked"
 		return d
 	}
-	// Other backlog stages (idea, ready) are not auto-worked: idea is pre-refinement
-	// (a human submits it for refinement), ready waits for a sprint.
-	if store.IsBacklogStage(t.Stage) {
-		d.Detail = "backlog stage — not auto-worked (submit to refine, or seal a sprint)"
-		return d
-	}
+	// Ready (non-draft) work is executed once it is in a sealed sprint; backlog work
+	// that isn't draft (e.g. a literal "ready" stage) waits for a sprint.
 	if !t.SprintSealed() {
 		d.Detail = "not in a sealed (active) sprint"
 		return d

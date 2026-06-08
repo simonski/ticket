@@ -285,9 +285,17 @@ func runAgent(args []string) error {
 			ticket := response.Ticket
 			alog("processing %s %q (role=%s)", ticketLabel(*ticket), ticket.Title, agentRole)
 
-			// Refinement is driven by the ticket's stage, not the agent's role: a
-			// ticket in the refine stage gets one turn of the idea→refinement dialogue.
-			isRefine := strings.EqualFold(strings.TrimSpace(ticket.Stage), "refine")
+			// A refiner agent takes one turn of the idea→refinement dialogue. The
+			// orchestrator only assigns refinement (a draft backlog story) to refiner
+			// agents, so the agent's role is the signal — refinement is an in-place
+			// activity, not tied to any literal "refine" stage.
+			isRefine := false
+			for _, role := range store.SplitAgentRoles(agentRole) {
+				if strings.EqualFold(role, "refiner") {
+					isRefine = true
+					break
+				}
+			}
 			var prompt string
 			if isRefine {
 				comments, _ := svc.ListComments(context.Background(), ticket.ID)
