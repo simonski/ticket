@@ -428,14 +428,16 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 	if !strings.Contains(string(body), `id="version-overlay"`) {
 		t.Fatalf("root response missing version overlay")
 	}
-	if !strings.Contains(string(body), `href="/site.css"`) {
-		t.Fatalf("root response missing absolute site.css stylesheet path")
+	// Local assets carry a ?v=<version> cache-buster so a new build forces
+	// clients to fetch fresh JS/CSS instead of reusing a stale cached copy.
+	if !strings.Contains(string(body), `href="/site.css?v=1.2.3"`) {
+		t.Fatalf("root response missing versioned site.css stylesheet path")
 	}
-	if !strings.Contains(string(body), `src="/api.js"`) {
-		t.Fatalf("root response missing absolute api.js path")
+	if !strings.Contains(string(body), `src="/api.js?v=1.2.3"`) {
+		t.Fatalf("root response missing versioned api.js path")
 	}
-	if !strings.Contains(string(body), `src="/app.js"`) {
-		t.Fatalf("root response missing absolute app.js path")
+	if !strings.Contains(string(body), `src="/app.js?v=1.2.3"`) {
+		t.Fatalf("root response missing versioned app.js path")
 	}
 
 	assetReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/site.css", http.NoBody)

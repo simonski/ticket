@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strconv"
@@ -228,7 +229,7 @@ func handlerWithPasskeyFactory(db *sql.DB, version string, verbose bool, output 
 	registerAPI(mux, db, version, live, verbose, output, passkeys)
 
 	fileServer := staticCacheHeadersMiddleware(http.FileServer(http.FS(staticFS)))
-	mux.Handle("/", spaHandler(fileServer, staticFS))
+	mux.Handle("/", spaHandler(fileServer, staticFS, version))
 
 	var handler http.Handler = mux
 	handler = csrfMiddleware(handler)
@@ -511,7 +512,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-func spaHandler(next http.Handler, staticFS fs.FS) http.Handler {
+func spaHandler(next http.Handler, staticFS fs.FS, version string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			data, err := fs.ReadFile(staticFS, "index.html")
@@ -525,6 +526,7 @@ func spaHandler(next http.Handler, staticFS fs.FS) http.Handler {
 				indexHTML = strings.Replace(indexHTML, "<style>", fmt.Sprintf(`<style nonce=%q>`, nonce), 1)
 				indexHTML = strings.ReplaceAll(indexHTML, "<script>", fmt.Sprintf(`<script nonce=%q>`, nonce))
 			}
+			indexHTML = versionStaticAssets(indexHTML, version)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache")
 			if _, err := io.WriteString(w, indexHTML); err != nil {
@@ -540,6 +542,24 @@ func spaHandler(next http.Handler, staticFS fs.FS) http.Handler {
 		r.URL.Path = "/"
 		next.ServeHTTP(w, r)
 	})
+}
+
+// versionStaticAssets appends a ?v=<version> query string to the SPA's local
+// asset references so that a new build (which bumps the version) forces the
+// browser to fetch fresh JS/CSS instead of reusing a cached copy. Without this,
+// the long-lived "public, max-age=3600" cache header on .js/.css means a client
+// can keep running stale scripts for up to an hour after a deploy.
+func versionStaticAssets(indexHTML, version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return indexHTML
+	}
+	q := "?v=" + url.QueryEscape(version)
+	for _, asset := range []string{"/site.css", "/app.js", "/api.js", "/landing.js"} {
+		indexHTML = strings.ReplaceAll(indexHTML, `href="`+asset+`"`, `href="`+asset+q+`"`)
+		indexHTML = strings.ReplaceAll(indexHTML, `src="`+asset+`"`, `src="`+asset+q+`"`)
+	}
+	return indexHTML
 }
 
 func staticCacheHeadersMiddleware(next http.Handler) http.Handler {
