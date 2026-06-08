@@ -1225,6 +1225,31 @@
             return state.workflows.find((item) => item.id === project.workflow_id) || null;
         }
 
+        // workflowRequiresReady reports whether a workflow gates work behind a
+        // readiness pipeline: it has backlog stages and/or a "ready" stage. Such a
+        // workflow indicates a story must be readied (refined) before it is assigned.
+        function workflowRequiresReady(workflow) {
+            if (!workflow || !Array.isArray(workflow.stages)) return false;
+            return workflow.stages.some((s) =>
+                s.is_backlog_stage || String(s.name || "").toLowerCase() === "ready");
+        }
+
+        // ticketIsReadyForAssignment reports whether a story has been readied enough
+        // to be worked: it is non-draft and either in a sprint, at the "ready" stage,
+        // or in a non-backlog (execution) stage. Backlog stages (idea/refine, or any
+        // stage flagged is_backlog_stage other than "ready") are not yet ready.
+        function ticketIsReadyForAssignment(ticket, workflow) {
+            if (!ticket || ticket.draft) return false;
+            const stage = String(ticket.stage || "").toLowerCase();
+            if (ticket.sprint_id) return true;
+            if (stage === "ready") return true;
+            if (stage === "idea" || stage === "refine") return false;
+            const st = (workflow && Array.isArray(workflow.stages) ? workflow.stages : [])
+                .find((s) => String(s.name || "").toLowerCase() === stage);
+            if (st && st.is_backlog_stage) return false;
+            return true;
+        }
+
         function getCurrentWorkflow() {
             return state.workflows.find((item) => item.id === state.selectedWorkflowID) || null;
         }
@@ -3675,6 +3700,49 @@
             dismissBoardContextMenu();
             const roleName = ticketCurrentRoleName(ticket);
 
+            // A backlog story in the design stage is refined, not assigned: offer
+            // "Refine this story", which moves it into the refinement chat.
+            if (String(ticket.stage || "").toLowerCase() === "design") {
+                const menu = document.createElement("div");
+                menu.className = "context-menu";
+                menu.setAttribute("role", "menu");
+                menu.innerHTML = "<div class=\"context-menu-header\">" + escapeHTML(ticket.key || ticket.id) +
+                    " <span class=\"context-menu-role\">design</span></div>" +
+                    "<div class=\"context-menu-list\">" +
+                    "<button type=\"button\" class=\"context-menu-item is-match\" data-refine-ticket=\"1\">" +
+                    "<span class=\"context-menu-check\">✦</span>" +
+                    "<span class=\"context-menu-label\">Refine this story<small>open the refinement chat</small></span>" +
+                    "</button></div>";
+                document.body.appendChild(menu);
+                boardContextMenuEl = menu;
+                positionBoardContextMenu(menu, event);
+                menu.addEventListener("click", (clickEvent) => {
+                    if (!clickEvent.target.closest("[data-refine-ticket]")) return;
+                    clickEvent.stopPropagation();
+                    dismissBoardContextMenu();
+                    refineStory(ticket);
+                });
+                armBoardContextMenuDismiss();
+                return;
+            }
+
+            // Readiness gate: if the workflow requires stories to be ready before
+            // assignment and this one is not ready yet, don't offer assignment — it
+            // must be refined/readied first.
+            const projectWorkflow = getCurrentProjectWorkflow();
+            if (workflowRequiresReady(projectWorkflow) && !ticketIsReadyForAssignment(ticket, projectWorkflow)) {
+                const menu = document.createElement("div");
+                menu.className = "context-menu";
+                menu.setAttribute("role", "menu");
+                menu.innerHTML = "<div class=\"context-menu-header\">" + escapeHTML(ticket.key || ticket.id) + "</div>" +
+                    "<div class=\"context-menu-empty\">Not ready for assignment — refine this story first.</div>";
+                document.body.appendChild(menu);
+                boardContextMenuEl = menu;
+                positionBoardContextMenu(menu, event);
+                armBoardContextMenuDismiss();
+                return;
+            }
+
             // Distinct enabled agents available on this project (includes globals).
             const seen = new Set();
             const agents = [];
@@ -3719,8 +3787,21 @@
             menu.innerHTML = header + "<div class=\"context-menu-list\">" + items + "</div>" + footer;
             document.body.appendChild(menu);
             boardContextMenuEl = menu;
+            positionBoardContextMenu(menu, event);
 
-            // Keep the menu within the viewport.
+            menu.addEventListener("click", (clickEvent) => {
+                const btn = clickEvent.target.closest("[data-assign-agent]");
+                if (!btn) return;
+                clickEvent.stopPropagation();
+                const username = btn.dataset.assignAgent || "";
+                dismissBoardContextMenu();
+                assignTicketToAgent(ticket, username);
+            });
+            armBoardContextMenuDismiss();
+        }
+
+        // positionBoardContextMenu places the menu at the cursor, kept within the viewport.
+        function positionBoardContextMenu(menu, event) {
             let x = event.clientX;
             let y = event.clientY;
             if (x + menu.offsetWidth > window.innerWidth - 8) {
@@ -3731,17 +3812,11 @@
             }
             menu.style.left = Math.max(8, x) + "px";
             menu.style.top = Math.max(8, y) + "px";
+        }
 
-            menu.addEventListener("click", (clickEvent) => {
-                const btn = clickEvent.target.closest("[data-assign-agent]");
-                if (!btn) return;
-                clickEvent.stopPropagation();
-                const username = btn.dataset.assignAgent || "";
-                dismissBoardContextMenu();
-                assignTicketToAgent(ticket, username);
-            });
-
-            // Defer the outside-click listener so this right-click doesn't instantly close it.
+        // armBoardContextMenuDismiss wires the outside-click/escape/scroll dismissers,
+        // deferred so the opening right-click doesn't immediately close the menu.
+        function armBoardContextMenuDismiss() {
             setTimeout(() => {
                 document.addEventListener("click", dismissBoardContextMenu);
                 document.addEventListener("keydown", onBoardContextMenuKey);
@@ -3749,6 +3824,35 @@
                 window.addEventListener("blur", dismissBoardContextMenu);
                 window.addEventListener("resize", dismissBoardContextMenu);
             }, 0);
+        }
+
+        // refineStory moves a design-stage backlog story into the refine stage and
+        // opens its refinement chat.
+        async function refineStory(ticket) {
+            try {
+                const payload = {
+                    project_id: ticket.project_id,
+                    type: ticket.type,
+                    title: ticket.title,
+                    description: ticket.description || "",
+                    acceptance_criteria: ticket.acceptance_criteria || "",
+                    parent_id: ticket.parent_id || null,
+                    stage: "refine",
+                    state: "idle",
+                    priority: Number(ticket.priority || 0),
+                    order: Number(ticket.order || 0),
+                    estimate_effort: Number(ticket.estimate_effort || 0),
+                    health: Number(ticket.health || 0),
+                };
+                const updated = normalizeTicket(await api("/api/tickets/" + ticket.id, { method: "PUT", body: JSON.stringify(payload) }));
+                await loadTickets();
+                renderTicketBoard();
+                renderTicketListView();
+                openTicketModal(updated);
+                setNotice("Refining " + (ticket.key || ticket.id) + " — chat with the refiner below.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
         }
 
         // assignTicketToAgent assigns (username set) or unassigns (empty) an idle
