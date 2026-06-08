@@ -910,6 +910,10 @@ select {
 .modal-grid { display: grid; grid-template-columns: 1fr 296px; }
 .modal-main { padding: 18px; border-right: 1px solid var(--card-border); overflow-y: auto; max-height: calc(90vh - 52px); }
 .modal-sidebar { overflow-y: auto; max-height: calc(90vh - 52px); }
+.modal-grid-tabbed { display: block; padding: 18px; overflow-y: auto; max-height: calc(90vh - 52px); }
+.ticket-subnav { margin-bottom: 14px; }
+.ticket-panel { display: none; }
+.ticket-panel.active { display: block; }
 
 .modal-section { margin-top: 18px; }
 .modal-section:first-child { margin-top: 0; }

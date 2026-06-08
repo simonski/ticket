@@ -1448,6 +1448,13 @@
                     if (btn) switchSettingsTab(btn.dataset.settingsTab);
                 });
             }
+            const ticketSubnav = document.getElementById("ticket-subnav");
+            if (ticketSubnav) {
+                ticketSubnav.addEventListener("click", (event) => {
+                    const btn = event.target.closest("[data-ticket-tab]");
+                    if (btn) switchTicketTab(btn.dataset.ticketTab);
+                });
+            }
             els.mainNav.addEventListener("dragstart", (event) => {
                 const button = event.target.closest("button[data-view]");
                 if (!button) {
@@ -1545,6 +1552,16 @@
                 panel.classList.toggle("active", panel.dataset.settingsPanel === name);
             });
             try { localStorage.setItem("site2.settingsTab", name); } catch (e) { /* ignore */ }
+        }
+
+        function switchTicketTab(tabName) {
+            const name = String(tabName || "details");
+            document.querySelectorAll("#ticket-subnav .seg-btn").forEach((btn) => {
+                btn.classList.toggle("active", btn.dataset.ticketTab === name);
+            });
+            document.querySelectorAll("#ticket-modal .ticket-panel").forEach((panel) => {
+                panel.classList.toggle("active", panel.dataset.ticketPanel === name);
+            });
         }
 
         function programmeLabelForProject(project) {
@@ -6638,6 +6655,11 @@
                 els.ticketTimeEntries.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
             });
             renderRefinementPanel(state.activeTicket);
+            if (ticketInRefinement(state.activeTicket)) {
+                switchTicketTab("refinement");
+            } else {
+                switchTicketTab("details");
+            }
         }
 
         function closeTicketModal() {
@@ -6714,7 +6736,9 @@
             const agents = agentUsernameSet();
             let html = "";
             if (Array.isArray(comments) && comments.length) {
-                html = comments.map((item) => {
+                // ListComments returns newest-first; the refinement chat reads oldest
+                // at the top to newest at the bottom (like a chat transcript).
+                html = comments.slice().reverse().map((item) => {
                     const author = item.author || "user";
                     const isAgent = agents.has(String(author).toLowerCase()) || /refin/i.test(author);
                     const side = isAgent ? "agent" : "human";
@@ -6771,11 +6795,18 @@
             const panel = document.getElementById("refinement-panel");
             if (!panel) return;
             if (!ticketInRefinement(ticket)) {
-                panel.classList.add("hidden");
                 disconnectRefinementSocket();
+                setRefinementStatus("This story isn't being refined. Right-click it on the board → Refine this story, or it enters refinement automatically as a backlog draft.", false);
+                const approveBox = document.getElementById("refinement-approve-box");
+                if (approveBox) approveBox.classList.add("hidden");
+                const compose = panel.querySelector(".refinement-compose");
+                if (compose) compose.classList.add("hidden");
+                const thread = document.getElementById("refinement-thread");
+                if (thread) thread.innerHTML = "";
                 return;
             }
-            panel.classList.remove("hidden");
+            const compose = panel.querySelector(".refinement-compose");
+            if (compose) compose.classList.remove("hidden");
 
             // Open (or keep) a streaming WebSocket for this refine ticket.
             connectRefinementSocket(ticket.id);

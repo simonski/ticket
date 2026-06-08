@@ -933,8 +933,14 @@
             <h2 id="ticket-modal-title">Ticket</h2>
             <button id="close-ticket-modal" class="icon-btn" type="button" aria-label="Close">&#10005;</button>
         </div>
-        <form id="ticket-form" class="modal-grid">
-            <div class="modal-main">
+        <form id="ticket-form" class="modal-grid-tabbed">
+            <div class="segmented ticket-subnav" id="ticket-subnav">
+                <button type="button" class="seg-btn active" data-ticket-tab="details">Details</button>
+                <button type="button" class="seg-btn" data-ticket-tab="refinement">Refinement</button>
+                <button type="button" class="seg-btn" data-ticket-tab="properties">Properties</button>
+                <button type="button" class="seg-btn" data-ticket-tab="activity">Activity</button>
+            </div>
+            <div class="ticket-panel active" data-ticket-panel="details">
                 <div class="field-row" style="margin-bottom:12px">
                     <div class="field field-narrow">
                         <label for="ticket-type">Type</label>
@@ -1022,6 +1028,24 @@
                     <button id="ticket-archive-button" class="btn btn-ghost" type="button">Archive</button>
                     <button id="ticket-unarchive-button" class="btn btn-ghost" type="button">Unarchive</button>
                 </div>
+            </div>
+            <div class="ticket-panel" data-ticket-panel="refinement">
+                <div id="refinement-panel" class="modal-section">
+                    <div class="section-heading">Refinement</div>
+                    <div id="refinement-status" class="refinement-status"></div>
+                    <div id="refinement-approve-box" class="refinement-approve-box hidden">
+                        <div class="refinement-approve-banner">The refiner has proposed a refinement &mdash; review and approve.</div>
+                        <div id="refinement-breakdown"></div>
+                        <button id="refinement-approve" class="btn btn-primary btn-sm" type="button">Approve &amp; ready</button>
+                    </div>
+                    <div id="refinement-thread" class="refinement-thread"></div>
+                    <div class="refinement-compose">
+                        <textarea id="refinement-input" placeholder="Reply to the refiner&hellip;"></textarea>
+                        <button id="refinement-send" class="btn" type="button">Send</button>
+                    </div>
+                </div>
+            </div>
+            <div class="ticket-panel" data-ticket-panel="properties">
                 <div class="modal-section">
                     <div class="section-heading">Labels</div>
                     <div id="ticket-labels" class="tag-row"></div>
@@ -1048,22 +1072,8 @@
                         <button id="add-ticket-time-button" class="btn" type="button">Log time</button>
                     </div>
                 </div>
-                <div id="refinement-panel" class="modal-section hidden">
-                    <div class="section-heading">Refinement</div>
-                    <div id="refinement-status" class="refinement-status"></div>
-                    <div id="refinement-approve-box" class="refinement-approve-box hidden">
-                        <div class="refinement-approve-banner">The refiner has proposed a refinement &mdash; review and approve.</div>
-                        <div id="refinement-breakdown"></div>
-                        <button id="refinement-approve" class="btn btn-primary btn-sm" type="button">Approve &amp; ready</button>
-                    </div>
-                    <div id="refinement-thread" class="refinement-thread"></div>
-                    <div class="refinement-compose">
-                        <textarea id="refinement-input" placeholder="Reply to the refiner&hellip;"></textarea>
-                        <button id="refinement-send" class="btn" type="button">Send</button>
-                    </div>
-                </div>
             </div>
-            <div class="modal-sidebar">
+            <div class="ticket-panel" data-ticket-panel="activity">
                 <div class="modal-section">
                     <div class="section-heading">History</div>
                     <div id="ticket-history" class="history-list"></div>
