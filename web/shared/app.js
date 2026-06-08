@@ -3833,6 +3833,10 @@
                     body: JSON.stringify({ sprint_id: sprintID }),
                 });
                 await loadTickets();
+                // Follow the ticket to its destination: the board/list views filter by
+                // the selected sprint, so without this the ticket would just vanish from
+                // the current (e.g. backlog) view instead of appearing where it landed.
+                setSelectedSprintFilter(sprintID === null ? "backlog" : String(sprintID));
                 renderTicketBoard();
                 renderTicketListView();
                 renderTicketPlanView();
@@ -3841,6 +3845,20 @@
                     : "Moved " + (ticket.key || ticket.id) + " to the planning sprint.");
             } catch (error) {
                 setNotice(error.message, true);
+            }
+        }
+
+        // setSelectedSprintFilter changes the active sprint filter and keeps the sprint
+        // <select> and persisted preference in sync.
+        function setSelectedSprintFilter(value) {
+            state.selectedSprintID = value;
+            if (els.boardSprintSelect) {
+                els.boardSprintSelect.value = value;
+            }
+            if (state.selectedProjectID) {
+                try {
+                    localStorage.setItem("site2.sprint." + state.selectedProjectID, value);
+                } catch (_) { /* ignore storage failures */ }
             }
         }
 
