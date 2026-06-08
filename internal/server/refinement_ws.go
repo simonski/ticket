@@ -169,7 +169,7 @@ func sendRefinementJSON(c *refinementClient, v any) {
 
 // websocketServeRefinement upgrades the connection and runs the streaming
 // refinement loop for one ticket and one connected human.
-func websocketServeRefinement(w http.ResponseWriter, r *http.Request, db *sql.DB, ticketID, userID string, notify func(string, int64, string)) error {
+func websocketServeRefinement(w http.ResponseWriter, r *http.Request, db *sql.DB, ticketID, userID string, notify func(string, int64, string), refineLog func(string)) error {
 	conn, err := upgradeWebSocket(w, r)
 	if err != nil {
 		return err
@@ -222,13 +222,13 @@ func websocketServeRefinement(w http.ResponseWriter, r *http.Request, db *sql.DB
 		if inbound.Type != "message" || strings.TrimSpace(inbound.Text) == "" {
 			continue
 		}
-		handleRefinementMessage(db, ticketID, userID, strings.TrimSpace(inbound.Text), notify)
+		handleRefinementMessage(db, ticketID, userID, strings.TrimSpace(inbound.Text), notify, refineLog)
 	}
 }
 
 // handleRefinementMessage persists the human message, then runs the refiner LLM and
 // streams its reply, persisting the result and applying any proposal.
-func handleRefinementMessage(db *sql.DB, ticketID, userID, text string, notify func(string, int64, string)) {
+func handleRefinementMessage(db *sql.DB, ticketID, userID, text string, notify func(string, int64, string), refineLog func(string)) {
 	session := sharedRefinementHub.get(ticketID, true)
 	session.mu.Lock()
 	if session.busy {
@@ -270,6 +270,9 @@ func handleRefinementMessage(db *sql.DB, ticketID, userID, text string, notify f
 	// Build the prompt from the idea + full thread.
 	comments, _ := store.ListComments(ctx, db, ticketID)
 	prompt := buildServerRefinementPrompt(ticket, comments)
+	if refineLog != nil {
+		refineLog(fmt.Sprintf("ticket=%s prompt (%d bytes):\n%s", ticketID, len(prompt), prompt))
+	}
 
 	// If no refiner LLM is actually wired up, don't pretend one is thinking —
 	// tell the human the message was saved but won't get an automated reply, and
@@ -284,7 +287,7 @@ func handleRefinementMessage(db *sql.DB, ticketID, userID, text string, notify f
 	sharedRefinementHub.broadcast(ticketID, mustJSON(map[string]any{"type": "refinement_thinking"}))
 	full, llmErr := streamRefinerLLM(ctx, prompt, func(chunk string) {
 		sharedRefinementHub.broadcast(ticketID, mustJSON(map[string]any{"type": "chunk", "text": chunk}))
-	})
+	}, refineLog)
 	if llmErr != nil {
 		sharedRefinementHub.broadcast(ticketID, mustJSON(map[string]any{"type": "refinement_error", "error": llmErr.Error()}))
 		return
@@ -336,10 +339,13 @@ func refinerLLMAvailable() (available bool, command, advice string) {
 
 // streamRefinerLLM runs the configured LLM command with the prompt on stdin and
 // streams stdout chunks via onChunk, returning the full (sanitised) output.
-func streamRefinerLLM(ctx context.Context, prompt string, onChunk func(string)) (string, error) {
+func streamRefinerLLM(ctx context.Context, prompt string, onChunk, refineLog func(string)) (string, error) {
 	args := resolveChatCommandArgs()
 	if len(args) == 0 {
 		return "", fmt.Errorf("refiner command is empty")
+	}
+	if refineLog != nil {
+		refineLog("exec: " + strings.Join(args, " "))
 	}
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...) // #nosec G204 -- args from trusted server config
 	cmd.Env = append(os.Environ(), "TERM=dumb", "NO_COLOR=1", "CLICOLOR=0")
@@ -351,13 +357,43 @@ func streamRefinerLLM(ctx context.Context, prompt string, onChunk func(string)) 
 	if err != nil {
 		return "", err
 	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return "", err
+	}
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("start refiner command: %w", err)
+		return "", fmt.Errorf("start refiner command %q: %w", args[0], err)
 	}
 	go func() {
 		_, _ = io.WriteString(stdin, prompt)
 		_ = stdin.Close()
 	}()
+
+	// Drain stderr concurrently so a chatty command can't deadlock on a full
+	// pipe, and so we can include it in the error and (when -v) in the log.
+	var errBuf strings.Builder
+	var errMu sync.Mutex
+	stderrDone := make(chan struct{})
+	go func() {
+		defer close(stderrDone)
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := stderr.Read(buf)
+			if n > 0 {
+				chunk := sanitizeTerminalOutput(string(buf[:n]))
+				errMu.Lock()
+				errBuf.WriteString(chunk)
+				errMu.Unlock()
+				if refineLog != nil && chunk != "" {
+					refineLog("stderr: " + strings.TrimRight(chunk, "\n"))
+				}
+			}
+			if readErr != nil {
+				return
+			}
+		}
+	}()
+
 	var b strings.Builder
 	buf := make([]byte, 4096)
 	for {
@@ -365,6 +401,9 @@ func streamRefinerLLM(ctx context.Context, prompt string, onChunk func(string)) 
 		if n > 0 {
 			chunk := sanitizeTerminalOutput(string(buf[:n]))
 			b.WriteString(chunk)
+			if refineLog != nil && chunk != "" {
+				refineLog("stdout: " + strings.TrimRight(chunk, "\n"))
+			}
 			if onChunk != nil && chunk != "" {
 				onChunk(chunk)
 			}
@@ -373,9 +412,27 @@ func streamRefinerLLM(ctx context.Context, prompt string, onChunk func(string)) 
 			break
 		}
 	}
+	<-stderrDone
 	waitErr := cmd.Wait()
 	out := strings.TrimSpace(b.String())
-	if out == "" && waitErr != nil {
+	errMu.Lock()
+	errText := strings.TrimSpace(errBuf.String())
+	errMu.Unlock()
+
+	if refineLog != nil {
+		status := "ok"
+		if waitErr != nil {
+			status = waitErr.Error()
+		}
+		refineLog(fmt.Sprintf("done: status=%s stdout=%d bytes stderr=%d bytes", status, len(out), len(errText)))
+	}
+
+	if waitErr != nil && out == "" {
+		// Surface the command's stderr (when any) so the human sees *why* it
+		// failed instead of a bare "exit status 1".
+		if errText != "" {
+			return "", fmt.Errorf("%s (%w)", errText, waitErr)
+		}
 		return "", waitErr
 	}
 	return out, nil

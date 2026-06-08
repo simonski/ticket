@@ -27,6 +27,22 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 		}
 	}
 
+	// refineLog mirrors chatLog for the refinement WebSocket: when the server is
+	// started with -v it prints the refiner command, prompt, and its stdout/stderr
+	// so failures (e.g. "exit status 1") can be diagnosed.
+	var refineLog func(string)
+	if verbose {
+		if output == nil {
+			output = io.Discard
+		}
+		var refineLogMu sync.Mutex
+		refineLog = func(line string) {
+			refineLogMu.Lock()
+			defer refineLogMu.Unlock()
+			fmt.Fprintf(output, "REFINE %s\n", strings.TrimRight(line, "\n"))
+		}
+	}
+
 	notify := func(eventType string, projectID int64, ticketID string) {
 		if live == nil {
 			return
@@ -87,7 +103,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeStoreError(w, err)
 			return
 		}
-		if err := websocketServeRefinement(w, req, db, ticketID, user.ID, notify); err != nil {
+		if err := websocketServeRefinement(w, req, db, ticketID, user.ID, notify, refineLog); err != nil {
 			if !strings.Contains(err.Error(), "upgrade") {
 				writeError(w, http.StatusInternalServerError, err.Error())
 			}
