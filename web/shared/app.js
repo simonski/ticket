@@ -6785,10 +6785,35 @@
                 el.innerHTML = "";
                 return;
             }
-            el.classList.remove("hidden");
+            el.classList.remove("hidden", "refinement-status-warn");
             el.classList.toggle("refinement-status-busy", Boolean(busy));
             const dot = busy ? "<span class=\"refining-pulse\"></span> " : "";
             el.innerHTML = dot + escapeHTML(text);
+        }
+
+        // showRefinementNoLLM surfaces a clear, persistent warning (status line + a
+        // note in the thread) when the server has no refiner LLM wired up, so the
+        // human knows their message was saved but won't get an AI reply — and how to
+        // fix it — instead of staring at a "thinking" animation that never resolves.
+        function showRefinementNoLLM(advice, command) {
+            const el = document.getElementById("refinement-status");
+            const text = advice ||
+                "No refiner LLM is configured on the server, so this message won't get an automated reply.";
+            if (el) {
+                el.classList.remove("hidden", "refinement-status-busy");
+                el.classList.add("refinement-status-warn");
+                el.innerHTML = "<span class=\"refinement-warn-icon\">⚠</span> " + escapeHTML(text);
+            }
+            const thread = refinementThreadEl();
+            if (thread && !thread.querySelector(".refinement-no-llm-note")) {
+                const note = document.createElement("div");
+                note.className = "refinement-no-llm-note";
+                note.innerHTML = "<strong>⚠ No AI refiner is running.</strong> " + escapeHTML(text) +
+                    (command ? "<div class=\"meta\">Command tried: <code>" + escapeHTML(command) + "</code></div>" : "");
+                thread.appendChild(note);
+                refinementScrollToBottom();
+            }
+            setNotice(text, true);
         }
 
         function renderRefinementPanel(ticket) {
@@ -7002,7 +7027,11 @@
             if (!payload || !payload.type) return;
             switch (payload.type) {
                 case "refinement_connected":
-                    setRefinementStatus("Connected — your turn", false);
+                    if (payload.llm_available === false) {
+                        showRefinementNoLLM(payload.llm_advice, payload.llm_command);
+                    } else {
+                        setRefinementStatus("Connected — your turn", false);
+                    }
                     return;
                 case "message": {
                     // Skip echoes of the local sender's own human turn to avoid a
@@ -7018,14 +7047,17 @@
                     return;
                 }
                 case "refinement_thinking": {
-                    setRefinementStatus("Refiner is working…", true);
+                    setRefinementStatus("Refiner is thinking…", true);
                     const thread = refinementThreadEl();
                     if (!thread) return;
                     removeRefinementStreamingBubble();
                     const bubble = document.createElement("div");
-                    bubble.className = "refinement-bubble refinement-bubble-agent refinement-streaming";
+                    // Mark as thinking so the first chunk knows to clear the
+                    // animated dots before appending real text.
+                    bubble.className = "refinement-bubble refinement-bubble-agent refinement-streaming refinement-thinking";
                     bubble.innerHTML = "<div class=\"refinement-author\">refiner</div>" +
-                        "<div class=\"refinement-text\"></div>";
+                        "<div class=\"refinement-text\"><span class=\"refinement-typing\" aria-label=\"thinking\">" +
+                        "<span></span><span></span><span></span></span></div>";
                     thread.appendChild(bubble);
                     refinementScrollToBottom();
                     return;
@@ -7034,6 +7066,12 @@
                     setRefinementStatus("Refiner is responding…", true);
                     const node = ensureRefinementStreamingBubble();
                     if (node) {
+                        // Clear the "thinking" dots once real output begins.
+                        const bubble = node.closest(".refinement-bubble");
+                        if (bubble && bubble.classList.contains("refinement-thinking")) {
+                            bubble.classList.remove("refinement-thinking");
+                            node.textContent = "";
+                        }
                         node.textContent += String(payload.text || "");
                         refinementScrollToBottom();
                     }
@@ -7048,6 +7086,10 @@
                 case "refinement_busy":
                     setRefinementStatus("Refiner is still responding…", true);
                     setNotice("Refiner is still responding…");
+                    return;
+                case "refinement_no_llm":
+                    removeRefinementStreamingBubble();
+                    showRefinementNoLLM(payload.advice, payload.command);
                     return;
                 case "refinement_error":
                     removeRefinementStreamingBubble();

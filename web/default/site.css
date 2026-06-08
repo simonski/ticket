@@ -1585,6 +1585,29 @@ select {
 }
 .refinement-status.hidden { display: none; }
 .refinement-status-busy { color: var(--fg); }
+/* Warning variant: no refiner LLM is wired up. */
+.refinement-status-warn {
+    color: var(--fg);
+    background: rgba(220, 140, 0, 0.12);
+    border-color: rgba(220, 140, 0, 0.55);
+}
+.refinement-warn-icon { color: #d08c00; }
+.refinement-no-llm-note {
+    align-self: stretch;
+    font-size: 0.8125rem;
+    color: var(--fg);
+    background: rgba(220, 140, 0, 0.10);
+    border: 1px solid rgba(220, 140, 0, 0.45);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+}
+.refinement-no-llm-note .meta { margin-top: 4px; color: var(--fg-2); }
+.refinement-no-llm-note code {
+    font-family: var(--mono, monospace);
+    background: var(--card);
+    padding: 1px 4px;
+    border-radius: 4px;
+}
 
 /* Animated pulse used by the status line, card chip, and thinking bubble. */
 .refining-pulse {

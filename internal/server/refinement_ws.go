@@ -191,7 +191,13 @@ func websocketServeRefinement(w http.ResponseWriter, r *http.Request, db *sql.DB
 		}
 	}()
 
-	sendRefinementJSON(client, map[string]any{"type": "refinement_connected"})
+	connAvail, connCmd, connAdvice := refinerLLMAvailable()
+	sendRefinementJSON(client, map[string]any{
+		"type":          "refinement_connected",
+		"llm_available": connAvail,
+		"llm_command":   connCmd,
+		"llm_advice":    connAdvice,
+	})
 
 	for {
 		opcode, payload, err := readWebSocketFrame(client.conn)
@@ -265,6 +271,16 @@ func handleRefinementMessage(db *sql.DB, ticketID, userID, text string, notify f
 	comments, _ := store.ListComments(ctx, db, ticketID)
 	prompt := buildServerRefinementPrompt(ticket, comments)
 
+	// If no refiner LLM is actually wired up, don't pretend one is thinking —
+	// tell the human the message was saved but won't get an automated reply, and
+	// how to enable it.
+	if avail, cmdStr, advice := refinerLLMAvailable(); !avail {
+		sharedRefinementHub.broadcast(ticketID, mustJSON(map[string]any{
+			"type": "refinement_no_llm", "command": cmdStr, "advice": advice,
+		}))
+		return
+	}
+
 	sharedRefinementHub.broadcast(ticketID, mustJSON(map[string]any{"type": "refinement_thinking"}))
 	full, llmErr := streamRefinerLLM(ctx, prompt, func(chunk string) {
 		sharedRefinementHub.broadcast(ticketID, mustJSON(map[string]any{"type": "chunk", "text": chunk}))
@@ -299,6 +315,23 @@ func handleRefinementMessage(db *sql.DB, ticketID, userID, text string, notify f
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+// refinerLLMAvailable reports whether a refiner LLM command is configured and its
+// executable can be resolved on the server's PATH. When it returns false, the
+// caller surfaces the advisory (third return value) to the human so they know the
+// refinement panel needs fixing rather than silently waiting on nothing. The
+// second return value is the command that was attempted.
+func refinerLLMAvailable() (available bool, command, advice string) {
+	args := resolveChatCommandArgs()
+	cmdStr := strings.TrimSpace(strings.Join(args, " "))
+	if len(args) == 0 {
+		return false, cmdStr, "No refiner LLM command is configured on the server. Set the TICKET_CHAT_CMD environment variable to an LLM CLI and restart the server to enable AI refinement."
+	}
+	if _, err := exec.LookPath(args[0]); err != nil {
+		return false, cmdStr, fmt.Sprintf("The refiner command %q is not installed on the server (not found on PATH), so your messages are saved but get no AI reply. Install it, or set TICKET_CHAT_CMD to an available LLM CLI, then restart the server.", args[0])
+	}
+	return true, cmdStr, ""
 }
 
 // streamRefinerLLM runs the configured LLM command with the prompt on stdin and
