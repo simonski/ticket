@@ -282,6 +282,59 @@ func TestMarkTicketReadySetsReadyStage(t *testing.T) {
 	}
 }
 
+// TestMarkTicketReadyMovesToDevelopWhenNoReadyStage verifies that, in a workflow
+// without a "ready" holding stage (e.g. Agile design→develop→test→done), marking a
+// refined story ready moves it straight into the develop stage.
+func TestMarkTicketReadyMovesToDevelopWhenNoReadyStage(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := context.Background()
+	adminID := testAdminID(t, db)
+
+	wf, err := CreateWorkflow(ctx, db, "agile", "design develop test done")
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	design, err := AddWorkflowStage(ctx, db, wf.ID, "design", "", "", 0)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(design) error = %v", err)
+	}
+	if err := SetWorkflowStageBacklog(ctx, db, design.ID, true); err != nil {
+		t.Fatalf("SetWorkflowStageBacklog() error = %v", err)
+	}
+	for i, name := range []string{"develop", "test", "done"} {
+		if _, err := AddWorkflowStage(ctx, db, wf.ID, name, "", "", i+1); err != nil {
+			t.Fatalf("AddWorkflowStage(%s) error = %v", name, err)
+		}
+	}
+
+	project, err := CreateProject(ctx, db, "Agile", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	wfID := wf.ID
+	ticket, err := CreateTicket(ctx, db, TicketCreateParams{
+		ProjectID:  project.ID,
+		WorkflowID: &wfID,
+		Type:       "story",
+		Title:      "refine me",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	ready, err := MarkTicketReady(ctx, db, ticket.ID, "admin", adminID)
+	if err != nil {
+		t.Fatalf("MarkTicketReady() error = %v", err)
+	}
+	if ready.Stage != StageDevelop {
+		t.Fatalf("MarkTicketReady().Stage = %q, want %q", ready.Stage, StageDevelop)
+	}
+	if ready.Draft {
+		t.Fatalf("MarkTicketReady().Draft = true, want false")
+	}
+}
+
 // TestSprintActivationBlockedByBacklogStages verifies that a sprint cannot be
 // activated if it contains tickets that are still in idea or refine stage.
 func TestSprintActivationBlockedByBacklogStages(t *testing.T) {

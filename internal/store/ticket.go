@@ -758,11 +758,22 @@ func MarkTicketReady(ctx context.Context, db *sql.DB, id, actorUsername, actorID
 	if err != nil {
 		return Ticket{}, err
 	}
-	// Move to a literal "ready" stage only when the workflow actually has one;
-	// otherwise readiness is just the draft flag clearing, in place.
+	// Choose the stage a refined story lands in once it's ready:
+	//   - a literal "ready" holding stage when the workflow has one (the
+	//     idea→refine→ready backlog model), otherwise
+	//   - the development stage, so a refined story flows straight into the work
+	//     pipeline (e.g. the Agile design→develop→test→done workflow), otherwise
+	//   - in place (readiness is just the draft flag clearing).
 	stage := current.Stage
-	if validStages, sErr := validStagesForTicket(ctx, db, current); sErr == nil && slices.Contains(validStages, StageReady) {
-		stage = StageReady
+	if validStages, sErr := validStagesForTicket(ctx, db, current); sErr == nil {
+		switch {
+		case slices.Contains(validStages, StageReady):
+			stage = StageReady
+		default:
+			if dev := developStageForTicket(ctx, db, current); dev != "" {
+				stage = dev
+			}
+		}
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
@@ -1601,6 +1612,35 @@ func validStagesForTicket(ctx context.Context, db *sql.DB, ticket Ticket) ([]str
 		}
 	}
 	return []string{StageIdea, StageRefine, StageReady, StageDesign, StageDevelop, StageTest, StageDone, StageComplete, StageReject}, nil
+}
+
+// developStageForTicket returns the workflow stage a refined story should move
+// into when marked ready: a stage literally named "develop" if the workflow has
+// one, otherwise the first non-backlog stage. Returns "" when the ticket has no
+// workflow or no suitable development stage (leave it in place).
+func developStageForTicket(ctx context.Context, db *sql.DB, ticket Ticket) string {
+	wfID := ResolveWorkflowID(ctx, db, ticket)
+	if wfID == nil {
+		return ""
+	}
+	stages, err := ListWorkflowStages(ctx, db, *wfID)
+	if err != nil {
+		return ""
+	}
+	firstWork := ""
+	for _, s := range stages {
+		name := strings.ToLower(strings.TrimSpace(s.StageName))
+		if name == "" {
+			continue
+		}
+		if name == StageDevelop {
+			return name
+		}
+		if !s.IsBacklogStage && firstWork == "" {
+			firstWork = name
+		}
+	}
+	return firstWork
 }
 
 func normalizeStageNames(stages []WorkflowStage) []string {
