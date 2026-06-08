@@ -1571,6 +1571,40 @@ select {
 .notif-pr-ready .notif-icon { color: #22c55e; }
 
 /* ── Refinement chat panel ─────────────────────────────────────────────── */
+.refinement-status {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 0.8125rem; color: var(--fg-2);
+    padding: 6px 10px; margin-bottom: 8px;
+    background: var(--accent-tint);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+}
+.refinement-status.hidden { display: none; }
+.refinement-status-busy { color: var(--fg); }
+
+/* Animated pulse used by the status line, card chip, and thinking bubble. */
+.refining-pulse {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); display: inline-block;
+    animation: refining-pulse 1s infinite ease-in-out;
+}
+@keyframes refining-pulse {
+    0%, 100% { opacity: 0.25; transform: scale(0.8); }
+    50%      { opacity: 1; transform: scale(1.15); }
+}
+
+/* Board card "refining" cue. */
+.ticket-card-refining {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-tint);
+}
+.chip-refining {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--accent-tint);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+}
+
 .refinement-thread {
     display: flex;
     flex-direction: column;

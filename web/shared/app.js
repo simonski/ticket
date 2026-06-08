@@ -3307,7 +3307,13 @@
                 const cards = sprintFilterTickets(state.tickets)
                     .filter((ticket) => (ticket.stage || fallbackLane) === lane.name)
                     .filter((ticket) => !searchText || String(ticket.title || "").toLowerCase().includes(searchText) || String(ticket.key || ticket.id || "").toLowerCase().includes(searchText))
-                    .sort((a, b) => (a.order || 0) - (b.order || 0))
+                    // Stories being refined float to the top of their lane.
+                    .sort((a, b) => {
+                        const ra = ticketInRefinement(a) ? 0 : 1;
+                        const rb = ticketInRefinement(b) ? 0 : 1;
+                        if (ra !== rb) return ra - rb;
+                        return (a.order || 0) - (b.order || 0);
+                    })
                     .map((ticket) => renderTicketCard(ticket))
                     .join("");
                 const draggable = lane.workflowStageID ? "true" : "false";
@@ -3904,12 +3910,22 @@
 
         function renderTicketCard(ticket) {
             const agentDot = ticketAgentDot(ticket);
-            return "<div class=\"ticket-card\" draggable=\"true\" data-ticket-id=\"" + ticket.id + "\">" +
+            const refining = ticketInRefinement(ticket);
+            const refinerWorking = refining && ticket.state === "active" && String(ticket.assignee || "").trim() !== "";
+            let refineChip = "";
+            if (refinerWorking) {
+                refineChip = "<span class=\"chip chip-refining\"><span class=\"refining-pulse\"></span> refining…</span>";
+            } else if (refining) {
+                refineChip = "<span class=\"chip chip-refining\">✦ refining</span>";
+            }
+            const cls = "ticket-card" + (refining ? " ticket-card-refining" : "");
+            return "<div class=\"" + cls + "\" draggable=\"true\" data-ticket-id=\"" + ticket.id + "\">" +
                 "<div class=\"panel-head panel-head-tight\">" + agentDot + "<h4>" + escapeHTML(ticket.key || ticket.id || "New") + "</h4><span class=\"chip\">" + escapeHTML(ticket.type || "task") + "</span></div>" +
                 "<p>" + escapeHTML(ticket.title || "(untitled)") + "</p>" +
                 "<div class=\"tag-row\">" +
                 "<span class=\"chip\">p" + escapeHTML(ticket.priority || 0) + "</span>" +
-                (ticket.recommended_ready && ticket.draft ? "<span class=\"chip chip-success\">✓ ready</span>" : "") +
+                refineChip +
+                (ticket.recommended_ready ? "<span class=\"chip chip-success\">✓ proposed</span>" : "") +
                 "</div>" +
                 "</div>";
         }
@@ -6734,6 +6750,23 @@
             renderRefinementThread(comments, thinking);
         }
 
+        // setRefinementStatus drives the always-on status line at the top of the
+        // refinement panel so there is a clear cue about what (if anything) is
+        // happening: connecting, refiner working, awaiting your reply, idle, errors.
+        function setRefinementStatus(text, busy) {
+            const el = document.getElementById("refinement-status");
+            if (!el) return;
+            if (!text) {
+                el.classList.add("hidden");
+                el.innerHTML = "";
+                return;
+            }
+            el.classList.remove("hidden");
+            el.classList.toggle("refinement-status-busy", Boolean(busy));
+            const dot = busy ? "<span class=\"refining-pulse\"></span> " : "";
+            el.innerHTML = dot + escapeHTML(text);
+        }
+
         function renderRefinementPanel(ticket) {
             const panel = document.getElementById("refinement-panel");
             if (!panel) return;
@@ -6767,6 +6800,15 @@
                     approveBox.classList.add("hidden");
                     breakdown.innerHTML = "";
                 }
+            }
+
+            // Initial status cue (the WS open/working events refine it live).
+            if (refinementIsThinking(ticket)) {
+                setRefinementStatus("Refiner is working…", true);
+            } else if (ticket.recommended_ready) {
+                setRefinementStatus("Refiner proposed a refinement — review & approve", false);
+            } else {
+                setRefinementStatus("Your turn — send a message to refine this story", false);
             }
 
             loadRefinementThread(ticket.id, refinementIsThinking(ticket)).catch((error) => {
@@ -6827,9 +6869,11 @@
             }
             state.refinementSocket = socket;
             state.refinementTicketId = ticketId;
+            setRefinementStatus("Connecting to the refiner…", true);
 
             socket.addEventListener("open", () => {
                 if (state.refinementSocket !== socket) return;
+                setRefinementStatus("Connected — your turn", false);
                 if (state.refinementPendingSend != null) {
                     const text = state.refinementPendingSend;
                     state.refinementPendingSend = null;
@@ -6858,6 +6902,9 @@
 
             socket.addEventListener("error", () => {
                 // Non-fatal; the REST fallback in the send handler covers this.
+                if (state.refinementSocket === socket) {
+                    setRefinementStatus("Live connection unavailable — replies may be delayed", false);
+                }
             });
         }
 
@@ -6924,6 +6971,7 @@
             if (!payload || !payload.type) return;
             switch (payload.type) {
                 case "refinement_connected":
+                    setRefinementStatus("Connected — your turn", false);
                     return;
                 case "message": {
                     // Skip echoes of the local sender's own human turn to avoid a
@@ -6939,6 +6987,7 @@
                     return;
                 }
                 case "refinement_thinking": {
+                    setRefinementStatus("Refiner is working…", true);
                     const thread = refinementThreadEl();
                     if (!thread) return;
                     removeRefinementStreamingBubble();
@@ -6951,6 +7000,7 @@
                     return;
                 }
                 case "chunk": {
+                    setRefinementStatus("Refiner is responding…", true);
                     const node = ensureRefinementStreamingBubble();
                     if (node) {
                         node.textContent += String(payload.text || "");
@@ -6960,14 +7010,17 @@
                 }
                 case "message_done": {
                     removeRefinementStreamingBubble();
+                    setRefinementStatus("Refiner replied — your turn", false);
                     refreshOpenRefinement(ticketId);
                     return;
                 }
                 case "refinement_busy":
+                    setRefinementStatus("Refiner is still responding…", true);
                     setNotice("Refiner is still responding…");
                     return;
                 case "refinement_error":
                     removeRefinementStreamingBubble();
+                    setRefinementStatus("Error: " + (payload.error || "refinement failed"), false);
                     setNotice(payload.error || "Refinement error", true);
                     return;
                 case "refinement_idle_closed": {
@@ -6979,6 +7032,7 @@
                         thread.appendChild(note);
                         refinementScrollToBottom();
                     }
+                    setRefinementStatus("Session idle — send a message to resume", false);
                     if (state.refinementSocket && String(state.refinementTicketId) === String(ticketId)) {
                         state.refinementSocket = null;
                     }
@@ -7003,6 +7057,7 @@
                     return false;
                 }
                 appendRefinementHumanBubble("you", text);
+                setRefinementStatus("Waiting for the refiner…", true);
                 return true;
             }
             // Socket closed (e.g. idle) or absent: reconnect and queue the send.
@@ -7012,6 +7067,7 @@
                 connectRefinementSocket(ticketId);
                 if (state.refinementSocket) {
                     appendRefinementHumanBubble("you", text);
+                    setRefinementStatus("Waiting for the refiner…", true);
                     return true;
                 }
                 state.refinementPendingSend = null;
