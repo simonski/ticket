@@ -765,6 +765,13 @@ func runDemo(args []string) error {
 				if _, err := db.ExecContext(ctx, `UPDATE tickets SET sprint_id = ?, draft = 0 WHERE ticket_id = ?`, spID, t.ID); err != nil {
 					return fmt.Errorf("assigning sprint to ticket %s: %w", t.ID, err)
 				}
+			} else {
+				// Backlog tickets are planned work, NOT drafts in refinement. Clear the
+				// draft flag (CreateTicket defaults it to 1) so they don't all show the
+				// "refining" indicator — only the explicit refine ideas below do.
+				if _, err := db.ExecContext(ctx, `UPDATE tickets SET draft = 0 WHERE ticket_id = ?`, t.ID); err != nil {
+					return fmt.Errorf("clearing draft on backlog ticket %s: %w", t.ID, err)
+				}
 			}
 
 			allTicketMeta = append(allTicketMeta, ticketMeta{

@@ -3777,6 +3777,92 @@
             return splitAgentRoles(agent.agent_role).some((r) => r.toLowerCase() === target);
         }
 
+        // getPlanningSprint returns the project's planning sprint (the one in the
+        // "design" stage) that backlog tickets are promoted into.
+        function getPlanningSprint() {
+            return (state.sprints || []).find((s) => s.stage === "design") || null;
+        }
+
+        // contextMenuExtraItemsHTML builds the trailing context-menu items shared by
+        // every menu variant: move to/from the planning sprint, and Delete.
+        function contextMenuExtraItemsHTML(ticket) {
+            let html = "<div class=\"context-menu-sep\"></div>";
+            const planning = getPlanningSprint();
+            const inBacklog = ticket.sprint_id === null || ticket.sprint_id === undefined;
+            if (inBacklog && planning) {
+                const label = "Sprint " + planning.number + (planning.title ? ": " + planning.title : "");
+                html += "<button type=\"button\" class=\"context-menu-item\" data-move-sprint=\"" + planning.id + "\">" +
+                    "<span class=\"context-menu-check\">→</span>" +
+                    "<span class=\"context-menu-label\">Move to " + escapeHTML(label) + "<small>add to the planning sprint</small></span>" +
+                    "</button>";
+            } else if (planning && Number(ticket.sprint_id) === Number(planning.id)) {
+                html += "<button type=\"button\" class=\"context-menu-item\" data-move-backlog=\"1\">" +
+                    "<span class=\"context-menu-check\">←</span>" +
+                    "<span class=\"context-menu-label\">Move to backlog<small>remove from the planning sprint</small></span>" +
+                    "</button>";
+            }
+            html += "<button type=\"button\" class=\"context-menu-item context-menu-danger\" data-delete-ticket=\"1\">" +
+                "<span class=\"context-menu-check\">🗑</span>" +
+                "<span class=\"context-menu-label\">Delete<small>permanently remove this ticket</small></span>" +
+                "</button>";
+            return html;
+        }
+
+        // handleContextMenuExtraClick dispatches the shared trailing items. Returns
+        // true if it handled the click.
+        function handleContextMenuExtraClick(btn, ticket) {
+            if (btn.dataset.moveSprint) {
+                moveTicketToSprint(ticket, Number(btn.dataset.moveSprint));
+                return true;
+            }
+            if (btn.dataset.moveBacklog) {
+                moveTicketToSprint(ticket, null);
+                return true;
+            }
+            if (btn.dataset.deleteTicket) {
+                deleteTicketWithConfirm(ticket);
+                return true;
+            }
+            return false;
+        }
+
+        async function moveTicketToSprint(ticket, sprintID) {
+            try {
+                await api("/api/tickets/" + ticket.id + "/sprint", {
+                    method: "PUT",
+                    body: JSON.stringify({ sprint_id: sprintID }),
+                });
+                await loadTickets();
+                renderTicketBoard();
+                renderTicketListView();
+                renderTicketPlanView();
+                setNotice(sprintID === null
+                    ? "Moved " + (ticket.key || ticket.id) + " to the backlog."
+                    : "Moved " + (ticket.key || ticket.id) + " to the planning sprint.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        async function deleteTicketWithConfirm(ticket) {
+            const confirmed = await uiConfirm(
+                "Delete ticket " + (ticket.key || ticket.id) + "? This cannot be undone.", "Delete");
+            if (!confirmed) return;
+            try {
+                await api("/api/tickets/" + ticket.id, { method: "DELETE" });
+                if (state.activeTicket && String(state.activeTicket.id) === String(ticket.id)) {
+                    closeTicketModal();
+                }
+                await loadTickets();
+                renderTicketBoard();
+                renderTicketListView();
+                renderTicketPlanView();
+                setNotice("Deleted " + (ticket.key || ticket.id) + ".");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
         function openBoardContextMenu(event, ticket) {
             dismissBoardContextMenu();
             const roleName = ticketCurrentRoleName(ticket);
@@ -3812,15 +3898,16 @@
                 menu.setAttribute("role", "menu");
                 menu.innerHTML = "<div class=\"context-menu-header\">" + escapeHTML(ticket.key || ticket.id) +
                     " <span class=\"context-menu-role\">" + escapeHTML(ticket.stage || "backlog") + "</span></div>" +
-                    "<div class=\"context-menu-list\">" + items + "</div>";
+                    "<div class=\"context-menu-list\">" + items + contextMenuExtraItemsHTML(ticket) + "</div>";
                 document.body.appendChild(menu);
                 boardContextMenuEl = menu;
                 positionBoardContextMenu(menu, event);
                 menu.addEventListener("click", (clickEvent) => {
-                    const btn = clickEvent.target.closest("[data-refine-ticket],[data-move-develop],[data-force-develop]");
+                    const btn = clickEvent.target.closest("[data-refine-ticket],[data-move-develop],[data-force-develop],[data-move-sprint],[data-move-backlog],[data-delete-ticket]");
                     if (!btn) return;
                     clickEvent.stopPropagation();
                     dismissBoardContextMenu();
+                    if (handleContextMenuExtraClick(btn, ticket)) return;
                     if (btn.dataset.refineTicket) {
                         refineStory(ticket);
                     } else if (btn.dataset.moveDevelop || btn.dataset.forceDevelop) {
@@ -3840,10 +3927,18 @@
                 menu.className = "context-menu";
                 menu.setAttribute("role", "menu");
                 menu.innerHTML = "<div class=\"context-menu-header\">" + escapeHTML(ticket.key || ticket.id) + "</div>" +
-                    "<div class=\"context-menu-empty\">Not ready for assignment — refine this story first.</div>";
+                    "<div class=\"context-menu-empty\">Not ready for assignment — refine this story first.</div>" +
+                    "<div class=\"context-menu-list\">" + contextMenuExtraItemsHTML(ticket) + "</div>";
                 document.body.appendChild(menu);
                 boardContextMenuEl = menu;
                 positionBoardContextMenu(menu, event);
+                menu.addEventListener("click", (clickEvent) => {
+                    const btn = clickEvent.target.closest("[data-move-sprint],[data-move-backlog],[data-delete-ticket]");
+                    if (!btn) return;
+                    clickEvent.stopPropagation();
+                    dismissBoardContextMenu();
+                    handleContextMenuExtraClick(btn, ticket);
+                });
                 armBoardContextMenuDismiss();
                 return;
             }
@@ -3889,17 +3984,19 @@
             const menu = document.createElement("div");
             menu.className = "context-menu";
             menu.setAttribute("role", "menu");
-            menu.innerHTML = header + "<div class=\"context-menu-list\">" + items + "</div>" + footer;
+            menu.innerHTML = header + "<div class=\"context-menu-list\">" + items + "</div>" + footer +
+                "<div class=\"context-menu-list\">" + contextMenuExtraItemsHTML(ticket) + "</div>";
             document.body.appendChild(menu);
             boardContextMenuEl = menu;
             positionBoardContextMenu(menu, event);
 
             menu.addEventListener("click", (clickEvent) => {
-                const btn = clickEvent.target.closest("[data-assign-agent]");
+                const btn = clickEvent.target.closest("[data-assign-agent],[data-move-sprint],[data-move-backlog],[data-delete-ticket]");
                 if (!btn) return;
                 clickEvent.stopPropagation();
-                const username = btn.dataset.assignAgent || "";
                 dismissBoardContextMenu();
+                if (handleContextMenuExtraClick(btn, ticket)) return;
+                const username = btn.dataset.assignAgent || "";
                 assignTicketToAgent(ticket, username);
             });
             armBoardContextMenuDismiss();
@@ -4036,9 +4133,12 @@
 
         function renderTicketCard(ticket) {
             const agentDot = ticketAgentDot(ticket);
-            const refining = ticketInRefinement(ticket);
-            const refined = ticketIsRefined(ticket);
-            const cls = "ticket-card" + (refining || refined ? " ticket-card-refining" : "");
+            // The accent outline marks a story the refiner is ACTIVELY working right
+            // now — not every backlog draft. Passive refinement state is conveyed by
+            // the chip badge alone.
+            const refinerWorking = ticketInRefinement(ticket) && ticket.state === "active" &&
+                String(ticket.assignee || "").trim() !== "";
+            const cls = "ticket-card" + (refinerWorking ? " ticket-card-refining" : "");
             return "<div class=\"" + cls + "\" draggable=\"true\" data-ticket-id=\"" + ticket.id + "\">" +
                 "<div class=\"panel-head panel-head-tight\">" + agentDot + "<h4>" + escapeHTML(ticket.key || ticket.id || "New") + "</h4><span class=\"chip\">" + escapeHTML(ticket.type || "task") + "</span></div>" +
                 "<p>" + escapeHTML(ticket.title || "(untitled)") + "</p>" +
@@ -6460,8 +6560,7 @@
                     return;
                 }
                 const ticket = state.tickets.find((item) => String(item.id) === card.dataset.ticketId);
-                // Only idle stories can be hand-assigned to an agent.
-                if (!ticket || String(ticket.state || "").toLowerCase() !== "idle") {
+                if (!ticket) {
                     return;
                 }
                 event.preventDefault();
@@ -6761,11 +6860,9 @@
                 els.ticketTimeEntries.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
             });
             renderRefinementPanel(state.activeTicket);
-            if (ticketInRefinement(state.activeTicket)) {
-                switchTicketTab("refinement");
-            } else {
-                switchTicketTab("details");
-            }
+            // Always open on the Details panel first; the Refinement tab is one click
+            // away for stories in refinement.
+            switchTicketTab("details");
         }
 
         function closeTicketModal() {

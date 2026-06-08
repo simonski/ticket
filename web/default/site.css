@@ -861,6 +861,11 @@ select {
     border-top: 1px solid var(--card-border);
     color: var(--red);
 }
+.context-menu-sep { height: 1px; background: var(--card-border); margin: 4px 0; }
+.context-menu-danger .context-menu-label { color: var(--red); }
+.context-menu-danger .context-menu-check { color: var(--red); }
+.context-menu-danger:hover { background: hsl(0 70% 96%); }
+.dark .context-menu-danger:hover { background: hsl(0 40% 22%); }
 
 /* ── Segmented control ──────────────────────────────────────────── */
 .segmented {
@@ -1186,6 +1191,16 @@ select {
     user-select: none;
 }
 
+/* Expand/collapse caret to the left of the sprint/backlog header. */
+.sprint-group > summary::before {
+    content: "\25B8"; /* ▸ */
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    color: var(--fg-3);
+    transition: transform 0.12s ease;
+}
+.sprint-group[open] > summary::before { transform: rotate(90deg); }
+
 .sprint-group[open] > summary {
     border-bottom: 1px solid var(--border);
 }
@@ -1216,6 +1231,14 @@ select {
 .ticket-list-row {
     cursor: pointer;
     transition: background 0.1s;
+}
+
+/* Zebra striping: subtle, neutral alternating row background to separate tickets. */
+.ticket-list-table tbody tr:nth-child(even) {
+    background: rgba(0, 0, 0, 0.028);
+}
+.dark .ticket-list-table tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.035);
 }
 
 .ticket-list-row:hover {
@@ -1620,10 +1643,11 @@ select {
     50%      { opacity: 1; transform: scale(1.15); }
 }
 
-/* Board card "refining" cue. */
+/* Board card "actively refining" cue. Uses outline (not border/box-shadow) so the
+   :hover rule — which changes border-color and box-shadow — can't override it. */
 .ticket-card-refining {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent-tint);
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
 }
 .chip-refining {
     display: inline-flex; align-items: center; gap: 4px;
