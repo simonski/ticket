@@ -71,6 +71,10 @@
             drag: null,
             liveSocket: null,
             liveRefreshTimer: null,
+            refinementSocket: null,
+            refinementTicketId: null,
+            refinementPendingSend: null,
+            refinementLastHumanText: null,
             agentBarPollTimer: null,
             documentFiles: [],
             systemAgentModelConfig: { provider: "", model: "", url: "", api_key: "", providers: [] },
@@ -6102,7 +6106,7 @@
             const refinementSendBtn = document.getElementById("refinement-send");
             const refinementInput = document.getElementById("refinement-input");
             if (refinementSendBtn && refinementInput) {
-                refinementSendBtn.addEventListener("click", async () => {
+                const sendRefinementReply = async () => {
                     const ticket = state.activeTicket;
                     if (!ticket || !ticket.id) return;
                     const comment = String(refinementInput.value || "").trim();
@@ -6110,6 +6114,13 @@
                         setNotice("Reply is required.", true);
                         return;
                     }
+                    // Prefer the streaming WebSocket; render the human bubble
+                    // optimistically and let the server stream the reply back.
+                    if (sendRefinementMessage(ticket.id, comment)) {
+                        refinementInput.value = "";
+                        return;
+                    }
+                    // Fall back to the existing REST POST + reload.
                     refinementSendBtn.disabled = true;
                     try {
                         await api("/api/tickets/" + ticket.id + "/comments", {
@@ -6122,6 +6133,16 @@
                         setNotice(e.message || "Failed to send reply", true);
                     } finally {
                         refinementSendBtn.disabled = false;
+                    }
+                };
+                refinementSendBtn.addEventListener("click", () => {
+                    sendRefinementReply().catch((e) => setNotice(e.message || "Failed to send reply", true));
+                });
+                refinementInput.addEventListener("keydown", (event) => {
+                    // Enter sends; Shift+Enter inserts a newline.
+                    if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        sendRefinementReply().catch((e) => setNotice(e.message || "Failed to send reply", true));
                     }
                 });
             }
@@ -6511,6 +6532,7 @@
             els.ticketTimeMinutes.value = "30";
             els.ticketTimeNote.value = "";
             els.ticketModal.classList.remove("open");
+            disconnectRefinementSocket();
         }
 
         async function loadTicketHistory(ticketID) {
@@ -6611,9 +6633,13 @@
             if (!panel) return;
             if (!ticket || ticket.stage !== "refine") {
                 panel.classList.add("hidden");
+                disconnectRefinementSocket();
                 return;
             }
             panel.classList.remove("hidden");
+
+            // Open (or keep) a streaming WebSocket for this refine ticket.
+            connectRefinementSocket(ticket.id);
 
             const approveBox = document.getElementById("refinement-approve-box");
             const breakdown = document.getElementById("refinement-breakdown");
@@ -6655,6 +6681,237 @@
             } catch (error) {
                 // Best-effort live refresh; ignore transient errors.
             }
+        }
+
+        // disconnectRefinementSocket closes any open refinement WebSocket and clears
+        // the associated streaming state.
+        function disconnectRefinementSocket() {
+            const socket = state.refinementSocket;
+            state.refinementSocket = null;
+            state.refinementTicketId = null;
+            state.refinementPendingSend = null;
+            state.refinementLastHumanText = null;
+            if (socket) {
+                try {
+                    socket.onclose = null;
+                    socket.close();
+                } catch (_) { /* ignore */ }
+            }
+        }
+
+        // connectRefinementSocket opens a streaming WebSocket for the given refine
+        // ticket. Any previously open refinement socket is closed first. Failures are
+        // swallowed so the UI silently falls back to REST + polling.
+        function connectRefinementSocket(ticketId) {
+            if (!ticketId) return;
+            if (window.__site2MockFetch || typeof WebSocket === "undefined") return;
+            if (state.refinementSocket && String(state.refinementTicketId) === String(ticketId) &&
+                (state.refinementSocket.readyState === WebSocket.OPEN ||
+                 state.refinementSocket.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+            disconnectRefinementSocket();
+
+            let socket;
+            try {
+                const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+                socket = new WebSocket(scheme + "//" + window.location.host +
+                    "/api/refinement/ws?ticket=" + encodeURIComponent(ticketId));
+            } catch (_) {
+                return;
+            }
+            state.refinementSocket = socket;
+            state.refinementTicketId = ticketId;
+
+            socket.addEventListener("open", () => {
+                if (state.refinementSocket !== socket) return;
+                if (state.refinementPendingSend != null) {
+                    const text = state.refinementPendingSend;
+                    state.refinementPendingSend = null;
+                    try {
+                        socket.send(JSON.stringify({ type: "message", text: text }));
+                    } catch (_) { /* ignore */ }
+                }
+            });
+
+            socket.addEventListener("message", (event) => {
+                if (state.refinementSocket !== socket) return;
+                let payload;
+                try {
+                    payload = JSON.parse(event.data);
+                } catch (_) {
+                    return;
+                }
+                handleRefinementMessage(ticketId, payload);
+            });
+
+            socket.addEventListener("close", () => {
+                if (state.refinementSocket === socket) {
+                    state.refinementSocket = null;
+                }
+            });
+
+            socket.addEventListener("error", () => {
+                // Non-fatal; the REST fallback in the send handler covers this.
+            });
+        }
+
+        // refinementThreadEl returns the live thread container, or null.
+        function refinementThreadEl() {
+            return document.getElementById("refinement-thread");
+        }
+
+        function refinementScrollToBottom() {
+            const thread = refinementThreadEl();
+            if (thread) thread.scrollTop = thread.scrollHeight;
+        }
+
+        // appendRefinementHumanBubble optimistically renders a human turn so the
+        // sender sees it immediately, before the server echo arrives.
+        function appendRefinementHumanBubble(author, text) {
+            const thread = refinementThreadEl();
+            if (!thread) return;
+            const empty = thread.querySelector(".empty");
+            if (empty) empty.remove();
+            const bubble = document.createElement("div");
+            bubble.className = "refinement-bubble refinement-bubble-human";
+            bubble.innerHTML = "<div class=\"refinement-author\">" + escapeHTML(author || "you") + "</div>" +
+                "<div class=\"refinement-text\"></div>";
+            bubble.querySelector(".refinement-text").textContent = text;
+            thread.appendChild(bubble);
+            refinementScrollToBottom();
+        }
+
+        // removeRefinementStreamingBubble clears any in-progress streaming/thinking
+        // agent bubble.
+        function removeRefinementStreamingBubble() {
+            const thread = refinementThreadEl();
+            if (!thread) return;
+            const streaming = thread.querySelector(".refinement-streaming");
+            if (streaming) streaming.remove();
+            const thinking = thread.querySelector(".refinement-thinking");
+            if (thinking) thinking.remove();
+        }
+
+        // ensureRefinementStreamingBubble returns the live text node of the streaming
+        // agent bubble, creating the bubble on first use.
+        function ensureRefinementStreamingBubble() {
+            const thread = refinementThreadEl();
+            if (!thread) return null;
+            let bubble = thread.querySelector(".refinement-streaming");
+            if (!bubble) {
+                const empty = thread.querySelector(".empty");
+                if (empty) empty.remove();
+                const thinking = thread.querySelector(".refinement-thinking");
+                if (thinking) thinking.remove();
+                bubble = document.createElement("div");
+                bubble.className = "refinement-bubble refinement-bubble-agent refinement-streaming";
+                bubble.innerHTML = "<div class=\"refinement-author\">refiner</div>" +
+                    "<div class=\"refinement-text\"></div>";
+                thread.appendChild(bubble);
+            }
+            return bubble.querySelector(".refinement-text");
+        }
+
+        // handleRefinementMessage applies a server → client streaming protocol message
+        // to the open refinement thread.
+        function handleRefinementMessage(ticketId, payload) {
+            if (!payload || !payload.type) return;
+            switch (payload.type) {
+                case "refinement_connected":
+                    return;
+                case "message": {
+                    // Skip echoes of the local sender's own human turn to avoid a
+                    // duplicate bubble (we already rendered it optimistically).
+                    if (payload.side === "human") {
+                        const text = String(payload.text || "");
+                        if (state.refinementLastHumanText != null && text === state.refinementLastHumanText) {
+                            state.refinementLastHumanText = null;
+                            return;
+                        }
+                        appendRefinementHumanBubble(payload.author, text);
+                    }
+                    return;
+                }
+                case "refinement_thinking": {
+                    const thread = refinementThreadEl();
+                    if (!thread) return;
+                    removeRefinementStreamingBubble();
+                    const bubble = document.createElement("div");
+                    bubble.className = "refinement-bubble refinement-bubble-agent refinement-streaming";
+                    bubble.innerHTML = "<div class=\"refinement-author\">refiner</div>" +
+                        "<div class=\"refinement-text\"></div>";
+                    thread.appendChild(bubble);
+                    refinementScrollToBottom();
+                    return;
+                }
+                case "chunk": {
+                    const node = ensureRefinementStreamingBubble();
+                    if (node) {
+                        node.textContent += String(payload.text || "");
+                        refinementScrollToBottom();
+                    }
+                    return;
+                }
+                case "message_done": {
+                    removeRefinementStreamingBubble();
+                    refreshOpenRefinement(ticketId);
+                    return;
+                }
+                case "refinement_busy":
+                    setNotice("Refiner is still responding…");
+                    return;
+                case "refinement_error":
+                    removeRefinementStreamingBubble();
+                    setNotice(payload.error || "Refinement error", true);
+                    return;
+                case "refinement_idle_closed": {
+                    const thread = refinementThreadEl();
+                    if (thread) {
+                        const note = document.createElement("div");
+                        note.className = "empty refinement-idle-note";
+                        note.textContent = "Session idle — send a message to resume.";
+                        thread.appendChild(note);
+                        refinementScrollToBottom();
+                    }
+                    if (state.refinementSocket && String(state.refinementTicketId) === String(ticketId)) {
+                        state.refinementSocket = null;
+                    }
+                    return;
+                }
+                default:
+                    return;
+            }
+        }
+
+        // sendRefinementMessage streams a human turn over the refinement WebSocket,
+        // reconnecting first if the session went idle. Returns true if handled over
+        // the socket; false if the caller should fall back to REST.
+        function sendRefinementMessage(ticketId, text) {
+            const socket = state.refinementSocket;
+            const sameTicket = String(state.refinementTicketId) === String(ticketId);
+            if (socket && sameTicket && socket.readyState === WebSocket.OPEN) {
+                state.refinementLastHumanText = text;
+                try {
+                    socket.send(JSON.stringify({ type: "message", text: text }));
+                } catch (_) {
+                    return false;
+                }
+                appendRefinementHumanBubble("you", text);
+                return true;
+            }
+            // Socket closed (e.g. idle) or absent: reconnect and queue the send.
+            if (typeof WebSocket !== "undefined" && !window.__site2MockFetch) {
+                state.refinementLastHumanText = text;
+                state.refinementPendingSend = text;
+                connectRefinementSocket(ticketId);
+                if (state.refinementSocket) {
+                    appendRefinementHumanBubble("you", text);
+                    return true;
+                }
+                state.refinementPendingSend = null;
+            }
+            return false;
         }
 
         function renderTicketLabels() {

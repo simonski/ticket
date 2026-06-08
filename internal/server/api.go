@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/simonski/ticket/internal/store"
 )
 
 func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, verbose bool, output io.Writer, passkeys passkeyServiceFactory) {
@@ -58,4 +60,37 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 	r.registerSprintHandlers()
 	r.registerOrgHandlers()
 	r.registerProgrammeHandlers()
+
+	// Streaming refinement chat: GET /api/refinement/ws?ticket=ID upgrades to a
+	// WebSocket that streams a refiner LLM's reply token by token (Phase 6).
+	mux.HandleFunc("/api/refinement/ws", func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		token := bearerToken(req)
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		user, err := store.GetUserByToken(req.Context(), db, token)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		ticketID := strings.TrimSpace(req.URL.Query().Get("ticket"))
+		if ticketID == "" {
+			writeError(w, http.StatusBadRequest, "ticket query parameter is required")
+			return
+		}
+		if _, err := store.GetTicket(req.Context(), db, ticketID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		if err := websocketServeRefinement(w, req, db, ticketID, user.ID, notify); err != nil {
+			if !strings.Contains(err.Error(), "upgrade") {
+				writeError(w, http.StatusInternalServerError, err.Error())
+			}
+		}
+	})
 }

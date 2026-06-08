@@ -1599,6 +1599,20 @@ select {
     border-top-right-radius: 2px;
 }
 .refinement-thinking { opacity: 0.85; }
+.refinement-streaming .refinement-text::after {
+    content: "";
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    background: var(--accent);
+    animation: refinement-caret 1s steps(1) infinite;
+}
+@keyframes refinement-caret {
+    0%, 50% { opacity: 1; }
+    50.01%, 100% { opacity: 0; }
+}
 .refinement-typing {
     display: inline-flex; gap: 3px; vertical-align: middle;
 }

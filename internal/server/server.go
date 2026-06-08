@@ -55,10 +55,36 @@ func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer
 	}
 	go s.runAgentReaper(db, verbose, output)
 	go s.runRetentionPurge(db, verbose)
+	go s.runRefinementReaper(db)
 	if enableOrchestrator {
 		go s.runOrchestrator(db, verbose)
 	}
 	return s, nil
+}
+
+// runRefinementReaper closes streaming refinement sessions that have been idle
+// (in human timescales) so refiner conversations do not accumulate when a user has
+// many ideas open. The idle window is the configured refinement_idle_minutes.
+func (s *Server) runRefinementReaper(db *sql.DB) {
+	reap := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		mins, err := store.RefinementIdleMinutes(ctx, db)
+		if err != nil || mins <= 0 {
+			mins = store.RefinementDefaultIdleMinutes
+		}
+		sharedRefinementHub.reapIdle(time.Duration(mins) * time.Minute)
+	}
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			reap()
+		case <-s.stopReaper:
+			return
+		}
+	}
 }
 
 // runOrchestrator periodically runs a deterministic orchestration pass: it assigns
@@ -69,7 +95,9 @@ func (s *Server) runOrchestrator(db *sql.DB, verbose bool) {
 	runOnce := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		decisions, err := orchestrator.Pass(ctx, db, orchestrator.Options{})
+		decisions, err := orchestrator.Pass(ctx, db, orchestrator.Options{
+			SkipRefineTickets: sharedRefinementHub.activeTicketIDs(),
+		})
 		if err != nil {
 			slog.Error("orchestrator pass error", "error", err)
 			return
@@ -291,7 +319,7 @@ func requestTimeoutMiddleware(next http.Handler, timeout time.Duration) http.Han
 	timeoutHandler := http.TimeoutHandler(next, timeout, `{"error":"request timeout"}`)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/ws", "/api/chat/ws":
+		case "/api/ws", "/api/chat/ws", "/api/refinement/ws":
 			next.ServeHTTP(w, r)
 			return
 		default:

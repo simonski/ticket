@@ -204,6 +204,158 @@ func ApproveRefinement(ctx context.Context, db *sql.DB, ticketID, actorUsername,
 	return GetTicket(ctx, db, ticketID)
 }
 
+// EnsureRefinerUser returns the user_id of an agent that performs the refiner
+// role, creating a dedicated system refiner agent if none exists. Used to attribute
+// streamed live-refinement replies to a refiner identity.
+func EnsureRefinerUser(ctx context.Context, db *sql.DB) (string, error) {
+	var id string
+	err := db.QueryRowContext(ctx, `
+		SELECT user_id FROM users
+		WHERE user_type = 'agent' AND enabled = 1 AND LOWER(COALESCE(agent_role, '')) LIKE '%refiner%'
+		ORDER BY user_id LIMIT 1
+	`).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	// Create a system refiner agent.
+	agent, _, createErr := CreateAgent(ctx, db, "")
+	if createErr != nil {
+		return "", createErr
+	}
+	username := "refiner"
+	var exists int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE username = ?`, username).Scan(&exists); err == nil && exists > 0 {
+		username = "refiner-" + agent.ID[:8]
+	}
+	if _, err := db.ExecContext(ctx, `
+		UPDATE users SET username = ?, display_name = 'Refiner', agent_role = 'refiner' WHERE user_id = ?
+	`, username, agent.ID); err != nil {
+		return "", err
+	}
+	return agent.ID, nil
+}
+
+// ParseRefinementProposal interprets refiner LLM output into a refinement turn: a
+// chat message plus a proposal (question / ready / breakdown). The markers are
+// PROPOSE_READY (with DESCRIPTION:/ACCEPTANCE_CRITERIA:) and PROPOSE_BREAKDOWN
+// (with STORY: <title> | <description> lines).
+func ParseRefinementProposal(out string) RefinementTurnParams {
+	text := strings.TrimSpace(out)
+	switch {
+	case strings.Contains(text, "PROPOSE_READY"):
+		idx := strings.Index(text, "PROPOSE_READY")
+		p := RefinementTurnParams{ProposalKind: "ready", Message: strings.TrimSpace(text[:idx])}
+		body := text[idx+len("PROPOSE_READY"):]
+		p.Description = refinementField(body, "DESCRIPTION:")
+		p.AcceptanceCriteria = refinementField(body, "ACCEPTANCE_CRITERIA:")
+		if p.Message == "" {
+			p.Message = "Proposed a refined, ready story."
+		}
+		return p
+	case strings.Contains(text, "PROPOSE_BREAKDOWN"):
+		idx := strings.Index(text, "PROPOSE_BREAKDOWN")
+		p := RefinementTurnParams{ProposalKind: "breakdown", Message: strings.TrimSpace(text[:idx])}
+		for _, line := range strings.Split(text[idx:], "\n") {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "STORY:") {
+				continue
+			}
+			rest := strings.TrimSpace(strings.TrimPrefix(line, "STORY:"))
+			title, desc := rest, ""
+			if pipe := strings.Index(rest, "|"); pipe >= 0 {
+				title = strings.TrimSpace(rest[:pipe])
+				desc = strings.TrimSpace(rest[pipe+1:])
+			}
+			if title != "" {
+				p.Stories = append(p.Stories, RefinementStory{Title: title, Description: desc})
+			}
+		}
+		if p.Message == "" {
+			p.Message = "Proposed breaking this idea into stories."
+		}
+		if len(p.Stories) == 0 {
+			return RefinementTurnParams{ProposalKind: "question", Message: text}
+		}
+		return p
+	default:
+		return RefinementTurnParams{ProposalKind: "question", Message: text}
+	}
+}
+
+func refinementField(body, label string) string {
+	idx := strings.Index(body, label)
+	if idx < 0 {
+		return ""
+	}
+	rest := body[idx+len(label):]
+	var out []string
+	for _, line := range strings.Split(rest, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if len(out) > 0 && (trimmed == "" || strings.HasPrefix(trimmed, "DESCRIPTION:") ||
+			strings.HasPrefix(trimmed, "ACCEPTANCE_CRITERIA:") || strings.HasPrefix(trimmed, "STORY:") ||
+			strings.HasPrefix(trimmed, "PROPOSE_")) {
+			break
+		}
+		out = append(out, trimmed)
+	}
+	return strings.TrimSpace(strings.Join(out, " "))
+}
+
+// ApplyLiveRefinerReply records a streamed live-refinement reply: it posts the
+// refiner's message as a comment authored by refinerUserID and applies the proposal
+// (single ready story, or breakdown into draft children). Unlike ApplyRefinementTurn
+// it has no assignee guard — live refinement is driven by the server, not an
+// orchestrator-assigned agent.
+func ApplyLiveRefinerReply(ctx context.Context, db *sql.DB, ticketID, refinerUsername, refinerUserID string, p RefinementTurnParams) error {
+	current, err := GetTicket(ctx, db, ticketID)
+	if err != nil {
+		return err
+	}
+	if msg := strings.TrimSpace(p.Message); msg != "" {
+		if _, cErr := AddComment(ctx, db, ticketID, refinerUserID, msg); cErr != nil {
+			return cErr
+		}
+	}
+	switch p.ProposalKind {
+	case "ready":
+		desc := current.Description
+		if strings.TrimSpace(p.Description) != "" {
+			desc = p.Description
+		}
+		ac := current.AcceptanceCriteria
+		if strings.TrimSpace(p.AcceptanceCriteria) != "" {
+			ac = p.AcceptanceCriteria
+		}
+		if _, uErr := UpdateTicket(ctx, db, ticketID, TicketUpdateParams{
+			Title: current.Title, Description: desc, AcceptanceCriteria: ac,
+			ParentID: current.ParentID, Assignee: "", Stage: current.Stage, State: StateIdle,
+			Priority: current.Priority, Order: current.Order,
+			ActorUsername: refinerUsername, ActorRole: "admin",
+		}); uErr != nil {
+			return uErr
+		}
+		if _, rErr := SetRecommendedReady(ctx, db, ticketID, true, refinerUsername, refinerUserID); rErr != nil {
+			return rErr
+		}
+	case "breakdown":
+		for _, st := range p.Stories {
+			if strings.TrimSpace(st.Title) == "" {
+				continue
+			}
+			if _, cErr := AddRefinementProposalChild(ctx, db, ticketID, st.Title, st.Description, st.AcceptanceCriteria, refinerUserID); cErr != nil {
+				return cErr
+			}
+		}
+		if _, rErr := SetRecommendedReady(ctx, db, ticketID, true, refinerUsername, refinerUserID); rErr != nil {
+			return rErr
+		}
+	}
+	return nil
+}
+
 // AddRefinementProposalChild creates a proposed child story under an idea during
 // breakdown. The child is created as a draft in the same project so the human can
 // review it before approving. Returns the new child ticket.

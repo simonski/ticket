@@ -19,7 +19,10 @@ func triggerRefinementPass(db *sql.DB, ticketID string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		if _, err := orchestrator.Pass(ctx, db, orchestrator.Options{TicketID: ticketID}); err != nil {
+		if _, err := orchestrator.Pass(ctx, db, orchestrator.Options{
+			TicketID:          ticketID,
+			SkipRefineTickets: sharedRefinementHub.activeTicketIDs(),
+		}); err != nil {
 			slog.Error("refinement trigger pass error", "ticket", ticketID, "error", err)
 		}
 	}()

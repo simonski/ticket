@@ -108,3 +108,44 @@ func TestApproveRefinementSingleAndBreakdown(t *testing.T) {
 		t.Fatalf("child after breakdown: stage=%q draft=%v, want ready/false", gotChild.Stage, gotChild.Draft)
 	}
 }
+
+func TestParseRefinementProposal(t *testing.T) {
+	t.Parallel()
+	ready := ParseRefinementProposal("Looks clear.\nPROPOSE_READY\nDESCRIPTION: Build the export.\nACCEPTANCE_CRITERIA: CSV and JSON; under 30s")
+	if ready.ProposalKind != "ready" || ready.Description == "" || ready.AcceptanceCriteria == "" {
+		t.Fatalf("ready parse = %+v", ready)
+	}
+	bd := ParseRefinementProposal("This is large.\nPROPOSE_BREAKDOWN\nSTORY: Export CSV | the csv path\nSTORY: Export JSON | the json path")
+	if bd.ProposalKind != "breakdown" || len(bd.Stories) != 2 || bd.Stories[0].Title != "Export CSV" {
+		t.Fatalf("breakdown parse = %+v", bd)
+	}
+	q := ParseRefinementProposal("Which platforms do you need?")
+	if q.ProposalKind != "question" {
+		t.Fatalf("question parse = %+v", q)
+	}
+	// A breakdown marker with no parseable stories falls back to a question.
+	empty := ParseRefinementProposal("PROPOSE_BREAKDOWN\n(no stories)")
+	if empty.ProposalKind != "question" {
+		t.Fatalf("empty breakdown = %+v", empty)
+	}
+}
+
+func TestEnsureRefinerUser(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := context.Background()
+	// No refiner yet → creates one.
+	id1, err := EnsureRefinerUser(ctx, db)
+	if err != nil || id1 == "" {
+		t.Fatalf("EnsureRefinerUser() = %q, %v", id1, err)
+	}
+	u, err := GetUserByID(ctx, db, id1)
+	if err != nil || u.UserType != "agent" {
+		t.Fatalf("refiner user = %+v, %v", u, err)
+	}
+	// Idempotent-ish: returns an existing refiner agent next time.
+	id2, err := EnsureRefinerUser(ctx, db)
+	if err != nil || id2 != id1 {
+		t.Fatalf("EnsureRefinerUser() second = %q, %v (want %q)", id2, err, id1)
+	}
+}

@@ -59,6 +59,10 @@ type Options struct {
 	HeartbeatTimeout time.Duration // 0 = look up from settings
 	RefinementIdle   time.Duration // 0 = look up from settings; refinement session idle window
 	Now              time.Time     // injectable clock for tests; zero = time.Now()
+	// SkipRefineTickets are tickets with an active live (streaming) refinement
+	// session; the orchestrator leaves their refinement to the live session so the
+	// two refiners never both reply.
+	SkipRefineTickets map[string]bool
 }
 
 // Pass performs one orchestration sweep and returns the decision for every ticket
@@ -118,6 +122,13 @@ func Pass(ctx context.Context, db *sql.DB, opts Options) ([]Decision, error) {
 		enabled, err := projectEnabled(t.ProjectID)
 		if err != nil {
 			return nil, fmt.Errorf("project %d enabled: %w", t.ProjectID, err)
+		}
+		if opts.SkipRefineTickets[t.TicketID] && t.Stage == store.StageRefine {
+			decisions = append(decisions, Decision{
+				TicketID: t.TicketID, ProjectID: t.ProjectID, Kind: ActionSkip,
+				From: t.Stage + "/" + t.State, Detail: "refine — live streaming session active",
+			})
+			continue
 		}
 		d := decide(t, pool, now, timeout, refinementIdle, enabled)
 		if !opts.DryRun && d.Kind != ActionSkip {
