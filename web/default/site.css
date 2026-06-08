@@ -1417,11 +1417,13 @@ select {
     width: 1.9rem; height: 1.9rem;
     font-size: 0.85rem;
     border-width: 2px;
+    background: var(--tb-bg);
 }
 .topbar .agent-icon-badge {
     width: 0.85rem; height: 0.85rem;
     font-size: 0.55rem;
     top: -2px; right: -2px;
+    border-color: var(--tb-bg);
 }
 /* The "Agents" text label is redundant beside the robot icons in the topbar. */
 .topbar .agent-bar-label { display: none; }
