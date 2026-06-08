@@ -1436,6 +1436,17 @@ func (r *router) registerTicketHandlers() {
 				writeJSON(w, http.StatusOK, ticket)
 				return
 			}
+			if len(parts) == 2 && parts[1] == "prompt" && r.Method == http.MethodGet {
+				ticket, err := store.GetTicket(r.Context(), db, id)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{
+					"prompt": buildTicketWorkPrompt(r.Context(), db, ticket),
+				})
+				return
+			}
 			if len(parts) == 2 && parts[1] == "analyse" && r.Method == http.MethodPost {
 				if !canWriteProject(role) {
 					writeAuthError(w, store.ErrForbidden)

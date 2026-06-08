@@ -1257,6 +1257,47 @@ select {
 
 .table-wrap { overflow-x: auto; }
 
+/* Ticket modal: collapsible "Agent prompt" preview sub-section. */
+.ticket-prompt-section {
+    margin-top: 14px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    background: var(--bg);
+}
+.ticket-prompt-section > summary {
+    cursor: pointer;
+    padding: 8px 12px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--fg-2);
+    user-select: none;
+}
+.ticket-prompt-preview {
+    margin: 0;
+    padding: 10px 12px;
+    border-top: 1px solid var(--card-border);
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 0.75rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+    overflow-y: auto;
+    color: var(--fg);
+}
+
+/* Inline-editable list cells (priority/type): click to open a value popup. */
+.editable-cell {
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 1px 5px;
+    border: 1px dashed transparent;
+}
+.editable-cell:hover {
+    border-color: var(--card-border);
+    background: var(--card);
+}
+
 .chip-state-active  { background: #d1fae5; color: #065f46; }
 .chip-state-idle    { background: #f3f4f6; color: #374151; }
 .chip-state-success { background: #dbeafe; color: #1e40af; }

@@ -3589,8 +3589,8 @@
                     "<td>" + escapeHTML(t.title || "(untitled)") + (refinementBadgeHTML(t) ? " " + refinementBadgeHTML(t) : "") + "</td>" +
                     "<td>" + escapeHTML(t.stage || "") + "</td>" +
                     "<td><span class=\"chip chip-state-" + escapeHTML(t.state || "idle") + "\">" + escapeHTML(t.state || "idle") + "</span></td>" +
-                    "<td>" + escapeHTML(String(t.priority || "")) + "</td>" +
-                    "<td>" + escapeHTML(t.type || "") + "</td>" +
+                    "<td><span class=\"editable-cell\" data-edit-field=\"priority\" title=\"Click to change priority\">p" + escapeHTML(String(t.priority || 0)) + "</span></td>" +
+                    "<td><span class=\"editable-cell\" data-edit-field=\"type\" title=\"Click to change type\">" + escapeHTML(t.type || "") + "</span></td>" +
                     "<td>" + escapeHTML(t.assignee || "—") + "</td>" +
                     "</tr>").join("") +
                 "</tbody></table>";
@@ -3858,6 +3858,70 @@
                 renderTicketListView();
                 renderTicketPlanView();
                 setNotice("Deleted " + (ticket.key || ticket.id) + ".");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        // openFieldPopup shows a small floating menu anchored to a list-view cell so
+        // priority/type can be changed in place. Reuses the context-menu dismiss
+        // machinery (boardContextMenuEl + arm/dismiss).
+        function openFieldPopup(anchorEl, ticket, field) {
+            dismissBoardContextMenu();
+            const opts = field === "type"
+                ? TICKET_TYPES.map((v) => ({ value: v, label: v }))
+                : [0, 1, 2, 3, 4, 5].map((v) => ({ value: v, label: "p" + v }));
+            const current = field === "type" ? String(ticket.type || "task") : String(Number(ticket.priority || 0));
+            const menu = document.createElement("div");
+            menu.className = "context-menu value-popup";
+            menu.setAttribute("role", "menu");
+            menu.innerHTML = "<div class=\"context-menu-list\">" + opts.map((o) => {
+                const sel = String(o.value) === current;
+                return "<button type=\"button\" class=\"context-menu-item" + (sel ? " is-match" : "") + "\" data-value=\"" + escapeHTML(String(o.value)) + "\">" +
+                    "<span class=\"context-menu-check\">" + (sel ? "✓" : "") + "</span>" +
+                    "<span class=\"context-menu-label\">" + escapeHTML(o.label) + "</span>" +
+                    "</button>";
+            }).join("") + "</div>";
+            document.body.appendChild(menu);
+            boardContextMenuEl = menu;
+            const rect = anchorEl.getBoundingClientRect();
+            positionBoardContextMenu(menu, { clientX: rect.left, clientY: rect.bottom + 2 });
+            menu.addEventListener("click", (ev) => {
+                const btn = ev.target.closest("[data-value]");
+                if (!btn) return;
+                ev.stopPropagation();
+                dismissBoardContextMenu();
+                const value = field === "type" ? btn.dataset.value : Number(btn.dataset.value);
+                updateTicketField(ticket, field, value);
+            });
+            armBoardContextMenuDismiss();
+        }
+
+        // updateTicketField PUTs a single changed field on a ticket, preserving the rest.
+        async function updateTicketField(ticket, field, value) {
+            const payload = {
+                project_id: ticket.project_id,
+                type: ticket.type,
+                title: ticket.title,
+                description: ticket.description || "",
+                acceptance_criteria: ticket.acceptance_criteria || "",
+                parent_id: ticket.parent_id || null,
+                stage: ticket.stage,
+                state: ticket.state,
+                assignee: ticket.assignee || "",
+                priority: Number(ticket.priority || 0),
+                order: Number(ticket.order || 0),
+                estimate_effort: Number(ticket.estimate_effort || 0),
+                health: Number(ticket.health || 0),
+            };
+            payload[field] = value;
+            try {
+                await api("/api/tickets/" + ticket.id, { method: "PUT", body: JSON.stringify(payload) });
+                await loadTickets();
+                renderTicketBoard();
+                renderTicketListView();
+                renderTicketPlanView();
+                setNotice("Updated " + (ticket.key || ticket.id) + " " + field + ".");
             } catch (error) {
                 setNotice(error.message, true);
             }
@@ -6414,9 +6478,18 @@
                         return;
                     }
                     const ticket = state.tickets.find((t) => t.id === ticketID);
-                    if (ticket) {
-                        openTicketModal(ticket);
+                    if (!ticket) {
+                        return;
                     }
+                    // Clicking the priority/type cell edits it inline instead of
+                    // opening the ticket.
+                    const editCell = e.target.closest("[data-edit-field]");
+                    if (editCell) {
+                        e.stopPropagation();
+                        openFieldPopup(editCell, ticket, editCell.dataset.editField);
+                        return;
+                    }
+                    openTicketModal(ticket);
                 });
             }
             document.getElementById("close-ticket-modal").addEventListener("click", closeTicketModal);
@@ -6860,9 +6933,24 @@
                 els.ticketTimeEntries.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
             });
             renderRefinementPanel(state.activeTicket);
+            loadTicketPrompt(ticket.id);
             // Always open on the Details panel first; the Refinement tab is one click
             // away for stories in refinement.
             switchTicketTab("details");
+        }
+
+        // loadTicketPrompt fetches and renders the agent prompt preview for a ticket.
+        async function loadTicketPrompt(ticketID) {
+            const pre = document.getElementById("ticket-prompt-preview");
+            if (!pre) return;
+            if (!ticketID) { pre.textContent = "Save the ticket to preview its agent prompt."; return; }
+            pre.textContent = "Loading…";
+            try {
+                const resp = await api("/api/tickets/" + ticketID + "/prompt");
+                pre.textContent = (resp && resp.prompt) ? resp.prompt : "(empty)";
+            } catch (error) {
+                pre.textContent = "Failed to load prompt: " + (error.message || "error");
+            }
         }
 
         function closeTicketModal() {
