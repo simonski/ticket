@@ -3828,6 +3828,13 @@
 
         async function moveTicketToSprint(ticket, sprintID) {
             try {
+                // A sprint can only hold ready (non-draft) tickets. Committing a story
+                // to a sprint implies it's ready, so clear the draft flag first —
+                // otherwise the server rejects the move with a 400 and it appears to do
+                // nothing.
+                if (sprintID !== null && ticket.draft) {
+                    await api("/api/tickets/" + ticket.id + "/undraft", { method: "POST" });
+                }
                 await api("/api/tickets/" + ticket.id + "/sprint", {
                     method: "PUT",
                     body: JSON.stringify({ sprint_id: sprintID }),
