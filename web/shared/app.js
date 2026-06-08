@@ -1262,6 +1262,44 @@
             return Boolean(ticket && !ticket.draft);
         }
 
+        // ticketIsRefined reports whether a backlog story's refinement has produced a
+        // ready recommendation — it's "refined" and can be promoted to development.
+        function ticketIsRefined(ticket) {
+            return Boolean(ticket && ticket.recommended_ready && ticketStageIsBacklog(ticket));
+        }
+
+        // refinementSortRank floats stories that are refining or refined to the top of
+        // a lane/list (rank 0) ahead of everything else (rank 1).
+        function refinementSortRank(ticket) {
+            return (ticketInRefinement(ticket) || ticketIsRefined(ticket)) ? 0 : 1;
+        }
+
+        // refinementBadgeHTML returns the "refining…/✦ refining/✓ refined" chip for a
+        // story, or "" when it is neither. Shared by board cards and list rows.
+        function refinementBadgeHTML(ticket) {
+            if (ticketIsRefined(ticket)) {
+                return "<span class=\"chip chip-success\">✓ refined</span>";
+            }
+            if (ticketInRefinement(ticket)) {
+                const working = ticket.state === "active" && String(ticket.assignee || "").trim() !== "";
+                return working
+                    ? "<span class=\"chip chip-refining\"><span class=\"refining-pulse\"></span> refining…</span>"
+                    : "<span class=\"chip chip-refining\">✦ refining</span>";
+            }
+            return "";
+        }
+
+        // findDevelopStageName resolves the workflow stage a refined story should move
+        // into: a stage literally named "develop", else the first non-backlog stage.
+        function findDevelopStageName() {
+            const workflow = getCurrentProjectWorkflow();
+            const stages = workflow && Array.isArray(workflow.stages) ? workflow.stages : [];
+            const explicit = stages.find((s) => String(s.name || "").toLowerCase() === "develop");
+            if (explicit) return explicit.name;
+            const firstWork = stages.find((s) => !s.is_backlog_stage);
+            return firstWork ? firstWork.name : "";
+        }
+
         function getCurrentWorkflow() {
             return state.workflows.find((item) => item.id === state.selectedWorkflowID) || null;
         }
@@ -3324,10 +3362,11 @@
                 const cards = sprintFilterTickets(state.tickets)
                     .filter((ticket) => (ticket.stage || fallbackLane) === lane.name)
                     .filter((ticket) => !searchText || String(ticket.title || "").toLowerCase().includes(searchText) || String(ticket.key || ticket.id || "").toLowerCase().includes(searchText))
-                    // Stories being refined float to the top of their lane.
+                    // Stories being refined (or refined and awaiting promotion) float
+                    // to the top of their lane.
                     .sort((a, b) => {
-                        const ra = ticketInRefinement(a) ? 0 : 1;
-                        const rb = ticketInRefinement(b) ? 0 : 1;
+                        const ra = refinementSortRank(a);
+                        const rb = refinementSortRank(b);
                         if (ra !== rb) return ra - rb;
                         return (a.order || 0) - (b.order || 0);
                     })
@@ -3537,10 +3576,17 @@
                 return "<div class=\"empty\">No tickets.</div>";
             }
             const dragAttr = draggable ? " draggable=\"true\"" : "";
+            // Refining/refined stories float to the top of the list.
+            const ordered = tickets.slice().sort((a, b) => {
+                const ra = refinementSortRank(a);
+                const rb = refinementSortRank(b);
+                if (ra !== rb) return ra - rb;
+                return (a.order || 0) - (b.order || 0);
+            });
             return "<table class=\"ticket-list-table\"><thead><tr><th>ID</th><th>Title</th><th>Stage</th><th>State</th><th>Priority</th><th>Type</th><th>Assignee</th></tr></thead><tbody>" +
-                tickets.map((t) => "<tr class=\"ticket-list-row\" data-ticket-id=\"" + escapeHTML(t.id) + "\"" + dragAttr + ">" +
+                ordered.map((t) => "<tr class=\"ticket-list-row\" data-ticket-id=\"" + escapeHTML(t.id) + "\"" + dragAttr + ">" +
                     "<td>" + ticketAgentDot(t) + escapeHTML(t.key || t.id || "") + "</td>" +
-                    "<td>" + escapeHTML(t.title || "(untitled)") + (t.recommended_ready && t.draft ? " <span class=\"chip chip-success\" style=\"font-size:0.7em\">✓ rdy</span>" : "") + "</td>" +
+                    "<td>" + escapeHTML(t.title || "(untitled)") + (refinementBadgeHTML(t) ? " " + refinementBadgeHTML(t) : "") + "</td>" +
                     "<td>" + escapeHTML(t.stage || "") + "</td>" +
                     "<td><span class=\"chip chip-state-" + escapeHTML(t.state || "idle") + "\">" + escapeHTML(t.state || "idle") + "</span></td>" +
                     "<td>" + escapeHTML(String(t.priority || "")) + "</td>" +
@@ -3735,27 +3781,51 @@
             dismissBoardContextMenu();
             const roleName = ticketCurrentRoleName(ticket);
 
-            // A story in a backlog stage is refined, not assigned: offer "Refine this
-            // story", which opens the refinement chat (in place — no stage change).
+            // A story in a backlog stage is refined, not assigned. Offer "Refine this
+            // story" (opens the refinement chat in place), plus promotion to develop:
+            // "Move to develop" once it's refined, and an always-available "Force ready
+            // for development and move to develop" escape hatch.
             if (ticketStageIsBacklog(ticket)) {
+                const refined = ticketIsRefined(ticket);
+                const developStage = findDevelopStageName();
+                let items =
+                    "<button type=\"button\" class=\"context-menu-item is-match\" data-refine-ticket=\"1\">" +
+                    "<span class=\"context-menu-check\">✦</span>" +
+                    "<span class=\"context-menu-label\">Refine this story<small>open the refinement chat</small></span>" +
+                    "</button>";
+                if (refined && developStage) {
+                    items +=
+                        "<button type=\"button\" class=\"context-menu-item is-match\" data-move-develop=\"1\">" +
+                        "<span class=\"context-menu-check\">✓</span>" +
+                        "<span class=\"context-menu-label\">Move to " + escapeHTML(developStage) + "<small>this story is refined</small></span>" +
+                        "</button>";
+                }
+                if (developStage) {
+                    items +=
+                        "<button type=\"button\" class=\"context-menu-item\" data-force-develop=\"1\">" +
+                        "<span class=\"context-menu-check\">»</span>" +
+                        "<span class=\"context-menu-label\">Force ready for development and move to " + escapeHTML(developStage) + "<small>skip refinement</small></span>" +
+                        "</button>";
+                }
                 const menu = document.createElement("div");
                 menu.className = "context-menu";
                 menu.setAttribute("role", "menu");
                 menu.innerHTML = "<div class=\"context-menu-header\">" + escapeHTML(ticket.key || ticket.id) +
                     " <span class=\"context-menu-role\">" + escapeHTML(ticket.stage || "backlog") + "</span></div>" +
-                    "<div class=\"context-menu-list\">" +
-                    "<button type=\"button\" class=\"context-menu-item is-match\" data-refine-ticket=\"1\">" +
-                    "<span class=\"context-menu-check\">✦</span>" +
-                    "<span class=\"context-menu-label\">Refine this story<small>open the refinement chat</small></span>" +
-                    "</button></div>";
+                    "<div class=\"context-menu-list\">" + items + "</div>";
                 document.body.appendChild(menu);
                 boardContextMenuEl = menu;
                 positionBoardContextMenu(menu, event);
                 menu.addEventListener("click", (clickEvent) => {
-                    if (!clickEvent.target.closest("[data-refine-ticket]")) return;
+                    const btn = clickEvent.target.closest("[data-refine-ticket],[data-move-develop],[data-force-develop]");
+                    if (!btn) return;
                     clickEvent.stopPropagation();
                     dismissBoardContextMenu();
-                    refineStory(ticket);
+                    if (btn.dataset.refineTicket) {
+                        refineStory(ticket);
+                    } else if (btn.dataset.moveDevelop || btn.dataset.forceDevelop) {
+                        moveTicketToDevelop(ticket);
+                    }
                 });
                 armBoardContextMenuDismiss();
                 return;
@@ -3880,6 +3950,45 @@
             }
         }
 
+        // moveTicketToDevelop promotes a refined (or force-readied) backlog story into
+        // the develop stage: it clears the draft flag (readiness) and moves the stage,
+        // leaving it idle and unassigned so it enters the development claim pool.
+        async function moveTicketToDevelop(ticket) {
+            const developStage = findDevelopStageName();
+            if (!developStage) {
+                setNotice("This workflow has no development stage to move into.", true);
+                return;
+            }
+            try {
+                if (ticket.draft) {
+                    await api("/api/tickets/" + ticket.id + "/undraft", { method: "POST" });
+                }
+                const payload = {
+                    project_id: ticket.project_id,
+                    type: ticket.type,
+                    title: ticket.title,
+                    description: ticket.description || "",
+                    acceptance_criteria: ticket.acceptance_criteria || "",
+                    parent_id: ticket.parent_id || null,
+                    stage: developStage,
+                    state: "idle",
+                    assignee: "",
+                    priority: Number(ticket.priority || 0),
+                    order: Number(ticket.order || 0),
+                    estimate_effort: Number(ticket.estimate_effort || 0),
+                    health: Number(ticket.health || 0),
+                };
+                await api("/api/tickets/" + ticket.id, { method: "PUT", body: JSON.stringify(payload) });
+                await loadTickets();
+                renderTicketBoard();
+                renderTicketListView();
+                renderTicketPlanView();
+                setNotice("Moved " + (ticket.key || ticket.id) + " to " + developStage + ".");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
         // assignTicketToAgent assigns (username set) or unassigns (empty) an idle
         // ticket. Assigning sets state=active so the agent resumes it on next poll;
         // unassigning returns it to idle so it re-enters the claim pool.
@@ -3928,21 +4037,14 @@
         function renderTicketCard(ticket) {
             const agentDot = ticketAgentDot(ticket);
             const refining = ticketInRefinement(ticket);
-            const refinerWorking = refining && ticket.state === "active" && String(ticket.assignee || "").trim() !== "";
-            let refineChip = "";
-            if (refinerWorking) {
-                refineChip = "<span class=\"chip chip-refining\"><span class=\"refining-pulse\"></span> refining…</span>";
-            } else if (refining) {
-                refineChip = "<span class=\"chip chip-refining\">✦ refining</span>";
-            }
-            const cls = "ticket-card" + (refining ? " ticket-card-refining" : "");
+            const refined = ticketIsRefined(ticket);
+            const cls = "ticket-card" + (refining || refined ? " ticket-card-refining" : "");
             return "<div class=\"" + cls + "\" draggable=\"true\" data-ticket-id=\"" + ticket.id + "\">" +
                 "<div class=\"panel-head panel-head-tight\">" + agentDot + "<h4>" + escapeHTML(ticket.key || ticket.id || "New") + "</h4><span class=\"chip\">" + escapeHTML(ticket.type || "task") + "</span></div>" +
                 "<p>" + escapeHTML(ticket.title || "(untitled)") + "</p>" +
                 "<div class=\"tag-row\">" +
                 "<span class=\"chip\">p" + escapeHTML(ticket.priority || 0) + "</span>" +
-                refineChip +
-                (ticket.recommended_ready ? "<span class=\"chip chip-success\">✓ proposed</span>" : "") +
+                refinementBadgeHTML(ticket) +
                 "</div>" +
                 "</div>";
         }
@@ -6352,7 +6454,7 @@
                     openTicketModal(ticket);
                 }
             });
-            els.ticketBoard.addEventListener("contextmenu", (event) => {
+            const onTicketContextMenu = (event) => {
                 const card = event.target.closest("[data-ticket-id]");
                 if (!card) {
                     return;
@@ -6364,7 +6466,11 @@
                 }
                 event.preventDefault();
                 openBoardContextMenu(event, ticket);
-            });
+            };
+            els.ticketBoard.addEventListener("contextmenu", onTicketContextMenu);
+            if (els.ticketListView) {
+                els.ticketListView.addEventListener("contextmenu", onTicketContextMenu);
+            }
             els.interventionList.addEventListener("click", (event) => {
                 const button = event.target.closest("[data-open-intervention-ticket]");
                 if (button) {
