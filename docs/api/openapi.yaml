@@ -37,6 +37,8 @@ tags:
     description: Team management
   - name: Projects
     description: Project CRUD and membership
+  - name: Releases
+    description: Release delivery containers and lifecycle
   - name: Tickets
     description: Ticket CRUD, lifecycle, and operations
   - name: Stories
@@ -251,6 +253,57 @@ components:
           type: string
           format: date-time
 
+    Release:
+      type: object
+      description: >-
+        Top-level delivery container for a project. Holds the features (and their
+        epic/story subtrees) that are designed, sealed, then executed together.
+      properties:
+        id:
+          type: integer
+          format: int64
+        project_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        purpose:
+          type: string
+        target_date:
+          type: string
+          description: Aspirational target delivery date
+        status:
+          type: string
+          enum: [in_design, in_progress, complete]
+          description: >-
+            Release lifecycle. Features may only be added while `in_design`;
+            `in_progress` means sealed and being executed by the orchestrator;
+            `complete` is the terminal state.
+        designed_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        feature_count:
+          type: integer
+          description: Number of features in this release
+        story_count:
+          type: integer
+          description: Number of stories across the release's features
+
     ProjectAccessRequest:
       type: object
       properties:
@@ -340,6 +393,11 @@ components:
         clone_of:
           type: string
           nullable: true
+        release_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Release this ticket belongs to (propagated across the feature subtree)
         type:
           type: string
           enum: [epic, story, task, bug, feature, idea, spike, chore, note, question, requirement, decision, action]
@@ -7264,10 +7322,259 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_ref}/releases:
+    get:
+      tags: [Releases]
+      summary: List releases for a project
+      operationId: listReleases
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project id or prefix
+      responses:
+        '200':
+          description: Release list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Release'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Releases]
+      summary: Create a release
+      operationId: createRelease
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project id or prefix
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                purpose:
+                  type: string
+                target_date:
+                  type: string
+                  description: Aspirational target delivery date
+      responses:
+        '201':
+          description: Release created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/releases/{release_id}:
+    put:
+      tags: [Releases]
+      summary: Update a release
+      operationId: updateRelease
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: release_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                purpose:
+                  type: string
+                target_date:
+                  type: string
+      responses:
+        '200':
+          description: Release updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Releases]
+      summary: Delete a release
+      operationId: deleteRelease
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: release_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Release deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/releases/{release_id}/status:
+    post:
+      tags: [Releases]
+      summary: Set release status
+      description: >-
+        Transition a release through its lifecycle. `in_progress` seals the
+        release; once sealed, features can no longer be added.
+      operationId: setReleaseStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: release_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [in_design, in_progress, complete]
+      responses:
+        '200':
+          description: Release status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/release:
+    put:
+      tags: [Tickets]
+      summary: Add a feature to a release or remove it
+      description: >-
+        Set or clear the release for a feature ticket; the release_id propagates
+        across the feature's epic/story subtree. Only permitted while the target
+        release is `in_design`. Pass `null` to remove the feature from its release.
+      operationId: setTicketRelease
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [release_id]
+              properties:
+                release_id:
+                  type: integer
+                  format: int64
+                  nullable: true
+                  description: Target release id, or null to remove from a release
+      responses:
+        '200':
+          description: Updated ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/clone:
     post:
       tags: [Tickets]
-      summary: Clone a ticket and its children
+      summary: Clone a feature ticket and its children
+      description: >-
+        Deep-copies a feature and its epic/story subtree to extend functionality.
       operationId: cloneTicket
       security:
         - BearerAuth: []

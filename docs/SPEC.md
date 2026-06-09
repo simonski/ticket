@@ -45,7 +45,7 @@ The system operates as a client/server architecture:
 
 ## 3. Non-Goals
 
-- Sprint planning or velocity tracking
+- Velocity tracking or burndown charts
 - Story points beyond the existing priority/estimate fields
 - Cross-project ticket hierarchy
 - Arbitrary ticket-type plugins
@@ -141,6 +141,34 @@ Top-level namespace and container for tickets.
 - A closed project does not accept new tickets or lifecycle mutations unless reopened.
 - Tickets cannot move between projects.
 
+### 5.3a Release
+
+Top-level delivery container for a project. Holds the **features** (and their
+epic/story subtrees) designed, sealed, then executed together. See
+[`RELEASES.md`](./RELEASES.md) for the full model.
+
+| Field | Type | Constraints |
+|-------|------|-------------|
+| id | INTEGER | Primary key, autoincrement |
+| project_id | INTEGER | FK → projects |
+| title | TEXT | Required |
+| purpose | TEXT | Default empty |
+| target_date | TEXT | Aspirational target delivery date |
+| status | TEXT | `in_design` \| `in_progress` \| `complete`, default `in_design` |
+| designed_at | TEXT | Timestamp, nullable |
+| started_at | TEXT | Timestamp, nullable |
+| completed_at | TEXT | Timestamp, nullable |
+| created_at | TEXT | Timestamp |
+| updated_at | TEXT | Timestamp |
+| feature_count | INTEGER | Derived count of features |
+| story_count | INTEGER | Derived count of stories across features |
+
+**Rules:**
+- A release moves `in_design` → `in_progress` → `complete`.
+- Features may be added to / removed from a release only while it is `in_design`.
+- `in_progress` ("sealed") freezes the feature set; the orchestrator then executes the release's ready stories.
+- Tickets carry `release_id`; adding a feature propagates `release_id` across its whole epic/story subtree.
+
 ### 5.4 Ticket
 
 The primary work artifact.
@@ -151,6 +179,7 @@ The primary work artifact.
 | project_id | INTEGER | FK → projects, required |
 | parent_id | TEXT | Nullable FK → tickets |
 | clone_of | TEXT | Nullable FK → tickets |
+| release_id | INTEGER | Nullable FK → releases. Propagated across a feature's subtree. |
 | type | TEXT | Required (see Ticket Types) |
 | title | TEXT | Required |
 | description | TEXT | Default empty |
@@ -194,7 +223,9 @@ Examples: `CUS-12`, `CUS-143`, `OPS-9`
 
 | Type | Code | Can be parent? |
 |------|------|----------------|
-| epic | E | Yes: epic, task, bug, spike, chore |
+| feature | F | Yes: epic. The "grand plan"/requirement, refined with a human + agent then broken down. |
+| epic | E | Yes: story, bug, task, spike, chore |
+| story | Y | No |
 | task | T | Yes: task, bug, spike, chore |
 | bug | B | No |
 | spike | S | No |
@@ -204,8 +235,10 @@ Examples: `CUS-12`, `CUS-143`, `OPS-9`
 | requirement | R | No |
 | decision | D | No |
 
-Stories are first-class records in their own table (see section 5.18) and link
-to tickets through `story_ticket_links`; they are not a valid ticket `type`.
+The delivery hierarchy is **Release → Feature → Epic → Story/Bug**: a feature
+contains epics, an epic contains stories/bugs, linked through `parent_id`
+(story.parent = epic, epic.parent = feature). A feature is added to a release
+(see section 5.3a and [`RELEASES.md`](./RELEASES.md)).
 
 #### 5.4.3 Ticket Hierarchy
 
@@ -214,6 +247,7 @@ to tickets through `story_ticket_links`; they are not a valid ticket `type`.
 - A ticket may have at most one parent
 - Cycles are forbidden
 - A parent ticket with children derives its lifecycle from descendants
+- A feature may be deep-cloned (its whole subtree) to extend functionality
 
 ### 5.5 Workflow
 
@@ -680,6 +714,21 @@ The binary is named `ticket` with the alias `tk`.
 | `tk project workflow <workflow-id>` | Assign an Workflow to the active project |
 | `tk project set-draft <true\|false>` | Toggle draft mode on the active project |
 
+### 12.3a Releases
+
+| Command | Description |
+|---------|-------------|
+| `tk release list` | List releases for the active project |
+| `tk release create -title "..." [-purpose "..."] [-target-date ...]` | Create a release (`in_design`) |
+| `tk release update <id> -title "..."` | Update release title/purpose/target date |
+| `tk release status <id> <in_design\|in_progress\|complete>` | Transition release status (seal / complete) |
+| `tk release add-feature <release-id> <feature-id>` | Add a feature (and its subtree) to a release |
+| `tk release remove <release-id> <feature-id>` | Remove a feature from a release |
+| `tk release delete <id>` | Delete a release |
+| `tk feature clone <feature-id>` | Deep-clone a feature and its subtree |
+
+See [`RELEASES.md`](./RELEASES.md).
+
 ### 12.4 Tickets
 
 | Command | Description |
@@ -974,6 +1023,15 @@ See [`openapi.yaml`](./api/openapi.yaml) for the full OpenAPI 3.1 specification.
 | GET | `/api/projects/{id}/labels` | User | List labels |
 | POST | `/api/projects/{id}/labels` | User | Create label |
 | DELETE | `/api/projects/{id}/labels/{label_id}` | User | Delete label |
+| GET | `/api/projects/{ref}/releases` | Read | List releases |
+| POST | `/api/projects/{ref}/releases` | Write | Create release |
+
+#### Releases
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| PUT | `/api/releases/{id}` | Write | Update release (title, purpose, target_date) |
+| POST | `/api/releases/{id}/status` | Write | Set status (`in_design`/`in_progress`/`complete`) |
+| DELETE | `/api/releases/{id}` | Write | Delete release |
 
 #### Tickets
 | Method | Path | Auth | Description |
@@ -994,7 +1052,8 @@ See [`openapi.yaml`](./api/openapi.yaml) for the full OpenAPI 3.1 specification.
 | GET | `/api/tickets/{ref}/comments` | Read | List comments |
 | POST | `/api/tickets/{ref}/comments` | Write | Add comment |
 | GET | `/api/tickets/{ref}/dependencies` | Read | List dependencies |
-| POST | `/api/tickets/{ref}/clone` | Write | Clone ticket |
+| POST | `/api/tickets/{ref}/clone` | Write | Clone a feature and its subtree |
+| PUT | `/api/tickets/{ref}/release` | Write | Add feature to / remove from a release |
 | POST | `/api/tickets/{ref}/close` | Write | Close ticket |
 | POST | `/api/tickets/{ref}/open` | Write | Reopen ticket |
 | POST | `/api/tickets/{ref}/archive` | Write | Archive ticket |

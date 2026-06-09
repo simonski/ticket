@@ -27,7 +27,7 @@
 > bootstrap workflow). Nothing moves to a literal `refine` stage. **Readiness is a
 > flag** (the draft clearing), not a stage: approval marks the ticket non-draft in
 > place (advancing to a literal `ready` stage only if the workflow defines one), and
-> the sprint-add gate accepts non-draft *or* the `ready` stage. `OrchestratorTicket.
+> the release-add gate accepts non-draft *or* the `ready` stage. `OrchestratorTicket.
 > InRefinement()` (= draft && `StageIsBacklog`) is the single predicate; the agent's
 > refiner role (not a stage) signals a refinement turn.
 
@@ -85,7 +85,7 @@ Key files: `internal/orchestrator/orchestrator.go`, `internal/store/orchestrator
 `internal/server/server.go` (`runOrchestrator`), `internal/server/api_agents.go`
 (push model + abandonment guard), `cmd/tk/cmd_orchestrator.go`. History event types:
 `orchestrator_assigned`, `orchestrator_advanced`, `orchestrator_recovered`,
-`orchestrator_abandoned`. "Sealed sprint" == a sprint in stage `active`.
+`orchestrator_abandoned`. A "sealed" release == a release in status `in_progress`.
 
 Notable behaviour: refiner agents are now pushed refinement turns by the
 orchestrator (no more self-pull); `tk agent request -id X` still performs an
@@ -101,7 +101,7 @@ self-selecting).
   self-assess success/fail). The orchestrator only applies workflow rules.
 - **C — `tk orchestrator N` is shorthand for `-id N`** (a single ticket); projects
   use `-project_id N`.
-- **D — The orchestrator drives both loops** (backlog preparation *and* sprint
+- **D — The orchestrator drives both loops** (backlog preparation *and* release
   execution). The preparation loop is the harder part because refinement is, by
   design, an interactive LLM+human dialogue.
 - **Q1 — Trust comes from adversarial multi-role workflows**, not from the
@@ -114,8 +114,9 @@ self-selecting).
   marks the job **abandoned / timed-out**; when that agent next wakes it sees the
   abandoned marker and drops the work it was doing.
 - **Q4 — Exactly one orchestrator.** Never more than one instance.
-- **Q5 — A "sealed" sprint is the green light for execution.** Sealing means every
-  story in the sprint is `ready`; once sealed, agents/orchestrator may work them.
+- **Q5 — A release `in_progress` ("sealed") is the green light for execution.**
+  Sealing a release means its features' stories are `ready`; once the release moves
+  to `in_progress`, agents/orchestrator may work them.
 - **Q6 — One server-wide orchestrator with per-project on/off flags.**
 
 **All Phase-1 gates are resolved.** Remaining open items (Q7 template engine, Q8
@@ -149,8 +150,10 @@ and acts upon.
 | **Story** | The unit of work. (Implemented as a ticket.) |
 | **Agent** | The worker that executes a story. Marks it `active`, does the work, then self-assesses `success`/`fail` and **un-assigns itself**. |
 | **Orchestrator** | The coordinator. The **only** thing that assigns work to agents. |
-| **Sprint** | A grouping of stories to be worked together. Prepared in the backlog, then "sealed" and executed. |
-| **Epic** | A container of multiple stories produced by breaking down an idea. |
+| **Release** | The top-level delivery container for a project. Features are added while it is `in_design`, then it is sealed (`in_progress`) and executed, and finally `complete`. |
+| **Feature** | A ticket of type `feature` — the "grand plan"/requirement. Refined with a human + agent, then broken down into epics. Added to a release. |
+| **Epic** | A container of stories/bugs under a feature, produced by breaking it down. |
+| **Story** | A leaf unit of work under an epic (also `bug`). |
 
 ### The composed prompt
 
@@ -172,7 +175,7 @@ Keeping them separate is important.
 
 ### 3.1 Preparation loop (backlog)
 
-Turns a raw requirement into sprint-ready, well-formed stories.
+Turns a raw requirement into release-ready, well-formed stories.
 
 ```
 idea  ->  refinement  ->  breakdown
@@ -185,13 +188,15 @@ idea  ->  refinement  ->  breakdown
   accepts, the stories are **packaged into an epic** (a container ticket) with the
   specific stories as children.
 
-Once stories are ready, they are allocated into a sprint; the sprint is **sealed**
-and handed to the execution loop.
+Once a feature's stories are ready, the feature is added to a **release** (while the
+release is `in_design`); the release is then **sealed** by moving it to
+`in_progress` and handed to the execution loop.
 
-### 3.2 Execution loop (sprint)
+### 3.2 Execution loop (release)
 
-Moves sealed stories through the project's workflow, stage by stage, role by role,
-until done — coordinated entirely by the orchestrator.
+Moves the stories of a sealed (`in_progress`) release through the project's
+workflow, stage by stage, role by role, until done — coordinated entirely by the
+orchestrator.
 
 ```
 for each (stage, role) in workflow:
@@ -212,7 +217,7 @@ Grounded findings from the current implementation:
 - Workflows, stages, roles, and the stage→role junction all exist with full CRUD.
 - A ticket tracks `stage`, `role_id`, and lifecycle `state` (`idle|active|success|fail`).
 - Pluggable per project: a project has a `workflow_id`; the board derives columns
-  from the workflow's stages (with `is_backlog_stage` distinguishing backlog vs sprint).
+  from the workflow's stages (with `is_backlog_stage` distinguishing backlog vs delivery).
 
 ### 4.2 Advancement logic — **EXISTS, but reactive only**
 - `internal/store/ticket.go`:
@@ -224,7 +229,7 @@ Grounded findings from the current implementation:
   - `UpdateTicket()` has a conditional **auto-advance** when `state=success` is set
     *and* the workflow's approval policy is `all_roles` and progression mode is not
     `stage_only`.
-- Sprint gating: a ticket at `ready` cannot advance unless assigned to a sprint
+- Release gating: a ticket at `ready` cannot advance unless it belongs to a release
   (`ticket.go` ~L869).
 - **There is no background process that triggers any of this.** It only happens on an
   explicit CLI/API call.
@@ -272,10 +277,13 @@ Grounded findings from the current implementation:
 - **No reusable, admin-editable template engine** that "fills in the blanks" from
   Story + Role + Stage + Project + Organisation.
 
-### 4.7 Sprints — **PARTIAL**
-- Sprints exist with stages `active` / `closed` (`internal/store/sprint.go`).
-- A sprint cannot be activated if tickets are still in `idea`/`refine`.
-- **No explicit "seal" concept** — "sealing" currently maps loosely to activation.
+### 4.7 Releases
+- Releases are the top-level delivery container (`internal/store/release.go`), with
+  status `in_design` → `in_progress` → `complete`.
+- Features (and their epic/story subtrees) are added to a release only while it is
+  `in_design`; the subtree inherits the release's `release_id`.
+- Moving a release to `in_progress` **seals** it: the feature set is frozen and its
+  ready stories become available to the orchestrator. `complete` is terminal.
 
 ### 4.8 Config — **EXISTS (KV store)**
 - `internal/store/settings.go` provides an app-settings key/value store
@@ -296,8 +304,8 @@ Grounded findings from the current implementation:
 2. **Decide**, per ticket, the next action based on the ticket's workflow + state.
 3. **Assign** work to agents (the only component permitted to do so).
 4. **Advance** tickets whose work is complete (success → next; fail → back/escalate).
-5. **Gate** correctly: respect backlog/sprint rules, sealed sprints, leaf-only work,
-   parent derivation.
+5. **Gate** correctly: respect backlog/release rules, sealed (`in_progress`)
+   releases, leaf-only work, parent derivation.
 
 ### 5.2 The assignment handshake (Decision A — settled)
 
@@ -306,7 +314,7 @@ The orchestrator pushes; the agent's poll is a pure *"anything for me?"* query.
 ```
 Orchestrator (deterministic, push)          Agent (LLM, execute only)
 ----------------------------------          -------------------------
-picks idle, unassigned, in-sprint story
+picks idle, unassigned, in-release story
 whose current role matches an available
 agent for that role
    -> sets assignee = agent, state = active
@@ -339,11 +347,11 @@ recognise the "abandoned" marker on a ticket it thought it held.
 
 For each candidate ticket the orchestrator evaluates, using the ticket's workflow:
 - `state=success` → compute `findNextStep()`; advance role/stage; set `state=idle`
-  (or `ready` when crossing into a sprint stage); un-assign. **No extra verification
+  (or `ready` when crossing into a delivery stage); un-assign. **No extra verification
   gate** — trust comes from the workflow's adversarial downstream roles (Q1).
 - `state=fail` → `findPrevStep()` / re-assign same role / escalate (policy TBD). A
   downstream adversarial role reporting `fail` is the normal way work bounces back.
-- `state=idle` + in active sprint + leaf + a role-matching agent is **free** → assign
+- `state=idle` + in an `in_progress` release + leaf + a role-matching agent is **free** → assign
   to the least-busy matching agent (load-balanced; order otherwise unimportant — Q2).
 - `state=active` → in progress, leave alone (unless stale — reaper concern).
 - backlog stages → **in scope (Decision D):** route the ticket into the preparation
@@ -357,7 +365,7 @@ quality; it only routes work through those roles, and the adversarial sequence i
 what makes the combined output trustworthy.
 
 > **✅ RESOLVED (Decision B) — The orchestrator is purely deterministic; NOT
-> LLM-assisted.** It applies workflow rules only (`findNextStep`, sprint gating,
+> LLM-assisted.** It applies workflow rules only (`findNextStep`, release gating,
 > role matching, leaf/parent checks). All intelligence lives in the **agent**, which
 > runs an LLM both to perform the work and to self-assess `success`/`fail`. The
 > dry-run CLI (§5.6) is therefore also deterministic: it reports the mechanical
@@ -408,7 +416,7 @@ Output: a per-ticket list of `(ticket, current stage/role/state) -> proposed act
 > reused unchanged by the orchestrator, so the agent runtime stays the same.
 
 > **✅ RESOLVED (Decision D) — The orchestrator drives BOTH loops.** It coordinates
-> backlog preparation *and* sprint execution. Execution is mostly mechanical and will
+> backlog preparation *and* release execution. Execution is mostly mechanical and will
 > be built first. Preparation is harder: refinement is, by design, an **interactive
 > LLM+human dialogue**, so the orchestrator's role there is to *route* a ticket into
 > refinement and react to its outcome — not to conduct the dialogue itself (the
@@ -455,12 +463,12 @@ Output: a per-ticket list of `(ticket, current stage/role/state) -> proposed act
 > (`SET assignee=?, state='active' WHERE assignee='' AND state='idle'`) as
 > belt-and-braces, but no multi-instance coordination is designed for.
 
-> **✅ RESOLVED (Q5) — "Sealed" sprint = the execution green light.** A sprint is
-> sealed only when **every story in it is `ready`**; sealing declares the sprint's
-> stories available for agents/orchestrator to work. Before sealing, the orchestrator
-> ignores the sprint's stories for execution. (Exact storage — a new sprint state vs.
-> a `sealed` flag alongside `active`/`closed` — and reversibility are an
-> implementation detail for the sprint model; the *meaning* is settled.)
+> **✅ RESOLVED (Q5) — A release `in_progress` ("sealed") = the execution green
+> light.** A release is sealed by moving it from `in_design` to `in_progress`; its
+> features' `ready` stories then become available for agents/orchestrator to work.
+> While `in_design`, the orchestrator ignores the release's stories for execution and
+> features may still be added/removed. Once `in_progress` the feature set is frozen;
+> the terminal state is `complete`. (See [`RELEASES.md`](./RELEASES.md).)
 
 > **✅ RESOLVED (Q6) — One server-wide orchestrator, per-project on/off.** A single
 > orchestrator loop spans the whole server (all programmes/projects), with a
@@ -488,7 +496,7 @@ and ready to build on request. Q7–Q9 are later-phase and do not block it.
 1. **Phase 1 — Orchestrator core (execution loop, deterministic).**
    - `internal/orchestrator` package: one `Pass(ctx, db)` that sweeps eligible
      tickets and returns a list of decisions (advance / assign / recover / skip).
-   - Reuse `findNextStep`, sprint gating, role-matching for candidate selection.
+   - Reuse `findNextStep`, release gating, role-matching for candidate selection.
    - Assignment = set `assignee` + `state=active` (same mechanism self-claim used).
 2. **Phase 2 — Remove agent self-claim (Decision A).**
    - `RequestAgentWork` stops calling `findClaimCandidate`; it returns only the
@@ -504,7 +512,7 @@ and ready to build on request. Q7–Q9 are later-phase and do not block it.
 6. **Phase 6 — Preparation loop (Decision D).** Orchestrator routes backlog tickets
    into refinement; design the interactive LLM+human refinement dialogue, breakdown
    into epic+child stories, and the "refined/ready" signal (Open Question 9).
-7. **Later — Sprint sealing semantics, admin-editable prompt-template engine.**
+7. **Later — Release sealing semantics, admin-editable prompt-template engine.**
 
 ---
 

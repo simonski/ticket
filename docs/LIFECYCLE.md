@@ -65,8 +65,8 @@ Example stages: `idea` -> `refine` -> `ready` -> `develop` -> `complete`.
 The first three stages (`idea`, `refine`, `ready`) are **backlog stages**. A ticket in a backlog stage:
 - Starts at `idea` when created.
 - Progresses `idea` → `refine` → `ready` via `tk next` (requires `state=success` at each step).
-- **Cannot** advance past `ready` until the ticket is assigned to an open sprint.
-- Once in a sprint, `tk next` advances from `ready` to the first sprint workflow stage (e.g. `develop`).
+- **Cannot** advance past `ready` until the ticket belongs to a release (its feature has been added to a release). See [`RELEASES.md`](./RELEASES.md).
+- Once in a release, `tk next` advances from `ready` to the first delivery stage (e.g. `develop`).
 
 ```bash
 tk workflow stage-list -id <workflow_id>
@@ -81,16 +81,16 @@ tk workflow stage-order -id <workflow_id> <stage_id1,stage_id2,stage_id3>
 
 The default bootstrap workflow has five stages: `idea`, `refine`, `ready`, `develop`, `complete`.
 
-`develop`: represents the stage where sprint work is carried out.
+`develop`: represents the stage where delivery work is carried out.
 `complete`: the terminal stage for accepted work — ticket is shipped and done.
-`reject`: an optional terminal stage for rejected sprint tickets. Not in the default linear chain; tickets are moved here manually when a sprint ticket will not be completed.
+`reject`: an optional terminal stage for rejected tickets. Not in the default linear chain; tickets are moved here manually when a ticket will not be completed.
 
 The **backlog board** shows only the three backlog stages: `idea`, `refine`, `ready`.
-The **sprint board** shows: `ready`, `develop`, `complete`, `reject` (in that order).
+The **delivery board** shows: `ready`, `develop`, `complete`, `reject` (in that order).
 
-Sprint assignment rules:
-- A ticket must be in `ready` stage before it can be added to a sprint (`SetTicketSprint`).
-- A sprint cannot be activated if any of its tickets are in `idea` or `refine` stage.
+Release assignment rules (see [`RELEASES.md`](./RELEASES.md)):
+- A feature must be in `ready` stage before its subtree can be added to a release (`PUT /api/tickets/{id}/release`).
+- A feature can only be added to a release while the release is `in_design`. Once the release is `in_progress` ("sealed") its stories are executed and the feature set is frozen.
 
 ---
 
