@@ -1285,6 +1285,18 @@ select {
     vertical-align: middle;
 }
 
+/* Collapse the ID column to its content so the title sits immediately to its
+   right (left-aligned) rather than across a stretched gap. */
+.ticket-list-table th:first-child,
+.ticket-list-row td:first-child {
+    width: 1%;
+    white-space: nowrap;
+}
+.ticket-list-table th:nth-child(2),
+.ticket-list-row td:nth-child(2) {
+    text-align: left;
+}
+
 .ticket-list-row:last-child td {
     border-bottom: none;
 }
