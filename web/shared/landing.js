@@ -146,7 +146,7 @@
   var clock = new THREE.Clock();
   // Phase durations (seconds): animate IN, a clear WAIT, then fade OUT — the
   // fade-out mirrors the intro (same duration) but plays it in reverse.
-  var INTRO_DUR=1.25, HOLD_DUR=0.7, FADE_DUR=1.25, XFADE_DUR=0.25;
+  var INTRO_DUR=1.25, HOLD_DUR=0.35, FADE_DUR=1.25, XFADE_DUR=0.25;
 
   var WH=0.48, WS=0.85, WL=0.6;
 
