@@ -105,12 +105,12 @@
         const NAV_ORDER_STORAGE_KEY = "site2.navOrder";
         const NAV_ITEMS = [
             { view: "tickets", label: "Board", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16\"></path><path d=\"M4 12h16\"></path><path d=\"M4 17h10\"></path></svg>" },
-            { view: "documents", label: "Documents", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 3h7l5 5v13H7z\"></path><path d=\"M14 3v5h5\"></path><path d=\"M9 13h8\"></path><path d=\"M9 17h8\"></path></svg>" },
-            { view: "interventions", label: "Mailbox", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
             { view: "projects", label: "Projects", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 7h18\"></path><path d=\"M6 7v10\"></path><path d=\"M12 7v10\"></path><path d=\"M18 7v10\"></path><path d=\"M3 17h18\"></path></svg>" },
-            { view: "workflows", label: "Workflows", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
-            { view: "roles", label: "Roles", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8a3 3 0 1 0 0.001 0\"></path><path d=\"M17 16a3 3 0 1 0 0.001 0\"></path><path d=\"M9.5 10.5l5 3\"></path></svg>" },
-            { view: "teams", label: "Teams", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 11a2.5 2.5 0 1 0 0.001 0\"></path><path d=\"M16 9a2 2 0 1 0 0.001 0\"></path><path d=\"M4 19a4 4 0 0 1 8 0\"></path><path d=\"M14 19a3 3 0 0 1 6 0\"></path></svg>" },
+            { view: "interventions", label: "Mailbox", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
+            { view: "workflows", label: "Workflows", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
+            { view: "roles", label: "Roles", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8a3 3 0 1 0 0.001 0\"></path><path d=\"M17 16a3 3 0 1 0 0.001 0\"></path><path d=\"M9.5 10.5l5 3\"></path></svg>" },
+            { view: "documents", label: "Documents", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 3h7l5 5v13H7z\"></path><path d=\"M14 3v5h5\"></path><path d=\"M9 13h8\"></path><path d=\"M9 17h8\"></path></svg>" },
+            { view: "teams", label: "Teams", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 11a2.5 2.5 0 1 0 0.001 0\"></path><path d=\"M16 9a2 2 0 1 0 0.001 0\"></path><path d=\"M4 19a4 4 0 0 1 8 0\"></path><path d=\"M14 19a3 3 0 0 1 6 0\"></path></svg>" },
             { view: "programmes", label: "Programmes", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 3h7v7H3z\"/><path d=\"M14 3h7v7h-7z\"/><path d=\"M3 14h7v7H3z\"/><path d=\"M14 14h7v7h-7z\"/></svg>" },
             { view: "settings", label: "Settings", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M12 17v4\"></path><path d=\"M4.9 6.3l2.8 2\"></path><path d=\"M16.3 15.7l2.8 2\"></path><path d=\"M3 12h4\"></path><path d=\"M17 12h4\"></path><path d=\"M4.9 17.7l2.8-2\"></path><path d=\"M16.3 8.3l2.8-2\"></path><circle cx=\"12\" cy=\"12\" r=\"3.5\"></circle></svg>" },
             { view: "agents", label: "Agents", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M8 8a4 4 0 1 1 8 0\"></path><path d=\"M7 13h10v7H7z\"></path></svg>" },
@@ -586,7 +586,10 @@
             return NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin());
         }
         function visibleGeneralNavItems() {
-            return NAV_ITEMS.filter((item) => item.section !== "admin" && (!item.adminOnly || isAdmin()));
+            return NAV_ITEMS.filter((item) => item.section === "general" && (!item.adminOnly || isAdmin()));
+        }
+        function visibleProcessNavItems() {
+            return NAV_ITEMS.filter((item) => item.section === "process" && (!item.adminOnly || isAdmin()));
         }
         function visibleAdminNavItems() {
             return NAV_ITEMS.filter((item) => item.section === "admin" && isAdmin());
@@ -786,6 +789,17 @@
                     "<span class=\"nav-icon\">" + item.icon + "</span><span>" + escapeHTML(item.label) + "</span></button>";
             }).join("");
             setInnerHTMLIfChanged(els.mainNav, generalHtml);
+
+            // Process nav (static — workflows, roles, documents, teams)
+            const processNavEl = document.getElementById("process-nav");
+            if (processNavEl) {
+                const processHtml = visibleProcessNavItems().map((item) => {
+                    const active = item.view === state.currentView ? " active" : "";
+                    return "<button type=\"button\" data-view=\"" + item.view + "\" class=\"" + active.trim() + "\">" +
+                        "<span class=\"nav-icon\">" + item.icon + "</span><span>" + escapeHTML(item.label) + "</span></button>";
+                }).join("");
+                setInnerHTMLIfChanged(processNavEl, processHtml);
+            }
 
             // Admin nav
             const adminNavEl = document.getElementById("admin-nav");
@@ -1468,6 +1482,16 @@
                 }
                 switchView(button.dataset.view);
             });
+            const processNavEl = document.getElementById("process-nav");
+            if (processNavEl) {
+                processNavEl.addEventListener("click", (event) => {
+                    const button = event.target.closest("button[data-view]");
+                    if (!button) {
+                        return;
+                    }
+                    switchView(button.dataset.view);
+                });
+            }
             const adminNavEl = document.getElementById("admin-nav");
             if (adminNavEl) {
                 adminNavEl.addEventListener("click", (event) => {
