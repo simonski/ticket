@@ -251,3 +251,42 @@ func TestSystemAgentModelConfigIncludesProviderCatalogWithCopilot(t *testing.T) 
 		t.Fatalf("GitHub Copilot Enterprise provider missing from catalog")
 	}
 }
+
+func TestDefaultProvidersIncludeExpandedCatalog(t *testing.T) {
+	t.Parallel()
+	providers := defaultAgentModelProviders()
+	byID := map[string]AgentModelProvider{}
+	for _, p := range providers {
+		byID[p.ID] = p
+	}
+
+	// Cloud + local API providers expected in the catalog.
+	for _, id := range []string{"openai", "anthropic", "deepseek", "ollama", "google", "mistral", "xai", "groq"} {
+		if _, ok := byID[id]; !ok {
+			t.Errorf("expected API provider %q in default catalog", id)
+		}
+	}
+	// Ollama is local: no API key, configurable URL.
+	if ollama, ok := byID["ollama"]; ok {
+		if ollama.AuthType != "none" || !ollama.RequiresURL {
+			t.Errorf("ollama provider = {auth:%q requires_url:%v}, want {none true}", ollama.AuthType, ollama.RequiresURL)
+		}
+	}
+	// Terminal-invocation agentic harnesses: no API key, no base URL.
+	for _, id := range []string{"claude-code", "codex", "github-copilot-cli", "gemini-cli", "aider"} {
+		p, ok := byID[id]
+		if !ok {
+			t.Errorf("expected terminal harness %q in default catalog", id)
+			continue
+		}
+		if p.AuthType != "none" {
+			t.Errorf("harness %q auth_type = %q, want none", id, p.AuthType)
+		}
+		if p.BaseURL != "" {
+			t.Errorf("harness %q base_url = %q, want empty", id, p.BaseURL)
+		}
+		if p.DefaultModel == "" || len(p.Models) == 0 {
+			t.Errorf("harness %q missing default model / models", id)
+		}
+	}
+}

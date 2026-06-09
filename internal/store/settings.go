@@ -21,9 +21,19 @@ const (
   {"id":"openai","label":"OpenAI","base_url":"https://api.openai.com/v1","default_model":"gpt-5.3-codex","models":["gpt-5.3-codex","gpt-5","o3"],"auth_type":"api_key","requires_url":false},
   {"id":"anthropic","label":"Anthropic","base_url":"https://api.anthropic.com","default_model":"claude-sonnet-4.5","models":["claude-sonnet-4.5","claude-opus-4.7","claude-haiku-4.5"],"auth_type":"api_key","requires_url":false},
   {"id":"google","label":"Google Gemini","base_url":"https://generativelanguage.googleapis.com","default_model":"gemini-2.5-pro","models":["gemini-2.5-pro","gemini-2.5-flash"],"auth_type":"api_key","requires_url":false},
+  {"id":"deepseek","label":"DeepSeek","base_url":"https://api.deepseek.com","default_model":"deepseek-chat","models":["deepseek-chat","deepseek-reasoner"],"auth_type":"api_key","requires_url":false},
+  {"id":"mistral","label":"Mistral","base_url":"https://api.mistral.ai/v1","default_model":"mistral-large-latest","models":["mistral-large-latest","codestral-latest","mistral-small-latest"],"auth_type":"api_key","requires_url":false},
+  {"id":"xai","label":"xAI Grok","base_url":"https://api.x.ai/v1","default_model":"grok-4","models":["grok-4","grok-3","grok-3-mini"],"auth_type":"api_key","requires_url":false},
+  {"id":"groq","label":"Groq","base_url":"https://api.groq.com/openai/v1","default_model":"llama-3.3-70b-versatile","models":["llama-3.3-70b-versatile","deepseek-r1-distill-llama-70b","qwen-2.5-coder-32b"],"auth_type":"api_key","requires_url":false},
   {"id":"openrouter","label":"OpenRouter","base_url":"https://openrouter.ai/api/v1","default_model":"openai/gpt-5","models":["openai/gpt-5","anthropic/claude-sonnet-4.5","google/gemini-2.5-pro"],"auth_type":"api_key","requires_url":false},
+  {"id":"ollama","label":"Ollama (Local)","base_url":"http://localhost:11434/v1","default_model":"qwen2.5-coder","models":["qwen2.5-coder","llama3.3","deepseek-r1","gemma3"],"auth_type":"none","requires_url":true},
   {"id":"github-copilot","label":"GitHub Copilot","base_url":"https://api.githubcopilot.com","default_model":"gpt-5.3-codex","models":["gpt-5.3-codex","gpt-5","claude-sonnet-4.6","gemini-2.5-pro"],"auth_type":"api_key","requires_url":false},
-  {"id":"github-copilot-enterprise","label":"GitHub Copilot Enterprise","base_url":"https://api.githubcopilot.com","default_model":"gpt-5.3-codex","models":["gpt-5.3-codex","gpt-5","claude-sonnet-4.6","gemini-2.5-pro"],"auth_type":"api_key","requires_url":false}
+  {"id":"github-copilot-enterprise","label":"GitHub Copilot Enterprise","base_url":"https://api.githubcopilot.com","default_model":"gpt-5.3-codex","models":["gpt-5.3-codex","gpt-5","claude-sonnet-4.6","gemini-2.5-pro"],"auth_type":"api_key","requires_url":false},
+  {"id":"claude-code","label":"Claude Code (CLI)","base_url":"","default_model":"sonnet","models":["sonnet","opus","haiku"],"auth_type":"none","requires_url":false},
+  {"id":"codex","label":"Codex (CLI)","base_url":"","default_model":"gpt-5.3-codex","models":["gpt-5.3-codex","gpt-5","o3"],"auth_type":"none","requires_url":false},
+  {"id":"github-copilot-cli","label":"GitHub Copilot CLI","base_url":"","default_model":"gpt-5.3-codex","models":["gpt-5.3-codex","claude-sonnet-4.6","gemini-2.5-pro"],"auth_type":"none","requires_url":false},
+  {"id":"gemini-cli","label":"Gemini CLI","base_url":"","default_model":"gemini-2.5-pro","models":["gemini-2.5-pro","gemini-2.5-flash"],"auth_type":"none","requires_url":false},
+  {"id":"aider","label":"Aider (CLI)","base_url":"","default_model":"claude-sonnet-4.5","models":["claude-sonnet-4.5","gpt-5","deepseek-chat"],"auth_type":"none","requires_url":false}
 ]`
 )
 
