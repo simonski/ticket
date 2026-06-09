@@ -169,8 +169,8 @@ func decide(t store.OrchestratorTicket, pool *agentPool, now time.Time, timeout,
 
 	case store.StateSuccess:
 		// Agent reported success. Advance to the next role/stage.
-		if t.Stage == store.StageReady && t.SprintID == nil {
-			d.Detail = "ready but not in a sprint — cannot advance until sealed into a sprint"
+		if t.Stage == store.StageReady && t.ReleaseID == nil {
+			d.Detail = "ready but not in a release — cannot advance until its feature is in an active release"
 			return d
 		}
 		d.Kind = ActionAdvance
@@ -237,10 +237,10 @@ func decideIdle(t store.OrchestratorTicket, pool *agentPool, now time.Time, refi
 		d.Detail = "has children — only leaf stories are worked"
 		return d
 	}
-	// Ready (non-draft) work is executed once it is in a sealed sprint; backlog work
-	// that isn't draft (e.g. a literal "ready" stage) waits for a sprint.
-	if !t.SprintSealed() {
-		d.Detail = "not in a sealed (active) sprint"
+	// Ready (non-draft) work is executed once its release is in progress; backlog
+	// work that isn't draft (e.g. a literal "ready" stage) waits for a release.
+	if !t.ReleaseActive() {
+		d.Detail = "not in an active (in-progress) release"
 		return d
 	}
 	if t.WorkflowStageID == 0 || t.RoleTitle == "" {

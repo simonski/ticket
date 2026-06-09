@@ -41,24 +41,16 @@ const (
 	settingOrchestratorEnabledPrefix    = "orchestrator_enabled_project_" // + projectID
 )
 
-// SprintSealedStage is the sprint stage that means "sealed" — ready work that the
-// orchestrator may execute.
-const SprintSealedStage = "active"
-
-// SealSprint marks a sprint as sealed (ready for execution). This is the spec's
-// "seal" verb; mechanically it activates the sprint, which already validates that
-// every story has reached the ready stage.
-func SealSprint(ctx context.Context, db *sql.DB, id int) (Sprint, error) {
-	s, err := getSprint(ctx, db, id)
-	if err != nil {
-		return Sprint{}, err
-	}
-	return UpdateSprint(ctx, db, id, s.Title, SprintSealedStage)
+// ActivateRelease moves a release into progress — the spec's "seal" verb. Its
+// features (and their stories) become eligible for execution by the orchestrator.
+func ActivateRelease(ctx context.Context, db *sql.DB, id int) (Release, error) {
+	return SetReleaseStatus(ctx, db, id, ReleaseInProgress)
 }
 
-// IsSprintSealed reports whether a sprint stage value represents a sealed sprint.
-func IsSprintSealed(sprintStage string) bool {
-	return sprintStage == SprintSealedStage
+// IsReleaseActive reports whether a release status represents work the
+// orchestrator may execute (the release is in progress).
+func IsReleaseActive(status string) bool {
+	return status == ReleaseInProgress
 }
 
 // ── Config accessors (app_settings KV) ───────────────────────────────────────
@@ -175,8 +167,8 @@ type OrchestratorTicket struct {
 	Draft            bool
 	HasChildren      bool
 	WorkflowStageID  int64
-	SprintID         *int64
-	SprintStage      string
+	ReleaseID        *int64
+	ReleaseStatus    string
 	Priority         int
 	AssigneeLastSeen string
 	AssigneeIsAgent  bool // true only when the assignee is a known agent user
@@ -201,9 +193,10 @@ func (t OrchestratorTicket) InRefinement() bool {
 	return t.Draft && t.StageIsBacklog
 }
 
-// SprintSealed reports whether this ticket's sprint is sealed (active).
-func (t OrchestratorTicket) SprintSealed() bool {
-	return t.SprintID != nil && IsSprintSealed(t.SprintStage)
+// ReleaseActive reports whether this ticket belongs to a release that is in
+// progress — the green light for the orchestrator to execute it.
+func (t OrchestratorTicket) ReleaseActive() bool {
+	return t.ReleaseID != nil && IsReleaseActive(t.ReleaseStatus)
 }
 
 // IsLeaf reports whether the ticket has no live children (only leaves are worked).
@@ -220,7 +213,7 @@ func ListOrchestratorCandidates(ctx context.Context, db *sql.DB, projectID int64
 		       COALESCE(t.assignee, ''), t.draft,
 		       CASE WHEN EXISTS (SELECT 1 FROM tickets c WHERE c.parent_id = t.ticket_id AND c.deleted = 0) THEN 1 ELSE 0 END,
 		       COALESCE(t.workflow_stage_id, 0),
-		       t.sprint_id, COALESCE(sp.stage, ''),
+		       t.release_id, COALESCE(rel.status, ''),
 		       t.priority,
 		       COALESCE(au.last_seen, ''),
 		       CASE WHEN au.user_id IS NOT NULL THEN 1 ELSE 0 END,
@@ -235,7 +228,7 @@ func ListOrchestratorCandidates(ctx context.Context, db *sql.DB, projectID int64
 		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
 		LEFT JOIN roles r ON r.role_id = t.role_id
-		LEFT JOIN sprints sp ON sp.id = t.sprint_id
+		LEFT JOIN releases rel ON rel.id = t.release_id
 		LEFT JOIN users au ON au.username = t.assignee AND au.user_type = 'agent'
 		LEFT JOIN workflow_stages ws ON ws.workflow_stage_id = t.workflow_stage_id
 		WHERE t.complete = 0 AND t.archived = 0 AND t.deleted = 0 AND p.status = 'open'`
@@ -260,10 +253,10 @@ func ListOrchestratorCandidates(ctx context.Context, db *sql.DB, projectID int64
 	for rows.Next() {
 		var t OrchestratorTicket
 		var draft, hasChildren, isAgent, agentTurn, stageBacklog int
-		var sprintID sql.NullInt64
+		var releaseID sql.NullInt64
 		if scanErr := rows.Scan(&t.TicketID, &t.ProjectID, &t.Stage, &t.State,
 			&t.RoleID, &t.RoleTitle, &t.Assignee, &draft, &hasChildren,
-			&t.WorkflowStageID, &sprintID, &t.SprintStage, &t.Priority,
+			&t.WorkflowStageID, &releaseID, &t.ReleaseStatus, &t.Priority,
 			&t.AssigneeLastSeen, &isAgent, &agentTurn, &t.RefinementLastActivity, &stageBacklog); scanErr != nil {
 			return nil, scanErr
 		}
@@ -272,9 +265,9 @@ func ListOrchestratorCandidates(ctx context.Context, db *sql.DB, projectID int64
 		t.StageIsBacklog = stageBacklog != 0
 		t.Draft = draft != 0
 		t.HasChildren = hasChildren != 0
-		if sprintID.Valid {
-			id := sprintID.Int64
-			t.SprintID = &id
+		if releaseID.Valid {
+			id := releaseID.Int64
+			t.ReleaseID = &id
 		}
 		out = append(out, t)
 	}

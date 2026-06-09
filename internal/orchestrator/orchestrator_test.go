@@ -12,18 +12,18 @@ import (
 
 // ── Pure decision-matrix tests (no DB) ────────────────────────────────────────
 
-func sealedSprintID() *int64 { id := int64(7); return &id }
+func activeReleaseID() *int64 { id := int64(7); return &id }
 
 func engineerAgent() store.OrchestratorAgent {
 	return store.OrchestratorAgent{UserID: "u1", Username: "eng-agent", Roles: []string{"Engineer"}, ActiveLoad: 0}
 }
 
-func TestDecideAssignsIdleSealedSprintTicket(t *testing.T) {
+func TestDecideAssignsIdleActiveReleaseTicket(t *testing.T) {
 	pool := newAgentPool([]store.OrchestratorAgent{engineerAgent()})
 	tk := store.OrchestratorTicket{
 		TicketID: "DEV-1", ProjectID: 1, Stage: "develop", State: store.StateIdle,
-		RoleTitle: "Engineer", WorkflowStageID: 5, SprintID: sealedSprintID(),
-		SprintStage: store.SprintSealedStage,
+		RoleTitle: "Engineer", WorkflowStageID: 5, ReleaseID: activeReleaseID(),
+		ReleaseStatus: store.ReleaseInProgress,
 	}
 	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionAssign {
@@ -34,12 +34,12 @@ func TestDecideAssignsIdleSealedSprintTicket(t *testing.T) {
 	}
 }
 
-func TestDecideSkipsIdleUnsealedSprint(t *testing.T) {
+func TestDecideSkipsIdleInactiveRelease(t *testing.T) {
 	pool := newAgentPool([]store.OrchestratorAgent{engineerAgent()})
 	tk := store.OrchestratorTicket{
 		TicketID: "DEV-2", ProjectID: 1, Stage: "develop", State: store.StateIdle,
-		RoleTitle: "Engineer", WorkflowStageID: 5, SprintID: sealedSprintID(),
-		SprintStage: "closed", // not sealed
+		RoleTitle: "Engineer", WorkflowStageID: 5, ReleaseID: activeReleaseID(),
+		ReleaseStatus: store.ReleaseInDesign, // not active
 	}
 	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionSkip {
@@ -51,8 +51,8 @@ func TestDecideSkipsWhenNoMatchingAgent(t *testing.T) {
 	pool := newAgentPool([]store.OrchestratorAgent{{Username: "qa-agent", Roles: []string{"QA Engineer"}}})
 	tk := store.OrchestratorTicket{
 		TicketID: "DEV-3", ProjectID: 1, Stage: "develop", State: store.StateIdle,
-		RoleTitle: "Engineer", WorkflowStageID: 5, SprintID: sealedSprintID(),
-		SprintStage: store.SprintSealedStage,
+		RoleTitle: "Engineer", WorkflowStageID: 5, ReleaseID: activeReleaseID(),
+		ReleaseStatus: store.ReleaseInProgress,
 	}
 	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionSkip {
@@ -108,7 +108,7 @@ func TestDecideAdvancesSuccess(t *testing.T) {
 	pool := newAgentPool(nil)
 	tk := store.OrchestratorTicket{
 		TicketID: "DEV-4", ProjectID: 1, Stage: "develop", State: store.StateSuccess,
-		WorkflowStageID: 5, SprintID: sealedSprintID(), SprintStage: store.SprintSealedStage,
+		WorkflowStageID: 5, ReleaseID: activeReleaseID(), ReleaseStatus: store.ReleaseInProgress,
 	}
 	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, true)
 	if d.Kind != ActionAdvance {
@@ -171,8 +171,8 @@ func TestDecideSkipsDisabledProject(t *testing.T) {
 	pool := newAgentPool([]store.OrchestratorAgent{engineerAgent()})
 	tk := store.OrchestratorTicket{
 		TicketID: "DEV-8", ProjectID: 1, Stage: "develop", State: store.StateIdle,
-		RoleTitle: "Engineer", WorkflowStageID: 5, SprintID: sealedSprintID(),
-		SprintStage: store.SprintSealedStage,
+		RoleTitle: "Engineer", WorkflowStageID: 5, ReleaseID: activeReleaseID(),
+		ReleaseStatus: store.ReleaseInProgress,
 	}
 	d := decide(tk, pool, time.Now().UTC(), time.Minute, 0, false /* project disabled */)
 	if d.Kind != ActionSkip {
@@ -184,8 +184,8 @@ func TestDecideSkipsDraftAndNonLeaf(t *testing.T) {
 	pool := newAgentPool([]store.OrchestratorAgent{engineerAgent()})
 	base := store.OrchestratorTicket{
 		TicketID: "DEV-9", ProjectID: 1, Stage: "develop", State: store.StateIdle,
-		RoleTitle: "Engineer", WorkflowStageID: 5, SprintID: sealedSprintID(),
-		SprintStage: store.SprintSealedStage,
+		RoleTitle: "Engineer", WorkflowStageID: 5, ReleaseID: activeReleaseID(),
+		ReleaseStatus: store.ReleaseInProgress,
 	}
 	draft := base
 	draft.Draft = true
@@ -222,7 +222,7 @@ func TestAgentPoolPicksLeastBusyAndBalances(t *testing.T) {
 
 // ── DB-backed apply test ──────────────────────────────────────────────────────
 
-func TestPassAssignsInSealedSprint(t *testing.T) {
+func TestPassAssignsInActiveRelease(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "orch.db")
 	if err := store.Init(dbPath, "admin", "password"); err != nil {
@@ -265,11 +265,17 @@ func TestPassAssignsInSealedSprint(t *testing.T) {
 		t.Fatalf("configure agent: %v", err)
 	}
 
-	// A ticket, put it on the workflow (sets role to first stage role), make it a
-	// leaf, non-draft, develop/idle, and place it in a sealed (active) sprint.
-	tk, err := store.CreateTicket(ctx, db, store.TicketCreateParams{ProjectID: proj.ID, Type: "story", Title: "Build it"})
+	// A feature ticket holding a child story. The story is the leaf the
+	// orchestrator works; the release attaches to the feature and propagates
+	// release_id to the child.
+	feature, err := store.CreateTicket(ctx, db, store.TicketCreateParams{ProjectID: proj.ID, Type: "feature", Title: "The feature"})
 	if err != nil {
-		t.Fatalf("CreateTicket: %v", err)
+		t.Fatalf("CreateTicket(feature): %v", err)
+	}
+	featureID := feature.ID
+	tk, err := store.CreateTicket(ctx, db, store.TicketCreateParams{ProjectID: proj.ID, ParentID: &featureID, Type: "story", Title: "Build it"})
+	if err != nil {
+		t.Fatalf("CreateTicket(story): %v", err)
 	}
 	if _, err := store.SetTicketWorkflow(ctx, db, tk.ID, wf.ID); err != nil {
 		t.Fatalf("SetTicketWorkflow: %v", err)
@@ -278,17 +284,22 @@ func TestPassAssignsInSealedSprint(t *testing.T) {
 	if _, err := store.SetTicketDraft(ctx, db, tk.ID, false, "admin", adminID); err != nil {
 		t.Fatalf("SetTicketDraft: %v", err)
 	}
-	sprint, err := store.CreateSprint(ctx, db, int(proj.ID), "S1")
+	// Place the leaf story at develop/idle (direct SQL, seeding-style, bypassing
+	// the ready-stage gate the same way tk demo does).
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET stage = 'develop', state = 'idle', status = 'develop/idle' WHERE ticket_id = ?`, tk.ID); err != nil {
+		t.Fatalf("set develop/idle: %v", err)
+	}
+	// Create a release, attach the feature (propagates release_id to the story),
+	// and activate it.
+	release, err := store.CreateRelease(ctx, db, int(proj.ID), "R1", "", "")
 	if err != nil {
-		t.Fatalf("CreateSprint: %v", err)
+		t.Fatalf("CreateRelease: %v", err)
 	}
-	// Place the leaf at develop/idle inside the sprint (direct SQL, seeding-style,
-	// bypassing the ready-stage gate the same way tk demo does).
-	if _, err := db.ExecContext(ctx, `UPDATE tickets SET stage = 'develop', state = 'idle', status = 'develop/idle', sprint_id = ? WHERE ticket_id = ?`, sprint.ID, tk.ID); err != nil {
-		t.Fatalf("set develop/idle in sprint: %v", err)
+	if err := store.AssignFeatureToRelease(ctx, db, feature.ID, release.ID); err != nil {
+		t.Fatalf("AssignFeatureToRelease: %v", err)
 	}
-	if _, err := store.SealSprint(ctx, db, sprint.ID); err != nil {
-		t.Fatalf("SealSprint: %v", err)
+	if _, err := store.ActivateRelease(ctx, db, release.ID); err != nil {
+		t.Fatalf("ActivateRelease: %v", err)
 	}
 
 	// Run a real pass.

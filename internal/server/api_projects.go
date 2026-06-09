@@ -179,8 +179,8 @@ func (r *router) registerProjectHandlers() {
 			}
 			return
 		}
-		if len(parts) == 2 && parts[1] == "sprints" {
-			if handled := handleProjectSprintsRoute(w, r, db, parts[0]); handled {
+		if len(parts) == 2 && parts[1] == "releases" {
+			if handled := handleProjectReleasesRoute(w, r, db, parts[0]); handled {
 				return
 			}
 		}

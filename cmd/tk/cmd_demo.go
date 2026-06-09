@@ -269,7 +269,6 @@ func runDemo(args []string) error {
 	numUsers := clamp(*n/50, 5, 100)
 	numTeams := clamp(*n/200, 2, 30)
 	numProjects := clamp(*n/200, 2, 20)
-	numSprintsPerProj := 6 // always: sprints 1-4 closed, 5 active (current), 6 design
 
 	fmt.Printf("Creating demo database at %s (~%d items)...\n", *dbPath, *n)
 
@@ -524,287 +523,225 @@ func runDemo(args []string) error {
 	}
 	fmt.Printf("  ✓ Created programme %q with %d projects\n", programme.Name, len(projects))
 
-	// Sprint timeline: 6 sprints, 2 weeks each, today = mid-sprint 5.
-	// Sprint 5 (index 4) started 7 days ago; each prior sprint is 14 days earlier.
+	// ── Releases → Features → Epics → Stories ────────────────────────────────
+	// Sprints are gone. Work is organised as Releases (delivery containers) that
+	// hold Features (the "grand plan" / requirement), which break down into Epics,
+	// which break down into Stories/Bugs.
 	now := time.Now().UTC()
-	sprintLen := 14 * 24 * time.Hour
-	activeSprintIdx := numSprintsPerProj - 2 // index 4 for 6 sprints
-	midSprintOffset := sprintLen / 2         // 7 days
-
 	sqlTS := func(t time.Time) string { return t.Format("2006-01-02 15:04:05") }
 
-	// sprintStart(si) returns the start of sprint at 0-based index si.
-	sprintStart := func(si int) time.Time {
-		return now.Add(-midSprintOffset - time.Duration(activeSprintIdx-si)*sprintLen)
+	type projectMeta struct {
+		project store.Project
+		pool    string
 	}
-	sprintEnd := func(si int) time.Time { return sprintStart(si).Add(sprintLen) }
-
-	// Create sprints per project
-	type projectSprints struct {
-		project    store.Project
-		sprints    []store.Sprint
-		pool       string
-		sprintIdxs []int // 0-based sprint index for each sprint
-	}
-	projectData := make([]projectSprints, len(projects))
-	totalSprints := 0
-
+	projectData := make([]projectMeta, len(projects))
 	for pi, proj := range projects {
 		pool := "mixed"
 		if pi < len(projectPool) {
 			pool = projectPool[pi].pool
 		}
-		sprints := make([]store.Sprint, 0, numSprintsPerProj)
-		sprintIdxs := make([]int, 0, numSprintsPerProj)
-		for si := 0; si < numSprintsPerProj; si++ {
-			sp, err := store.CreateSprint(ctx, db, int(proj.ID), "")
-			if err != nil {
-				return fmt.Errorf("creating sprint %d for project %s: %w", si+1, proj.Title, err)
-			}
-			var stage string
-			switch {
-			case si < activeSprintIdx:
-				stage = "closed"
-			case si == activeSprintIdx:
-				stage = "active"
-			default:
-				stage = "design"
-			}
-			sp, err = store.UpdateSprint(ctx, db, sp.ID, sp.Title, stage)
-			if err != nil {
-				return fmt.Errorf("updating sprint stage: %w", err)
-			}
-			// Backdate sprint created_at to sprint start
-			ts := sqlTS(sprintStart(si))
-			if _, err := db.ExecContext(ctx, `UPDATE sprints SET created_at = ?, updated_at = ? WHERE id = ?`, ts, ts, sp.ID); err != nil {
-				return fmt.Errorf("backdating sprint: %w", err)
-			}
-			sprints = append(sprints, sp)
-			sprintIdxs = append(sprintIdxs, si)
-		}
-		projectData[pi] = projectSprints{project: proj, sprints: sprints, pool: pool, sprintIdxs: sprintIdxs}
-		totalSprints += len(sprints)
+		projectData[pi] = projectMeta{project: proj, pool: pool}
 	}
 
-	fmt.Printf("  ✓ Created %d sprints\n", totalSprints)
-
-	// Create tickets
-	fmt.Printf("  Creating %d tickets...", numTickets)
-
-	// Distribute tickets across projects
-	ticketsPerProject := numTickets / len(projects)
-	extraTickets := numTickets % len(projects)
-
-	// Track sprint assignment for backdating: map ticketID → sprint 0-based index (-1 = backlog)
-	type ticketMeta struct {
-		id        string
-		sprintIdx int // -1 = backlog
-		stage     string
-	}
-	allTicketMeta := make([]ticketMeta, 0, numTickets)
-
-	ticketIndex := 0
-
-	// sprint5AssignCount tracks how many tickets have been routed to sprint 5 so we can
-	// send every other one to the backlog instead.
-	sprint5AssignCount := 0
-
-	for pi, pd := range projectData {
-		count := ticketsPerProject
-		if pi < extraTickets {
-			count++
+	// setTicketFields applies seed-only stage/state/draft/release/timestamps via
+	// direct SQL, bypassing the lifecycle advance guards.
+	setTicketFields := func(id, stage, state string, draft bool, created time.Time) error {
+		d := 0
+		if draft {
+			d = 1
 		}
+		ts := sqlTS(created)
+		_, err := db.ExecContext(ctx, `UPDATE tickets SET stage = ?, state = ?, status = ?, draft = ?, created_at = ?, updated_at = ? WHERE ticket_id = ?`,
+			stage, state, stage+"/"+state, d, ts, ts, id)
+		return err
+	}
 
-		// Pick title pool for this project
-		var titlePool []string
-		switch pd.pool {
+	titlesFor := func(pool string) []string {
+		switch pool {
 		case "frontend":
-			titlePool = frontendTitles
+			return frontendTitles
 		case "backend":
-			titlePool = backendTitles
+			return backendTitles
 		case "infra":
-			titlePool = infraTitles
+			return infraTitles
 		default:
-			titlePool = append(titlePool, frontendTitles...)
-			titlePool = append(titlePool, backendTitles...)
-			titlePool = append(titlePool, bugTitles...)
+			out := append([]string{}, frontendTitles...)
+			out = append(out, backendTitles...)
+			return out
 		}
+	}
 
-		// Each project round-robins through all its sprints.
-		sprintCursor := 0
-
-		for ti := 0; ti < count; ti++ {
-			localIdx := ticketIndex
-
-			// Pick type
-			mod20 := localIdx % 20
-			var ticketType string
-			switch {
-			case mod20 < 10:
-				ticketType = "task"
-			case mod20 < 15:
-				ticketType = "bug"
-			case mod20 < 18:
-				ticketType = "chore"
-			default:
-				ticketType = "epic"
-			}
-
-			// Pick title
-			var title string
-			switch ticketType {
-			case "bug":
-				title = bugTitles[localIdx%len(bugTitles)]
-			case "chore":
-				title = choreTitles[localIdx%len(choreTitles)]
-			default:
-				title = titlePool[localIdx%len(titlePool)]
-			}
-
-			// Build description
-			descTmpl := descTemplates[localIdx%len(descTemplates)]
-			words := strings.Fields(title)
-			word1 := "feature"
-			if len(words) > 0 {
-				word1 = words[0]
-			}
-			word2 := pd.project.Title
-			var description string
-			verbCount := strings.Count(descTmpl, "%s")
-			switch verbCount {
-			case 0:
-				description = descTmpl
-			case 1:
-				description = fmt.Sprintf(descTmpl, word1)
-			default:
-				description = fmt.Sprintf(descTmpl, word1, word2)
-			}
-
-			assignee := users[localIdx%len(users)].Username
-			author := users[(localIdx+1)%len(users)].Username
-			priority := (localIdx % 5) + 1
-
-			// Determine which sprint this ticket belongs to (round-robin across all sprints).
-			targetSprintLocalIdx := sprintCursor % len(pd.sprints)
-			targetSprintGlobalIdx := pd.sprintIdxs[targetSprintLocalIdx]
-			sprintCursor++
-
-			// Determine stage/state based on which sprint the ticket is in.
-			var stage, state string
-			isBacklog := false
-			if targetSprintGlobalIdx == activeSprintIdx {
-				// Active sprint: half go to the backlog, half into the sprint.
-				if sprint5AssignCount%2 == 1 {
-					isBacklog = true
-					stage, state = "design", store.StateIdle
-				} else {
-					// In active sprint: design/idle → develop → test → done
-					switch localIdx % 10 {
-					case 0, 1:
-						stage, state = "design", store.StateIdle
-					case 2, 3, 4:
-						stage, state = "develop", store.StateIdle
-					case 5, 6:
-						stage, state = "develop", store.StateActive
-					case 7, 8:
-						stage, state = "done", store.StateSuccess
-					default:
-						stage, state = "test", store.StateActive
-					}
-				}
-				sprint5AssignCount++
-			} else if targetSprintGlobalIdx > activeSprintIdx {
-				// Future sprint: assign to design/idle (planned work)
-				stage, state = "design", store.StateIdle
-			} else {
-				// Past (closed) sprint: 80% done, 20% test/success
-				switch localIdx % 10 {
-				case 0, 1, 2, 3, 4, 5, 6, 7:
-					stage, state = "done", store.StateSuccess
+	// Release blueprints applied to every project.
+	type relSpec struct {
+		title   string
+		purpose string
+		status  string
+		target  time.Time
+		// storyStage returns (stage, state) for a story by index.
+		storyStage func(i int) (string, string)
+		draftFeat  bool // features still being refined?
+	}
+	relSpecs := []relSpec{
+		{
+			title: "1.0 — Foundation", purpose: "Establish the core product: the must-have capabilities for launch.",
+			status: store.ReleaseComplete, target: now.AddDate(0, 0, -20),
+			storyStage: func(i int) (string, string) { return "done", store.StateSuccess },
+		},
+		{
+			title: "1.1 — Growth", purpose: "Round out the experience and harden what shipped in 1.0.",
+			status: store.ReleaseInProgress, target: now.AddDate(0, 0, 14),
+			storyStage: func(i int) (string, string) {
+				switch i % 5 {
+				case 0, 1:
+					return "done", store.StateSuccess
+				case 2:
+					return "test", store.StateActive
+				case 3:
+					return "develop", store.StateActive
 				default:
-					stage, state = "test", store.StateSuccess
+					return "develop", store.StateIdle
 				}
-			}
-			// Idle tickets have no assignee — they are available to be picked up.
-			if state == store.StateIdle {
-				assignee = ""
-			}
+			},
+		},
+		{
+			title: "2.0 — Horizon", purpose: "The next big bet — still being shaped with the Product Owner.",
+			status: store.ReleaseInDesign, target: now.AddDate(0, 1, 0),
+			storyStage: func(i int) (string, string) { return "design", store.StateIdle },
+			draftFeat:  true,
+		},
+	}
 
-			t, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
-				ProjectID:   pd.project.ID,
-				Type:        ticketType,
-				Title:       title,
-				Description: description,
-				Priority:    priority,
-				Assignee:    assignee,
-				Author:      author,
-				CreatedBy:   adminUser.ID,
-				State:       "idle",
+	featCount, epicCount, storyCount, relCount := 0, 0, 0, 0
+	ti := 0
+
+	// makeFeature builds one feature + its epics + stories, returns the feature ticket ID.
+	makeFeature := func(pd projectMeta, featTitle, featDesc string, spec *relSpec, created time.Time) (string, error) {
+		pool := titlesFor(pd.pool)
+		feat, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
+			ProjectID: pd.project.ID, Type: "feature", Title: featTitle, Description: featDesc,
+			Priority: (ti % 5) + 1, Author: adminUser.Username, CreatedBy: adminUser.ID, State: "idle",
+		})
+		if err != nil {
+			return "", err
+		}
+		ti++
+		featCount++
+		featDraft := spec != nil && spec.draftFeat
+		featStage, featState := "design", store.StateIdle
+		if spec != nil && spec.status == store.ReleaseComplete {
+			featStage, featState = "done", store.StateSuccess
+		}
+		if err := setTicketFields(feat.ID, featStage, featState, featDraft, created); err != nil {
+			return "", err
+		}
+		for e := 0; e < 2; e++ {
+			epicTitle := "Epic: " + pool[ti%len(pool)]
+			fid := feat.ID
+			epic, eErr := store.CreateTicket(ctx, db, store.TicketCreateParams{
+				ProjectID: pd.project.ID, ParentID: &fid, Type: "epic",
+				Title: epicTitle, Description: descTemplates[ti%len(descTemplates)],
+				Priority: (ti % 5) + 1, Author: adminUser.Username, CreatedBy: adminUser.ID, State: "idle",
 			})
-			if err != nil {
-				return fmt.Errorf("creating ticket %d: %w", localIdx, err)
+			if eErr != nil {
+				return "", eErr
 			}
-
-			if stage != "design" || state != "idle" {
-				_, _ = store.UpdateTicket(ctx, db, t.ID, store.TicketUpdateParams{
-					Title:       t.Title,
-					Description: t.Description,
-					Stage:       stage,
-					State:       state,
-					Priority:    t.Priority,
-					Assignee:    t.Assignee,
-					UpdatedBy:   adminUser.Username,
+			ti++
+			epicCount++
+			_ = setTicketFields(epic.ID, "design", store.StateIdle, false, created)
+			for s := 0; s < 3; s++ {
+				stType := "story"
+				stTitle := pool[(ti+1)%len(pool)]
+				switch ti % 4 {
+				case 3:
+					stType = "bug"
+					stTitle = bugTitles[ti%len(bugTitles)]
+				case 2:
+					stType = "chore"
+					stTitle = choreTitles[ti%len(choreTitles)]
+				}
+				eid := epic.ID
+				st, sErr := store.CreateTicket(ctx, db, store.TicketCreateParams{
+					ProjectID: pd.project.ID, ParentID: &eid, Type: stType,
+					Title: stTitle, Description: descTemplates[ti%len(descTemplates)],
+					Priority: (ti % 5) + 1, Author: adminUser.Username, CreatedBy: adminUser.ID, State: "idle",
 				})
-			}
-
-			if !isBacklog {
-				// Direct SQL to bypass the closed-sprint guard (valid for seeding only).
-				// Sprint tickets are not drafts — they are ready for the orchestrator
-				// to assign and work.
-				spID := pd.sprints[targetSprintLocalIdx].ID
-				if _, err := db.ExecContext(ctx, `UPDATE tickets SET sprint_id = ?, draft = 0 WHERE ticket_id = ?`, spID, t.ID); err != nil {
-					return fmt.Errorf("assigning sprint to ticket %s: %w", t.ID, err)
+				if sErr != nil {
+					return "", sErr
 				}
-			} else {
-				// Backlog tickets are planned work, NOT drafts in refinement. Clear the
-				// draft flag (CreateTicket defaults it to 1) so they don't all show the
-				// "refining" indicator — only the explicit refine ideas below do.
-				if _, err := db.ExecContext(ctx, `UPDATE tickets SET draft = 0 WHERE ticket_id = ?`, t.ID); err != nil {
-					return fmt.Errorf("clearing draft on backlog ticket %s: %w", t.ID, err)
+				stStage, stState := "design", store.StateIdle
+				stDraft := false
+				if spec != nil {
+					stStage, stState = spec.storyStage(ti)
+					stDraft = spec.draftFeat
+				} else {
+					stDraft = true // backlog features are still being refined
+				}
+				if err := setTicketFields(st.ID, stStage, stState, stDraft, created); err != nil {
+					return "", err
+				}
+				ti++
+				storyCount++
+			}
+		}
+		return feat.ID, nil
+	}
+
+	fmt.Printf("  Building release/feature/epic/story hierarchy...")
+	for _, pd := range projectData {
+		// Releases with their features.
+		for ri := range relSpecs {
+			spec := relSpecs[ri]
+			rel, err := store.CreateRelease(ctx, db, int(pd.project.ID), spec.title, spec.purpose, spec.target.Format("2006-01-02"))
+			if err != nil {
+				return fmt.Errorf("creating release: %w", err)
+			}
+			relCount++
+			created := now.AddDate(0, 0, -10)
+			if spec.status == store.ReleaseComplete {
+				created = now.AddDate(0, 0, -40)
+			}
+			featureIDs := make([]string, 0, 2)
+			for f := 0; f < 2; f++ {
+				ftitle := "Feature: " + titlesFor(pd.pool)[ti%len(titlesFor(pd.pool))]
+				fdesc := "Grand plan — " + descTemplates[ti%len(descTemplates)]
+				fid, fErr := makeFeature(pd, ftitle, fdesc, &spec, created)
+				if fErr != nil {
+					return fErr
+				}
+				featureIDs = append(featureIDs, fid)
+			}
+			// Attach features to the release while it is in_design, then move the
+			// release to its target status.
+			for _, fid := range featureIDs {
+				if err := store.AssignFeatureToRelease(ctx, db, fid, rel.ID); err != nil {
+					return fmt.Errorf("assigning feature to release: %w", err)
 				}
 			}
-
-			allTicketMeta = append(allTicketMeta, ticketMeta{
-				id: t.ID,
-				sprintIdx: func() int {
-					if isBacklog {
-						return -1
-					}
-					return targetSprintGlobalIdx
-				}(),
-				stage: stage,
-			})
-
-			ticketIndex++
-			if ticketIndex%1000 == 0 {
-				fmt.Printf(" [%d/%d]", ticketIndex, numTickets)
+			if spec.status != store.ReleaseInDesign {
+				if _, err := store.SetReleaseStatus(ctx, db, rel.ID, spec.status); err != nil {
+					return fmt.Errorf("setting release status: %w", err)
+				}
+			}
+		}
+		// Backlog features (not in any release) — still being refined.
+		for b := 0; b < 2; b++ {
+			btitle := "Feature: " + titlesFor(pd.pool)[(ti+3)%len(titlesFor(pd.pool))]
+			if _, err := makeFeature(pd, btitle, "Backlog idea awaiting refinement.", nil, now.AddDate(0, 0, -2)); err != nil {
+				return err
 			}
 		}
 	}
 	fmt.Println(" done")
+	fmt.Printf("  ✓ Seeded %d releases, %d features, %d epics, %d stories/bugs\n", relCount, featCount, epicCount, storyCount)
 
-	// A few backlog ideas sitting in the refine stage so the orchestrator's
-	// preparation loop has work: the refiner agent is assigned these and opens the
-	// idea→refinement dialogue (Phase 6).
+	// A couple of standalone refine ideas so the orchestrator's preparation loop
+	// has draft work to chew on.
 	if len(projects) > 0 {
 		refineIdeas := []struct{ title, desc string }{
-			{"Let users export their data as a portable archive", "A user has asked to download everything they've created. Scope is unclear: which entities, which formats, how big."},
-			{"Add a weekly digest email summarising activity", "Stakeholders want a recap. Unclear what to include, cadence, and opt-out."},
+			{"Let users export their data as a portable archive", "A user asked to download everything they've created. Scope is unclear: which entities, which formats, how big."},
 			{"Support single sign-on for enterprise customers", "Large prospect needs SSO. Which protocols and providers are in scope is undecided."},
 		}
 		for _, idea := range refineIdeas {
-			// New ideas start at the workflow's first stage (design = a backlog stage)
-			// as drafts, which is exactly "in refinement" — no special stage needed.
 			if _, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
 				ProjectID: projects[0].ID, Type: "idea", Title: idea.title, Description: idea.desc,
 				Author: adminUser.Username, CreatedBy: adminUser.ID, State: "idle",
@@ -812,53 +749,8 @@ func runDemo(args []string) error {
 				return fmt.Errorf("creating refine idea: %w", err)
 			}
 		}
-		fmt.Printf("  ✓ Seeded %d backlog ideas in refinement for the orchestrator's preparation loop\n", len(refineIdeas))
+		fmt.Printf("  ✓ Seeded %d backlog ideas in refinement\n", len(refineIdeas))
 	}
-
-	// Backdate ticket timestamps based on their sprint assignment.
-	fmt.Printf("  Backdating %d tickets...", len(allTicketMeta))
-	for _, tm := range allTicketMeta {
-		var createdAt, updatedAt string
-		if tm.sprintIdx == -1 {
-			// Backlog: created in the last 3 days
-			offset := time.Duration(rand.Intn(3*24*60)) * time.Minute
-			createdAt = sqlTS(now.Add(-offset))
-			updatedAt = createdAt
-		} else {
-			si := tm.sprintIdx
-			start := sprintStart(si)
-			end := sprintEnd(si)
-			if si == activeSprintIdx {
-				end = now // cap active sprint end at now
-			}
-			dur := end.Sub(start)
-			if dur <= 0 {
-				dur = time.Hour
-			}
-			// Created randomly in the first half of the sprint
-			halfDur := dur / 2
-			createOffset := time.Duration(rand.Int63n(int64(halfDur)))
-			createdAt = sqlTS(start.Add(createOffset))
-			if (tm.stage == "done" || tm.stage == "test") && si < activeSprintIdx {
-				// Completed/rejected in the second half of the sprint
-				doneOffset := halfDur + time.Duration(rand.Int63n(int64(halfDur)))
-				updatedAt = sqlTS(start.Add(doneOffset))
-			} else if si == activeSprintIdx {
-				// Updated at some point since sprint start
-				updateOffset := time.Duration(rand.Int63n(int64(end.Sub(start))))
-				updatedAt = sqlTS(start.Add(updateOffset))
-			} else {
-				// Past closed sprint, not done: updated mid-sprint
-				updateOffset := halfDur + time.Duration(rand.Int63n(int64(halfDur)/2+1))
-				updatedAt = sqlTS(start.Add(updateOffset))
-			}
-		}
-		if _, err := db.ExecContext(ctx, `UPDATE tickets SET created_at = ?, updated_at = ? WHERE ticket_id = ?`,
-			createdAt, updatedAt, tm.id); err != nil {
-			return fmt.Errorf("backdating ticket %s: %w", tm.id, err)
-		}
-	}
-	fmt.Println(" done")
 
 	// Create comments
 	fmt.Printf("  Creating %d comments...", numComments)

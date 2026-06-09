@@ -1407,7 +1407,9 @@ func (r *router) registerTicketHandlers() {
 				}
 				return
 			}
-			if len(parts) == 2 && parts[1] == "sprint" {
+			// PUT /api/tickets/{id}/release — add the feature (subtree) to a release
+			// (release_id set) or remove it (release_id null).
+			if len(parts) == 2 && parts[1] == "release" {
 				if !canWriteProject(role) {
 					writeAuthError(w, store.ErrForbidden)
 					return
@@ -1417,14 +1419,20 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var payload struct {
-					SprintID *int `json:"sprint_id"`
+					ReleaseID *int `json:"release_id"`
 				}
 				if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				if err := store.SetTicketSprint(r.Context(), db, id, payload.SprintID); err != nil {
-					writeStoreError(w, err)
+				var actErr error
+				if payload.ReleaseID == nil {
+					actErr = store.RemoveFeatureFromRelease(r.Context(), db, id)
+				} else {
+					actErr = store.AssignFeatureToRelease(r.Context(), db, id, *payload.ReleaseID)
+				}
+				if actErr != nil {
+					writeStoreError(w, actErr)
 					return
 				}
 				ticket, err := store.GetTicket(r.Context(), db, id)
@@ -1434,6 +1442,21 @@ func (r *router) registerTicketHandlers() {
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			// POST /api/tickets/{id}/clone — deep-clone a feature subtree.
+			if len(parts) == 2 && parts[1] == "clone" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				cloned, cloneErr := store.CloneFeature(r.Context(), db, id, user.Username, user.ID)
+				if cloneErr != nil {
+					writeStoreError(w, cloneErr)
+					return
+				}
+				notify("ticket_updated", cloned.ProjectID, cloned.ID)
+				writeJSON(w, http.StatusCreated, cloned)
 				return
 			}
 			if len(parts) == 2 && parts[1] == "prompt" && r.Method == http.MethodGet {

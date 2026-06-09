@@ -314,16 +314,19 @@ CREATE TABLE IF NOT EXISTS projects (
 	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id)
 );
 
-CREATE TABLE IF NOT EXISTS sprints (
+CREATE TABLE IF NOT EXISTS releases (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	number INTEGER NOT NULL,
 	title TEXT NOT NULL DEFAULT '',
-	stage TEXT NOT NULL DEFAULT 'design',
+	purpose TEXT NOT NULL DEFAULT '',
+	target_date TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL DEFAULT 'in_design',
+	designed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	started_at TEXT NOT NULL DEFAULT '',
+	completed_at TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	UNIQUE(project_id, number)
+	FOREIGN KEY(project_id) REFERENCES projects(project_id)
 );
 
 CREATE TABLE IF NOT EXISTS tickets (
@@ -357,7 +360,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 	deleted INTEGER NOT NULL DEFAULT 0,
 	previous_workflow_stage_id INTEGER,
 	previous_role_id INTEGER,
-	sprint_id INTEGER,
+	release_id INTEGER,
 	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -367,7 +370,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 	FOREIGN KEY(created_by) REFERENCES users(user_id),
 	FOREIGN KEY(workflow_stage_id) REFERENCES workflow_stages(workflow_stage_id),
 	FOREIGN KEY(role_id) REFERENCES roles(role_id),
-	FOREIGN KEY(sprint_id) REFERENCES sprints(id)
+	FOREIGN KEY(release_id) REFERENCES releases(id)
 );
 
 CREATE TABLE IF NOT EXISTS stories (
@@ -1552,28 +1555,31 @@ CREATE TABLE user_notifications (
 		}
 	}
 
-	// Add sprints table if it doesn't exist yet (existing databases).
-	if !tableExists(ctx, db, "sprints") {
+	// Add releases table if it doesn't exist yet (existing databases).
+	if !tableExists(ctx, db, "releases") {
 		if _, err := db.ExecContext(ctx, `
-			CREATE TABLE sprints (
+			CREATE TABLE releases (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				project_id INTEGER NOT NULL,
-				number INTEGER NOT NULL,
 				title TEXT NOT NULL DEFAULT '',
-				stage TEXT NOT NULL DEFAULT 'design',
+				purpose TEXT NOT NULL DEFAULT '',
+				target_date TEXT NOT NULL DEFAULT '',
+				status TEXT NOT NULL DEFAULT 'in_design',
+				designed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				started_at TEXT NOT NULL DEFAULT '',
+				completed_at TEXT NOT NULL DEFAULT '',
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY(project_id) REFERENCES projects(project_id),
-				UNIQUE(project_id, number)
+				FOREIGN KEY(project_id) REFERENCES projects(project_id)
 			)
 		`); err != nil {
 			return err
 		}
 	}
 
-	// Add sprint_id column to tickets if it doesn't exist yet.
-	if !columnExists(ctx, db, "tickets", "sprint_id") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN sprint_id INTEGER REFERENCES sprints(id)`); err != nil {
+	// Add release_id column to tickets if it doesn't exist yet.
+	if !columnExists(ctx, db, "tickets", "release_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN release_id INTEGER REFERENCES releases(id)`); err != nil {
 			return err
 		}
 	}
