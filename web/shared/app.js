@@ -85,8 +85,8 @@
             navOrder: [],
             users: [],
             teamMembers: [],
-            sprints: [],
-            selectedSprintID: "backlog",
+            releases: [],
+            selectedReleaseID: "backlog",
             boardPerspective: localStorage.getItem("site2.board-view") || "board",
             org: null,
             programmes: [],
@@ -97,7 +97,7 @@
         const TICKET_TYPES = ["epic", "task", "bug", "spike", "chore", "story", "note", "question", "requirement", "decision"];
         const FALLBACK_STAGES = ["backlog", "todo", "doing", "done"];
         const BACKLOG_BOARD_STAGES = ["idea", "refine", "ready"];
-        const SPRINT_BOARD_STAGES = ["ready", "develop", "complete", "reject"];
+        const RELEASE_BOARD_STAGES = ["ready", "develop", "complete", "reject"];
         const AUTH_STORAGE_KEY = "site2.auth";
         const SELECTED_PROJECT_STORAGE_KEY = "site2.selectedProjectID";
         const SELECTED_VIEW_STORAGE_KEY = "site2.selectedView";
@@ -226,7 +226,7 @@
             adminSummaryContent: document.getElementById("admin-summary-content"),
             boardSearch: document.getElementById("board-search"),
             boardHideDone: document.getElementById("board-hide-done"),
-            boardSprintSelect: document.getElementById("board-sprint-select"),
+            boardReleaseSelect: document.getElementById("board-release-select"),
             interventionList: document.getElementById("intervention-list"),
             interventionFilter: document.getElementById("intervention-filter"),
             interventionSort: document.getElementById("intervention-sort"),
@@ -1414,7 +1414,7 @@
             const workflow = getCurrentProjectWorkflow();
             const allStages = workflow && workflow.stages ? workflow.stages : [];
             const stageMap = new Map(allStages.map((stage) => [stage.name, stage]));
-            const sel = state.selectedSprintID;
+            const sel = state.selectedReleaseID;
 
             let primaryNames;
             if (sel === "backlog") {
@@ -1425,10 +1425,10 @@
                     : BACKLOG_BOARD_STAGES;
             } else if (sel && sel !== "") {
                 // Show stages NOT marked as backlog stages; fall back to hardcoded list if workflow has none flagged.
-                const sprintStages = allStages.filter((s) => !s.is_backlog_stage);
-                primaryNames = sprintStages.length > 0
-                    ? sprintStages.map((s) => s.name)
-                    : SPRINT_BOARD_STAGES;
+                const releaseStages = allStages.filter((s) => !s.is_backlog_stage);
+                primaryNames = releaseStages.length > 0
+                    ? releaseStages.map((s) => s.name)
+                    : RELEASE_BOARD_STAGES;
             } else {
                 primaryNames = getStageOptions();
             }
@@ -1438,7 +1438,7 @@
             // matches the workflow definition regardless of load timing.
             const visibleTickets = sel === "backlog" || !sel || sel === ""
                 ? state.tickets
-                : sprintFilterTickets(state.tickets);
+                : releaseFilterTickets(state.tickets);
             const presentStages = new Set(visibleTickets.map((t) => t.stage).filter(Boolean));
 
             // Use sort_order from the stage object itself (not array index) for stability.
@@ -1628,7 +1628,7 @@
             state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
             populateTicketTypeAndStageSelects();
             await loadProjectAgentModelConfig();
-            await Promise.all([loadTickets(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
+            await Promise.all([loadTickets(), loadReleases(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
             renderAll();
         }
 
@@ -1855,22 +1855,22 @@
             state.interventionComments = Object.fromEntries(interventionDetailEntries.map(([ticketID, detail]) => [ticketID, detail.comments]));
         }
 
-        async function loadSprints() {
+        async function loadReleases() {
             if (!state.selectedProjectID) {
-                state.sprints = [];
+                state.releases = [];
                 return;
             }
             try {
-                state.sprints = await apiClient.listSprints(state.selectedProjectID);
+                state.releases = await apiClient.listReleases(state.selectedProjectID);
             } catch (e) {
-                state.sprints = [];
+                state.releases = [];
             }
-            // Restore selected sprint from localStorage
-            const saved = localStorage.getItem("site2.sprint." + state.selectedProjectID);
+            // Restore selected release from localStorage
+            const saved = localStorage.getItem("site2.release." + state.selectedProjectID);
             if (saved !== null) {
-                state.selectedSprintID = saved;
+                state.selectedReleaseID = saved;
             } else {
-                state.selectedSprintID = "backlog";
+                state.selectedReleaseID = "backlog";
             }
         }
 
@@ -2048,7 +2048,7 @@
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
-            await Promise.all([loadTickets(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
+            await Promise.all([loadTickets(), loadReleases(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
             renderAll();
         }
 
@@ -2189,7 +2189,7 @@
             renderTeams();
             renderUsers();
             renderTeamMembers();
-            renderSprintSelect();
+            renderReleaseSelect();
             renderProjectAgentBar();
             renderTicketBoard();
             renderTicketListView();
@@ -3248,16 +3248,16 @@
                 : "<option value=\"\">No users available</option>";
         }
 
-        function sprintFilterTickets(tickets) {
-            const sel = state.selectedSprintID;
+        function releaseFilterTickets(tickets) {
+            const sel = state.selectedReleaseID;
             if (sel === "" || sel === null || sel === undefined) {
                 return tickets; // All
             }
             if (sel === "backlog") {
-                return tickets.filter((t) => t.sprint_id === null || t.sprint_id === undefined);
+                return tickets.filter((t) => t.release_id === null || t.release_id === undefined);
             }
             const numID = Number(sel);
-            return tickets.filter((t) => t.sprint_id === numID);
+            return tickets.filter((t) => t.release_id === numID);
         }
 
         function agentStatusIcon(agent) {
@@ -3305,29 +3305,28 @@
                 agents.map((s) => agentStatusIcon(s.agent || s)).join("");
         }
 
-        function renderSprintSelect() {
-            if (!els.boardSprintSelect) {
+        function renderReleaseSelect() {
+            if (!els.boardReleaseSelect) {
                 return;
             }
-            const allSprints = state.sprints || [];
-            const sel = state.selectedSprintID;
+            const allReleases = state.releases || [];
+            const sel = state.selectedReleaseID;
 
-            // Order: descending by sprint number (most recent first)
-            const ordered = allSprints.slice().sort((a, b) => b.number - a.number);
+            // Order: most recently created first.
+            const ordered = allReleases.slice().sort((a, b) => (b.id || 0) - (a.id || 0));
 
-            const sprintOption = (s) => {
-                const stateLabel = s.stage === "active" ? " (active)" : s.stage === "closed" ? " (closed)" : " (planning)";
-                const label = "Sprint " + s.number + stateLabel + (s.title ? ": " + s.title : "");
-                const selected = String(s.id) === String(sel) ? " selected" : "";
-                return "<option value=\"" + s.id + "\"" + selected + ">" + escapeHTML(label) + "</option>";
+            const releaseOption = (r) => {
+                const label = (r.title || "Release") + " (" + (r.status || "in_design") + ")";
+                const selected = String(r.id) === String(sel) ? " selected" : "";
+                return "<option value=\"" + r.id + "\"" + selected + ">" + escapeHTML(label) + "</option>";
             };
 
             const backlogSelected = sel === "backlog" ? " selected" : "";
             const options = [
                 "<option value=\"backlog\"" + backlogSelected + ">Backlog</option>",
-            ].concat(ordered.map(sprintOption));
+            ].concat(ordered.map(releaseOption));
 
-            els.boardSprintSelect.innerHTML = options.join("");
+            els.boardReleaseSelect.innerHTML = options.join("");
         }
 
         function renderTicketBoard() {
@@ -3347,9 +3346,9 @@
                 els.ticketPlanView.classList.toggle("hidden", perspective !== "plan");
             }
 
-            // The sprint dropdown is a board-only filter — hide it in list/plan views.
-            if (els.boardSprintSelect) {
-                els.boardSprintSelect.classList.toggle("hidden", perspective !== "board");
+            // The release dropdown is a board-only filter — hide it in list/plan views.
+            if (els.boardReleaseSelect) {
+                els.boardReleaseSelect.classList.toggle("hidden", perspective !== "board");
             }
             // Reflect the active perspective on the segmented toggle buttons.
             document.querySelectorAll("[data-perspective]").forEach((btn) => {
@@ -3367,7 +3366,7 @@
 
             els.ticketBoard.innerHTML = visibleLanes.map((lane) => {
                 const fallbackLane = visibleLanes.length ? visibleLanes[0].name : "";
-                const cards = sprintFilterTickets(state.tickets)
+                const cards = releaseFilterTickets(state.tickets)
                     .filter((ticket) => (ticket.stage || fallbackLane) === lane.name)
                     .filter((ticket) => !searchText || String(ticket.title || "").toLowerCase().includes(searchText) || String(ticket.key || ticket.id || "").toLowerCase().includes(searchText))
                     // Stories being refined (or refined and awaiting promotion) float
@@ -3397,75 +3396,90 @@
             if (perspective !== "list") {
                 return;
             }
-            const sprints = state.sprints || [];
-            // "hide done" hides finished work: both done-stage stories and old
-            // (closed) sprints.
+            const releases = state.releases || [];
+            // "hide done" hides finished work: done-stage stories.
             const hideDone = Boolean(els.boardHideDone && els.boardHideDone.checked);
-            // The list view is a full sprint-by-sprint breakdown and has no sprint
-            // dropdown of its own, so it shows every ticket (the board view is the one
-            // filtered by the selected sprint).
+            // The list view is a full Release → Feature → Epic → Story breakdown and
+            // has no release dropdown of its own, so it shows every ticket (the board
+            // view is the one filtered by the selected release).
             let tickets = state.tickets || [];
             if (hideDone) {
                 tickets = tickets.filter((t) => String(t.stage || "").toLowerCase() !== "done");
             }
 
-            // Group tickets by sprint_id
-            const groups = {};
-            const backlog = [];
+            // Index tickets by parent_id so we can walk the hierarchy, and collect the
+            // feature tickets keyed by release_id.
+            const childrenByParent = {};
             tickets.forEach((t) => {
-                if (t.sprint_id) {
-                    if (!groups[t.sprint_id]) { groups[t.sprint_id] = []; }
-                    groups[t.sprint_id].push(t);
+                const pid = t.parent_id;
+                if (pid !== null && pid !== undefined) {
+                    if (!childrenByParent[pid]) { childrenByParent[pid] = []; }
+                    childrenByParent[pid].push(t);
+                }
+            });
+            const features = tickets.filter((t) => t.type === "feature");
+            const featuresByRelease = {};
+            const backlogFeatures = [];
+            features.forEach((f) => {
+                if (f.release_id !== null && f.release_id !== undefined) {
+                    if (!featuresByRelease[f.release_id]) { featuresByRelease[f.release_id] = []; }
+                    featuresByRelease[f.release_id].push(f);
                 } else {
-                    backlog.push(t);
+                    backlogFeatures.push(f);
                 }
             });
 
-            const sorted = sprints.slice().sort((a, b) => a.number - b.number);
-            const nextSprint  = sorted.find((s) => s.stage === "design");
-            const activeSprint = sorted.find((s) => s.stage === "active");
-            const closedSprints = sorted.filter((s) => s.stage === "closed").reverse(); // newest first
-            const selectedSprintNumID = state.selectedSprintID && state.selectedSprintID !== "backlog" ? Number(state.selectedSprintID) : null;
+            const sortByOrder = (a, b) => (a.order || 0) - (b.order || 0);
 
-            function sprintBlock(sprint, extraClass, dropTarget) {
-                const sprintTickets = groups[sprint.id] || [];
-                const label = "Sprint " + sprint.number + (sprint.title ? ": " + sprint.title : "");
-                const isSelected = selectedSprintNumID === sprint.id;
-                const openAttr = isSelected || sprint.stage === "active" || sprint.stage === "design" ? " open" : "";
-                const dropAttr = dropTarget ? " data-list-drop-sprint=\"" + sprint.id + "\"" : "";
-                return "<details class=\"sprint-group" + (extraClass ? " " + extraClass : "") + "\"" + openAttr + dropAttr + ">" +
-                    "<summary><strong>" + escapeHTML(label) + "</strong> <span class=\"chip\">" + escapeHTML(sprint.stage) + "</span> <span class=\"chip\">" + sprintTickets.length + "</span></summary>" +
-                    renderTicketListRows(sprintTickets, false) +
+            // Render a feature and its epic/story subtree as nested <details>.
+            function featureBlock(feature) {
+                const epics = (childrenByParent[feature.id] || []).slice().sort(sortByOrder);
+                const epicsHtml = epics.map((epic) => {
+                    const leaves = (childrenByParent[epic.id] || []).slice().sort(sortByOrder);
+                    return "<details class=\"release-group release-group-epic\" open>" +
+                        "<summary><strong>" + escapeHTML(epic.key || String(epic.id)) + "</strong> " + escapeHTML(epic.title || "(untitled)") +
+                        " <span class=\"chip\">" + leaves.length + "</span></summary>" +
+                        renderTicketListRows(leaves, false) +
+                        "</details>";
+                }).join("");
+                return "<details class=\"release-group release-group-feature\" open>" +
+                    "<summary><strong>" + escapeHTML(feature.key || String(feature.id)) + "</strong> " + escapeHTML(feature.title || "(untitled)") +
+                    " <span class=\"chip\">" + epics.length + " epics</span></summary>" +
+                    (epicsHtml || "<div class=\"empty\">No epics.</div>") +
                     "</details>";
             }
+
+            function releaseBlock(release, releaseFeatures, extraClass, openAttr) {
+                const featuresHtml = releaseFeatures.slice().sort(sortByOrder).map(featureBlock).join("");
+                const statusLabel = release.status || "in_design";
+                return "<details class=\"release-group" + (extraClass ? " " + extraClass : "") + "\"" + openAttr + ">" +
+                    "<summary><strong>" + escapeHTML(release.title || "Release") + "</strong> " +
+                    "<span class=\"chip release-status-" + escapeHTML(statusLabel) + "\">" + escapeHTML(statusLabel) + "</span> " +
+                    "<span class=\"chip\">" + (release.feature_count != null ? release.feature_count : releaseFeatures.length) + " features</span> " +
+                    "<span class=\"chip\">" + (release.story_count != null ? release.story_count : "") + " stories</span></summary>" +
+                    (featuresHtml || "<div class=\"empty\">No features.</div>") +
+                    "</details>";
+            }
+
+            const selectedReleaseNumID = state.selectedReleaseID && state.selectedReleaseID !== "backlog" ? Number(state.selectedReleaseID) : null;
+            const ordered = releases.slice().sort((a, b) => (a.id || 0) - (b.id || 0));
 
             let html = "";
+            ordered.forEach((release) => {
+                const isSelected = selectedReleaseNumID === release.id;
+                const openAttr = isSelected || release.status !== "complete" ? " open" : "";
+                html += releaseBlock(release, featuresByRelease[release.id] || [], "release-group-release", openAttr);
+            });
 
-            // 1. Next sprint (design) — drop target for backlog drags
-            if (nextSprint) {
-                html += sprintBlock(nextSprint, "sprint-group-next", true);
-            }
-
-            // 2. Backlog — tickets are draggable into next sprint
-            if (backlog.length > 0 || state.selectedSprintID === "backlog" || state.selectedSprintID === "") {
-                const isSelected = state.selectedSprintID === "backlog";
-                const openAttr = isSelected || state.selectedSprintID === "" ? " open" : "";
-                html += "<details class=\"sprint-group sprint-group-backlog\"" + openAttr + ">" +
-                    "<summary><strong>Backlog</strong> <span class=\"chip\">" + backlog.length + "</span></summary>" +
-                    renderTicketListRows(backlog, true) +
+            // Backlog group: features not in any release.
+            if (backlogFeatures.length > 0 || state.selectedReleaseID === "backlog" || state.selectedReleaseID === "") {
+                const isSelected = state.selectedReleaseID === "backlog" || state.selectedReleaseID === "";
+                const openAttr = isSelected ? " open" : "";
+                const featuresHtml = backlogFeatures.slice().sort(sortByOrder).map(featureBlock).join("");
+                html += "<details class=\"release-group release-group-backlog\"" + openAttr + ">" +
+                    "<summary><strong>Backlog</strong> <span class=\"chip\">" + backlogFeatures.length + " features</span></summary>" +
+                    (featuresHtml || "<div class=\"empty\">No features.</div>") +
                     "</details>";
-            }
-
-            // 3. Current (active) sprint
-            if (activeSprint) {
-                html += sprintBlock(activeSprint, "sprint-group-active", false);
-            }
-
-            // 4. Closed sprints, newest first (hidden when "hide done" is on)
-            if (!hideDone) {
-                closedSprints.forEach((sprint) => {
-                    html += sprintBlock(sprint, "sprint-group-closed", false);
-                });
             }
 
             if (!html) {
@@ -3482,63 +3496,65 @@
             if (perspective !== "plan") {
                 return;
             }
-            // "hide done" hides finished work: closed (old) sprints and done stories.
+            // "hide done" hides finished work: complete releases and done stories.
             const hideDone = Boolean(els.boardHideDone && els.boardHideDone.checked);
-            const sprints = (state.sprints || []).slice()
-                .filter((s) => !hideDone || s.stage !== "closed")
-                .sort((a, b) => a.number - b.number);
+            const releases = (state.releases || []).slice()
+                .filter((r) => !hideDone || r.status !== "complete")
+                .sort((a, b) => (a.id || 0) - (b.id || 0));
             let allTickets = state.tickets || [];
             if (hideDone) {
                 allTickets = allTickets.filter((t) => String(t.stage || "").toLowerCase() !== "done");
             }
 
-            const sprintTicketsMap = {};
-            const backlogTickets = [];
-            allTickets.forEach((t) => {
-                if (t.sprint_id) {
-                    if (!sprintTicketsMap[t.sprint_id]) {
-                        sprintTicketsMap[t.sprint_id] = [];
+            // Only features carry a release; the plan view drags features between
+            // releases and the backlog.
+            const features = allTickets.filter((t) => t.type === "feature");
+            const featuresByRelease = {};
+            const backlogFeatures = [];
+            features.forEach((f) => {
+                if (f.release_id !== null && f.release_id !== undefined) {
+                    if (!featuresByRelease[f.release_id]) {
+                        featuresByRelease[f.release_id] = [];
                     }
-                    sprintTicketsMap[t.sprint_id].push(t);
+                    featuresByRelease[f.release_id].push(f);
                 } else {
-                    backlogTickets.push(t);
+                    backlogFeatures.push(f);
                 }
             });
 
-            const sprintsHtml = sprints.map((sprint) => {
-                const tickets = sprintTicketsMap[sprint.id] || [];
-                const label = "Sprint " + sprint.number + (sprint.title ? ": " + sprint.title : "");
-                const isClosed = sprint.stage === "closed";
-                const draggable = isClosed ? "false" : "true";
-                const closedAttr = isClosed ? " data-sprint-closed=\"true\"" : "";
-                const rowsHtml = tickets.map((t) =>
-                    "<div class=\"plan-ticket-row" + (isClosed ? " plan-ticket-locked" : "") + "\" draggable=\"" + draggable + "\" data-ticket-id=\"" + escapeHTML(String(t.id)) + "\" data-sprint-id=\"" + escapeHTML(String(sprint.id)) + "\">" +
+            const releasesHtml = releases.map((release) => {
+                const feats = featuresByRelease[release.id] || [];
+                const isLocked = release.status !== "in_design";
+                const draggable = isLocked ? "false" : "true";
+                const lockedAttr = isLocked ? " data-release-locked=\"true\"" : "";
+                const rowsHtml = feats.map((t) =>
+                    "<div class=\"plan-ticket-row" + (isLocked ? " plan-ticket-locked" : "") + "\" draggable=\"" + draggable + "\" data-ticket-id=\"" + escapeHTML(String(t.id)) + "\" data-release-id=\"" + escapeHTML(String(release.id)) + "\">" +
                     "<span class=\"plan-ticket-key\">" + escapeHTML(t.key || String(t.id)) + "</span>" +
                     "<span>" + escapeHTML(t.title || "(untitled)") + "</span>" +
                     "</div>"
                 ).join("");
-                return "<details class=\"plan-sprint-group\" data-sprint-id=\"" + escapeHTML(String(sprint.id)) + "\"" + closedAttr + " open>" +
-                    "<summary><strong>" + escapeHTML(label) + "</strong> <span class=\"chip\">" + escapeHTML(sprint.stage) + "</span> <span class=\"chip\">" + tickets.length + "</span></summary>" +
-                    "<div class=\"plan-drop-zone\"" + closedAttr + ">" +
-                    (rowsHtml || "<div class=\"plan-empty\">No tickets</div>") +
+                return "<details class=\"plan-release-group\" data-release-id=\"" + escapeHTML(String(release.id)) + "\"" + lockedAttr + " open>" +
+                    "<summary><strong>" + escapeHTML(release.title || "Release") + "</strong> <span class=\"chip release-status-" + escapeHTML(release.status || "in_design") + "\">" + escapeHTML(release.status || "in_design") + "</span> <span class=\"chip\">" + feats.length + "</span></summary>" +
+                    "<div class=\"plan-drop-zone\"" + lockedAttr + ">" +
+                    (rowsHtml || "<div class=\"plan-empty\">No features</div>") +
                     "</div>" +
                     "</details>";
             }).join("");
 
-            const backlogRowsHtml = backlogTickets.map((t) =>
-                "<div class=\"plan-ticket-row\" draggable=\"true\" data-ticket-id=\"" + escapeHTML(String(t.id)) + "\" data-sprint-id=\"\">" +
+            const backlogRowsHtml = backlogFeatures.map((t) =>
+                "<div class=\"plan-ticket-row\" draggable=\"true\" data-ticket-id=\"" + escapeHTML(String(t.id)) + "\" data-release-id=\"\">" +
                 "<span class=\"plan-ticket-key\">" + escapeHTML(t.key || String(t.id)) + "</span>" +
                 "<span>" + escapeHTML(t.title || "(untitled)") + "</span>" +
                 "</div>"
             ).join("");
 
-            const html = "<div class=\"plan-pane plan-sprints-pane\">" +
-                "<div class=\"plan-pane-header\">Sprints</div>" +
-                (sprintsHtml || "<div class=\"plan-empty\">No sprints</div>") +
+            const html = "<div class=\"plan-pane plan-releases-pane\">" +
+                "<div class=\"plan-pane-header\">Releases</div>" +
+                (releasesHtml || "<div class=\"plan-empty\">No releases</div>") +
                 "</div>" +
-                "<div class=\"plan-pane plan-backlog-pane\" data-sprint-id=\"\">" +
+                "<div class=\"plan-pane plan-backlog-pane\" data-release-id=\"\">" +
                 "<div class=\"plan-pane-header\">Backlog</div>" +
-                (backlogRowsHtml || "<div class=\"plan-empty\">No backlog tickets</div>") +
+                (backlogRowsHtml || "<div class=\"plan-empty\">No backlog features</div>") +
                 "</div>";
 
             setInnerHTMLIfChanged(els.ticketPlanView, html);
@@ -3803,29 +3819,38 @@
             return splitAgentRoles(agent.agent_role).some((r) => r.toLowerCase() === target);
         }
 
-        // getPlanningSprint returns the project's planning sprint (the one in the
-        // "design" stage) that backlog tickets are promoted into.
-        function getPlanningSprint() {
-            return (state.sprints || []).find((s) => s.stage === "design") || null;
+        // inDesignReleases returns the releases still in the in_design status, which
+        // are the only releases a feature can be added to.
+        function inDesignReleases() {
+            return (state.releases || []).filter((r) => r.status === "in_design");
         }
 
         // contextMenuExtraItemsHTML builds the trailing context-menu items shared by
-        // every menu variant: move to/from the planning sprint, and Delete.
+        // every menu variant. For features it offers release add/remove and clone;
+        // every variant ends with Delete.
         function contextMenuExtraItemsHTML(ticket) {
             let html = "<div class=\"context-menu-sep\"></div>";
-            const planning = getPlanningSprint();
-            const inBacklog = ticket.sprint_id === null || ticket.sprint_id === undefined;
-            if (inBacklog && planning) {
-                const label = "Sprint " + planning.number + (planning.title ? ": " + planning.title : "");
-                html += "<button type=\"button\" class=\"context-menu-item\" data-move-sprint=\"" + planning.id + "\">" +
-                    "<span class=\"context-menu-check\">→</span>" +
-                    "<span class=\"context-menu-label\">Move to " + escapeHTML(label) + "<small>add to the planning sprint</small></span>" +
+            if (ticket.type === "feature") {
+                const currentReleaseID = ticket.release_id;
+                // Offer each in_design release the feature is not already in.
+                inDesignReleases().forEach((r) => {
+                    if (Number(currentReleaseID) === Number(r.id)) { return; }
+                    html += "<button type=\"button\" class=\"context-menu-item\" data-move-release=\"" + r.id + "\">" +
+                        "<span class=\"context-menu-check\">→</span>" +
+                        "<span class=\"context-menu-label\">Add to " + escapeHTML(r.title || "Release") + "<small>add this feature to the release</small></span>" +
+                        "</button>";
+                });
+                if (currentReleaseID !== null && currentReleaseID !== undefined) {
+                    html += "<button type=\"button\" class=\"context-menu-item\" data-move-backlog=\"1\">" +
+                        "<span class=\"context-menu-check\">←</span>" +
+                        "<span class=\"context-menu-label\">Remove from release<small>move this feature to the backlog</small></span>" +
+                        "</button>";
+                }
+                html += "<button type=\"button\" class=\"context-menu-item\" data-clone-feature=\"1\">" +
+                    "<span class=\"context-menu-check\">⧉</span>" +
+                    "<span class=\"context-menu-label\">Clone feature<small>deep-copy this feature subtree</small></span>" +
                     "</button>";
-            } else if (planning && Number(ticket.sprint_id) === Number(planning.id)) {
-                html += "<button type=\"button\" class=\"context-menu-item\" data-move-backlog=\"1\">" +
-                    "<span class=\"context-menu-check\">←</span>" +
-                    "<span class=\"context-menu-label\">Move to backlog<small>remove from the planning sprint</small></span>" +
-                    "</button>";
+                html += "<div class=\"context-menu-sep\"></div>";
             }
             html += "<button type=\"button\" class=\"context-menu-item context-menu-danger\" data-delete-ticket=\"1\">" +
                 "<span class=\"context-menu-check\">🗑</span>" +
@@ -3837,12 +3862,16 @@
         // handleContextMenuExtraClick dispatches the shared trailing items. Returns
         // true if it handled the click.
         function handleContextMenuExtraClick(btn, ticket) {
-            if (btn.dataset.moveSprint) {
-                moveTicketToSprint(ticket, Number(btn.dataset.moveSprint));
+            if (btn.dataset.moveRelease) {
+                moveTicketToRelease(ticket, Number(btn.dataset.moveRelease));
                 return true;
             }
             if (btn.dataset.moveBacklog) {
-                moveTicketToSprint(ticket, null);
+                moveTicketToRelease(ticket, null);
+                return true;
+            }
+            if (btn.dataset.cloneFeature) {
+                cloneFeatureTicket(ticket);
                 return true;
             }
             if (btn.dataset.deleteTicket) {
@@ -3852,45 +3881,48 @@
             return false;
         }
 
-        async function moveTicketToSprint(ticket, sprintID) {
+        async function moveTicketToRelease(ticket, releaseID) {
             try {
-                // A sprint can only hold ready (non-draft) tickets. Committing a story
-                // to a sprint implies it's ready, so clear the draft flag first —
-                // otherwise the server rejects the move with a 400 and it appears to do
-                // nothing.
-                if (sprintID !== null && ticket.draft) {
-                    await api("/api/tickets/" + ticket.id + "/undraft", { method: "POST" });
-                }
-                await api("/api/tickets/" + ticket.id + "/sprint", {
-                    method: "PUT",
-                    body: JSON.stringify({ sprint_id: sprintID }),
-                });
+                await apiClient.setTicketRelease(ticket.id, releaseID);
                 await loadTickets();
-                // Follow the ticket to its destination: the board/list views filter by
-                // the selected sprint, so without this the ticket would just vanish from
-                // the current (e.g. backlog) view instead of appearing where it landed.
-                setSelectedSprintFilter(sprintID === null ? "backlog" : String(sprintID));
+                // Follow the feature to its destination: the board/list views filter by
+                // the selected release, so without this the feature would vanish from
+                // the current view instead of appearing where it landed.
+                setSelectedReleaseFilter(releaseID === null ? "backlog" : String(releaseID));
                 renderTicketBoard();
                 renderTicketListView();
                 renderTicketPlanView();
-                setNotice(sprintID === null
-                    ? "Moved " + (ticket.key || ticket.id) + " to the backlog."
-                    : "Moved " + (ticket.key || ticket.id) + " to the planning sprint.");
+                setNotice(releaseID === null
+                    ? "Removed " + (ticket.key || ticket.id) + " from its release."
+                    : "Added " + (ticket.key || ticket.id) + " to the release.");
             } catch (error) {
                 setNotice(error.message, true);
             }
         }
 
-        // setSelectedSprintFilter changes the active sprint filter and keeps the sprint
-        // <select> and persisted preference in sync.
-        function setSelectedSprintFilter(value) {
-            state.selectedSprintID = value;
-            if (els.boardSprintSelect) {
-                els.boardSprintSelect.value = value;
+        async function cloneFeatureTicket(ticket) {
+            try {
+                const clone = await apiClient.cloneFeature(ticket.id);
+                await loadTickets();
+                renderTicketBoard();
+                renderTicketListView();
+                renderTicketPlanView();
+                setNotice("Cloned " + (ticket.key || ticket.id) + (clone && clone.key ? " to " + clone.key : "") + ".");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        // setSelectedReleaseFilter changes the active release filter and keeps the
+        // release <select> and persisted preference in sync.
+        function setSelectedReleaseFilter(value) {
+            state.selectedReleaseID = value;
+            if (els.boardReleaseSelect) {
+                els.boardReleaseSelect.value = value;
             }
             if (state.selectedProjectID) {
                 try {
-                    localStorage.setItem("site2.sprint." + state.selectedProjectID, value);
+                    localStorage.setItem("site2.release." + state.selectedProjectID, value);
                 } catch (_) { /* ignore storage failures */ }
             }
         }
@@ -4018,7 +4050,7 @@
                 boardContextMenuEl = menu;
                 positionBoardContextMenu(menu, event);
                 menu.addEventListener("click", (clickEvent) => {
-                    const btn = clickEvent.target.closest("[data-refine-ticket],[data-move-develop],[data-force-develop],[data-move-sprint],[data-move-backlog],[data-delete-ticket]");
+                    const btn = clickEvent.target.closest("[data-refine-ticket],[data-move-develop],[data-force-develop],[data-move-release],[data-move-backlog],[data-clone-feature],[data-delete-ticket]");
                     if (!btn) return;
                     clickEvent.stopPropagation();
                     dismissBoardContextMenu();
@@ -4048,7 +4080,7 @@
                 boardContextMenuEl = menu;
                 positionBoardContextMenu(menu, event);
                 menu.addEventListener("click", (clickEvent) => {
-                    const btn = clickEvent.target.closest("[data-move-sprint],[data-move-backlog],[data-delete-ticket]");
+                    const btn = clickEvent.target.closest("[data-move-release],[data-move-backlog],[data-clone-feature],[data-delete-ticket]");
                     if (!btn) return;
                     clickEvent.stopPropagation();
                     dismissBoardContextMenu();
@@ -4106,7 +4138,7 @@
             positionBoardContextMenu(menu, event);
 
             menu.addEventListener("click", (clickEvent) => {
-                const btn = clickEvent.target.closest("[data-assign-agent],[data-move-sprint],[data-move-backlog],[data-delete-ticket]");
+                const btn = clickEvent.target.closest("[data-assign-agent],[data-move-release],[data-move-backlog],[data-clone-feature],[data-delete-ticket]");
                 if (!btn) return;
                 clickEvent.stopPropagation();
                 dismissBoardContextMenu();
@@ -4852,7 +4884,7 @@
                 state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
                 renderProjectMenu();
                 populateTicketTypeAndStageSelects();
-                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]).then(renderAll).catch((error) => setNotice(error.message, true));
+                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadReleases(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]).then(renderAll).catch((error) => setNotice(error.message, true));
             });
 
             document.getElementById("new-project-button").addEventListener("click", () => {
@@ -4910,7 +4942,7 @@
                     state.selectedProjectID = project.id;
                     storeSelectedProjectID(state.selectedProjectID);
                     await Promise.all([loadProjects(), loadWorkflows()]);
-                    await Promise.all([loadTickets(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
+                    await Promise.all([loadTickets(), loadReleases(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
                     renderAll();
                     setNotice("Project saved.");
                 } catch (error) {
@@ -4936,7 +4968,7 @@
                     state.projectAccessReviewEnabled = false;
                     state.projectAgentModelConfig = emptyAgentModelConfig();
                     await loadProjects();
-                    await Promise.all([loadTickets(), loadSprints(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
+                    await Promise.all([loadTickets(), loadReleases(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]);
                     renderAll();
                     setNotice("Project deleted.");
                 } catch (error) {
@@ -6472,19 +6504,19 @@
         }
 
         function bindTicketsHandlers() {
-            // "New…" dropdown: create a ticket or a sprint from one menu.
+            // "New…" dropdown: create a ticket or a release from one menu.
             const newMenuButton = document.getElementById("new-menu-button");
             const newMenuDropdown = document.getElementById("new-menu-dropdown");
             function closeNewMenu() {
                 if (newMenuDropdown) newMenuDropdown.classList.remove("open");
                 if (newMenuButton) newMenuButton.setAttribute("aria-expanded", "false");
             }
-            async function createSprintFromMenu() {
+            async function createReleaseFromMenu() {
                 if (!state.selectedProjectID) return;
                 try {
-                    await apiClient.createSprint(state.selectedProjectID, "");
-                    await loadSprints();
-                    renderSprintSelect();
+                    await apiClient.createRelease(state.selectedProjectID, { title: "New release" });
+                    await loadReleases();
+                    renderReleaseSelect();
                     renderTicketBoard();
                     renderTicketListView();
                     renderTicketPlanView();
@@ -6504,8 +6536,8 @@
                     closeNewMenu();
                     if (item.dataset.newAction === "ticket") {
                         openTicketModal(emptyTicket());
-                    } else if (item.dataset.newAction === "sprint") {
-                        createSprintFromMenu();
+                    } else if (item.dataset.newAction === "release") {
+                        createReleaseFromMenu();
                     }
                 });
                 document.addEventListener("click", (event) => {
@@ -6520,11 +6552,11 @@
             if (els.boardHideDone) {
                 els.boardHideDone.addEventListener("change", () => { renderTicketBoard(); renderTicketListView(); renderTicketPlanView(); });
             }
-            if (els.boardSprintSelect) {
-                els.boardSprintSelect.addEventListener("change", () => {
-                    state.selectedSprintID = els.boardSprintSelect.value;
+            if (els.boardReleaseSelect) {
+                els.boardReleaseSelect.addEventListener("change", () => {
+                    state.selectedReleaseID = els.boardReleaseSelect.value;
                     if (state.selectedProjectID) {
-                        localStorage.setItem("site2.sprint." + state.selectedProjectID, state.selectedSprintID);
+                        localStorage.setItem("site2.release." + state.selectedProjectID, state.selectedReleaseID);
                     }
                     renderTicketBoard();
                     renderTicketListView();
@@ -6898,8 +6930,8 @@
                 els.ticketPlanView.querySelectorAll(".dragging").forEach((el) => el.classList.remove("dragging"));
             });
             els.ticketPlanView.addEventListener("dragover", (event) => {
-                const target = event.target.closest("[data-sprint-id]");
-                if (!target || target.dataset.sprintClosed) {
+                const target = event.target.closest("[data-release-id]");
+                if (!target || target.dataset.releaseLocked) {
                     return;
                 }
                 event.preventDefault();
@@ -6918,13 +6950,13 @@
                 if (!ticketId) {
                     return;
                 }
-                const target = event.target.closest("[data-sprint-id]");
-                if (!target || target.dataset.sprintClosed) {
+                const target = event.target.closest("[data-release-id]");
+                if (!target || target.dataset.releaseLocked) {
                     return;
                 }
-                const sprintId = target.dataset.sprintId;
+                const releaseId = target.dataset.releaseId;
                 try {
-                    await apiClient.setTicketSprint(ticketId, sprintId ? parseInt(sprintId, 10) : null);
+                    await apiClient.setTicketRelease(ticketId, releaseId ? parseInt(releaseId, 10) : null);
                     await loadTickets();
                     renderTicketBoard();
                     renderTicketListView();
@@ -6947,19 +6979,31 @@
             document.getElementById("ticket-ac").value = ticket.acceptance_criteria || "";
             document.getElementById("ticket-parent").value = ticket.parent_id || "";
             document.getElementById("ticket-workflow").value = ticket.workflow_id || "";
-            // Populate sprint select
-            const ticketSprintEl = document.getElementById("ticket-sprint");
-            if (ticketSprintEl) {
-                const sprintOptions = ["<option value=\"\">None</option>"].concat(
-                    (state.sprints || []).map((s) => {
-                        const label = "Sprint " + s.number + (s.title ? ": " + s.title : "");
-                        const selected = ticket.sprint_id === s.id ? " selected" : "";
-                        return "<option value=\"" + s.id + "\"" + selected + ">" + escapeHTML(label) + "</option>";
-                    })
-                );
-                ticketSprintEl.innerHTML = sprintOptions.join("");
-                if (!ticket.sprint_id) {
-                    ticketSprintEl.value = "";
+            // Populate release select. Only features carry a release, so the field is
+            // shown for feature tickets and hidden otherwise. The options are the
+            // in_design releases (plus the current release if it is no longer in_design,
+            // so it still renders correctly).
+            const ticketReleaseEl = document.getElementById("ticket-release");
+            const ticketReleaseField = ticketReleaseEl ? ticketReleaseEl.closest(".field") : null;
+            if (ticketReleaseEl) {
+                const isFeature = ticket.type === "feature";
+                if (ticketReleaseField) {
+                    ticketReleaseField.classList.toggle("hidden", !isFeature);
+                }
+                if (isFeature) {
+                    const releaseList = (state.releases || []).filter((r) =>
+                        r.status === "in_design" || r.id === ticket.release_id);
+                    const releaseOptions = ["<option value=\"\">None</option>"].concat(
+                        releaseList.map((r) => {
+                            const label = (r.title || "Release") + " (" + (r.status || "in_design") + ")";
+                            const selected = ticket.release_id === r.id ? " selected" : "";
+                            return "<option value=\"" + r.id + "\"" + selected + ">" + escapeHTML(label) + "</option>";
+                        })
+                    );
+                    ticketReleaseEl.innerHTML = releaseOptions.join("");
+                    if (!ticket.release_id) {
+                        ticketReleaseEl.value = "";
+                    }
                 }
             }
             document.getElementById("ticket-draft").value = String(Boolean(ticket.draft));
@@ -7791,14 +7835,14 @@
                     await api("/api/tickets/" + ticket.id + "/workflow", { method: "DELETE" });
                 }
 
-                // Handle sprint assignment
-                const ticketSprintEl = document.getElementById("ticket-sprint");
-                if (ticketSprintEl) {
-                    const sprintVal = ticketSprintEl.value;
-                    const newSprintID = sprintVal ? Number(sprintVal) : null;
-                    const currentSprintID = ticket.sprint_id || null;
-                    if (newSprintID !== currentSprintID) {
-                        await apiClient.setTicketSprint(ticket.id, newSprintID);
+                // Handle release assignment (features only).
+                const ticketReleaseEl = document.getElementById("ticket-release");
+                if (ticketReleaseEl && ticket.type === "feature") {
+                    const releaseVal = ticketReleaseEl.value;
+                    const newReleaseID = releaseVal ? Number(releaseVal) : null;
+                    const currentReleaseID = ticket.release_id || null;
+                    if (newReleaseID !== currentReleaseID) {
+                        await apiClient.setTicketRelease(ticket.id, newReleaseID);
                     }
                 }
 

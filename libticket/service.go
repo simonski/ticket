@@ -189,6 +189,15 @@ type TicketService interface {
 	GetStory(ctx context.Context, id int64) (store.Story, error)
 	UpdateStory(ctx context.Context, id int64, title, description string) (store.Story, error)
 	DeleteStory(ctx context.Context, id int64) error
+	ListReleases(ctx context.Context, projectID int64) ([]store.Release, error)
+	GetRelease(ctx context.Context, id int64) (store.Release, error)
+	CreateRelease(ctx context.Context, projectID int64, title, purpose, targetDate string) (store.Release, error)
+	UpdateRelease(ctx context.Context, id int64, title, purpose, targetDate string) (store.Release, error)
+	SetReleaseStatus(ctx context.Context, id int64, status string) (store.Release, error)
+	DeleteRelease(ctx context.Context, id int64) error
+	AddFeatureToRelease(ctx context.Context, featureTicketID string, releaseID int64) error
+	RemoveFeatureFromRelease(ctx context.Context, featureTicketID string) error
+	CloneFeature(ctx context.Context, featureTicketID string) (store.Ticket, error)
 	CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error)
 	ListDocuments(ctx context.Context, projectID int64) ([]store.Document, error)
 	GetDocument(ctx context.Context, id int64) (store.Document, error)

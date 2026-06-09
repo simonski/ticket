@@ -351,6 +351,16 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Manages stories within the active project.", "Stories provide a lightweight grouping layer within a project."},
 		example: "tk story create -title \"User onboarding flow\"",
 	},
+	"release": {
+		usage:   "tk release <list|create|status|update|add|remove|delete>",
+		details: []string{"Manages releases within the active project.", "A release contains features (and their epic/story subtrees) and moves through in_design -> in_progress -> complete.", "Features can only be added/removed while the release is in_design."},
+		example: "tk release create -title \"Q3 launch\" -date 2026-09-30",
+	},
+	"feature": {
+		usage:   "tk feature <clone>",
+		details: []string{"Feature ticket operations.", "`clone` deep-clones a feature and its entire epic/story subtree into a fresh draft."},
+		example: "tk feature clone -id CUS-42",
+	},
 	"document": {
 		usage:   "tk document <create|list|get|update|delete|label-add|label-rm|label-ls|file-add|file-ls|file-get|file-rm>",
 		details: []string{"Manages documents within the active project.", "Documents support text content, labels, and uploaded files."},
@@ -786,6 +796,22 @@ Commands:
   get      <id>                            Show story detail
   update   <id> -title <title> [-d <desc>] Update a story
   rm       <id>                            Delete a story`
+
+const releaseUsage = `Usage: tk release <command> [flags]
+
+Commands:
+  ls                                                  List releases in active project
+  create  -title <t> [-purpose <p>] [-date <date>]    Create a release
+  status  -id <N> -status <in_design|in_progress|complete>  Set release status
+  update  -id <N> [-title <t>] [-purpose <p>] [-date <date>] Update a release
+  add     -id <N> -feature <TICKET-KEY>               Add a feature to a release
+  remove  -feature <TICKET-KEY>                       Remove a feature from its release
+  delete  -id <N>                                     Delete a release`
+
+const featureUsage = `Usage: tk feature <command> [flags]
+
+Commands:
+  clone   -id <TICKET-KEY>                            Clone a feature and its subtree`
 
 const documentUsage = `Usage: tk document <command> [flags]
 

@@ -131,7 +131,7 @@
                         <div class="view-actions">
                             <input id="board-search" type="search" placeholder="Filter tickets" class="input-sm">
                             <label class="checkbox-label"><input id="board-hide-done" type="checkbox"> hide done</label>
-                            <select id="board-sprint-select" class="select-sm"></select>
+                            <select id="board-release-select" class="select-sm"></select>
                             <div class="segmented perspective-toggle" role="tablist">
                                 <button class="seg-btn" type="button" data-perspective="board" title="Board view" aria-label="Board view">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="5" height="18"/><rect x="10" y="3" width="5" height="18"/><rect x="17" y="3" width="4" height="18"/></svg>
@@ -139,7 +139,7 @@
                                 <button class="seg-btn" type="button" data-perspective="list" title="List view" aria-label="List view">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>
                                 </button>
-                                <button class="seg-btn" type="button" data-perspective="plan" title="Sprint planner" aria-label="Sprint planner">
+                                <button class="seg-btn" type="button" data-perspective="plan" title="Release planner" aria-label="Release planner">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="18"/><rect x="13" y="3" width="8" height="9"/><rect x="13" y="14" width="8" height="7"/></svg>
                                 </button>
                             </div>
@@ -147,7 +147,7 @@
                                 <button id="new-menu-button" class="btn btn-primary" type="button" aria-haspopup="true" aria-expanded="false">New <span class="chevron">&#9662;</span></button>
                                 <div id="new-menu-dropdown" class="dropdown">
                                     <button class="dropdown-item" type="button" data-new-action="ticket">Ticket</button>
-                                    <button class="dropdown-item" type="button" data-new-action="sprint">Sprint</button>
+                                    <button class="dropdown-item" type="button" data-new-action="release">Release</button>
                                 </div>
                             </div>
                         </div>
@@ -1000,8 +1000,8 @@
                         <select id="ticket-workflow"></select>
                     </div>
                     <div class="field">
-                        <label for="ticket-sprint">Sprint</label>
-                        <select id="ticket-sprint"><option value="">None</option></select>
+                        <label for="ticket-release">Release</label>
+                        <select id="ticket-release"><option value="">None</option></select>
                     </div>
                 </div>
                 <div class="field-row">

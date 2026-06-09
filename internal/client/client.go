@@ -2832,6 +2832,136 @@ func (c *Client) DeleteStory(ctx context.Context, id int64) error {
 	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/stories/%d", id), nil, nil)
 }
 
+type releaseRequest struct {
+	Title      string `json:"title"`
+	Purpose    string `json:"purpose"`
+	TargetDate string `json:"target_date"`
+}
+
+type releaseStatusRequest struct {
+	Status string `json:"status"`
+}
+
+type ticketReleaseRequest struct {
+	ReleaseID *int64 `json:"release_id"`
+}
+
+func (c *Client) ListReleases(ctx context.Context, projectID int64) ([]store.Release, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		return store.ListReleases(ctx, db, int(projectID))
+	}
+	var releases []store.Release
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/projects/%d/releases", projectID), nil, &releases)
+	return releases, err
+}
+
+func (c *Client) GetRelease(ctx context.Context, id int64) (store.Release, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Release{}, err
+		}
+		return store.GetRelease(ctx, db, int(id))
+	}
+	var release store.Release
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/releases/%d", id), nil, &release)
+	return release, err
+}
+
+func (c *Client) CreateRelease(ctx context.Context, projectID int64, title, purpose, targetDate string) (store.Release, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Release{}, err
+		}
+		return store.CreateRelease(ctx, db, int(projectID), title, purpose, targetDate)
+	}
+	var created store.Release
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%d/releases", projectID), releaseRequest{Title: title, Purpose: purpose, TargetDate: targetDate}, &created)
+	return created, err
+}
+
+func (c *Client) UpdateRelease(ctx context.Context, id int64, title, purpose, targetDate string) (store.Release, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Release{}, err
+		}
+		return store.UpdateRelease(ctx, db, int(id), title, purpose, targetDate)
+	}
+	var updated store.Release
+	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/releases/%d", id), releaseRequest{Title: title, Purpose: purpose, TargetDate: targetDate}, &updated)
+	return updated, err
+}
+
+func (c *Client) SetReleaseStatus(ctx context.Context, id int64, status string) (store.Release, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Release{}, err
+		}
+		return store.SetReleaseStatus(ctx, db, int(id), status)
+	}
+	var updated store.Release
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/releases/%d/status", id), releaseStatusRequest{Status: status}, &updated)
+	return updated, err
+}
+
+func (c *Client) DeleteRelease(ctx context.Context, id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.DeleteRelease(ctx, db, int(id))
+	}
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/releases/%d", id), nil, nil)
+}
+
+func (c *Client) AddFeatureToRelease(ctx context.Context, featureTicketID string, releaseID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.AssignFeatureToRelease(ctx, db, featureTicketID, int(releaseID))
+	}
+	rid := releaseID
+	return c.doJSON(ctx, http.MethodPut, "/api/tickets/"+url.PathEscape(featureTicketID)+"/release", ticketReleaseRequest{ReleaseID: &rid}, nil)
+}
+
+func (c *Client) RemoveFeatureFromRelease(ctx context.Context, featureTicketID string) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.RemoveFeatureFromRelease(ctx, db, featureTicketID)
+	}
+	return c.doJSON(ctx, http.MethodPut, "/api/tickets/"+url.PathEscape(featureTicketID)+"/release", ticketReleaseRequest{ReleaseID: nil}, nil)
+}
+
+func (c *Client) CloneFeature(ctx context.Context, featureTicketID string) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		return store.CloneFeature(ctx, db, featureTicketID, user.Username, user.ID)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(featureTicketID)+"/clone", nil, &ticket)
+	return ticket, err
+}
+
 func (c *Client) CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

@@ -1949,6 +1949,82 @@ func (s *LocalService) DeleteStory(ctx context.Context, id int64) error {
 	return store.DeleteStory(ctx, db, id)
 }
 
+func (s *LocalService) ListReleases(ctx context.Context, projectID int64) ([]store.Release, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	return store.ListReleases(ctx, db, int(projectID))
+}
+
+func (s *LocalService) GetRelease(ctx context.Context, id int64) (store.Release, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Release{}, err
+	}
+	return store.GetRelease(ctx, db, int(id))
+}
+
+func (s *LocalService) CreateRelease(ctx context.Context, projectID int64, title, purpose, targetDate string) (store.Release, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Release{}, err
+	}
+	return store.CreateRelease(ctx, db, int(projectID), title, purpose, targetDate)
+}
+
+func (s *LocalService) UpdateRelease(ctx context.Context, id int64, title, purpose, targetDate string) (store.Release, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Release{}, err
+	}
+	return store.UpdateRelease(ctx, db, int(id), title, purpose, targetDate)
+}
+
+func (s *LocalService) SetReleaseStatus(ctx context.Context, id int64, status string) (store.Release, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Release{}, err
+	}
+	return store.SetReleaseStatus(ctx, db, int(id), status)
+}
+
+func (s *LocalService) DeleteRelease(ctx context.Context, id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.DeleteRelease(ctx, db, int(id))
+}
+
+func (s *LocalService) AddFeatureToRelease(ctx context.Context, featureTicketID string, releaseID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.AssignFeatureToRelease(ctx, db, featureTicketID, int(releaseID))
+}
+
+func (s *LocalService) RemoveFeatureFromRelease(ctx context.Context, featureTicketID string) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.RemoveFeatureFromRelease(ctx, db, featureTicketID)
+}
+
+func (s *LocalService) CloneFeature(ctx context.Context, featureTicketID string) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	user, err := s.localUser(ctx, db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.CloneFeature(ctx, db, featureTicketID, user.Username, user.ID)
+}
+
 func (s *LocalService) CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error) {
 	db, err := s.openDB()
 	if err != nil {

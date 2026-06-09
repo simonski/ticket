@@ -367,24 +367,32 @@
             return del("/api/teams/" + encodeURIComponent(teamID) + "/users/" + encodeURIComponent(userID));
         }
 
-        function listSprints(projectID) {
-            return get("/api/projects/" + encodeURIComponent(projectID) + "/sprints");
+        function listReleases(projectID) {
+            return get("/api/projects/" + encodeURIComponent(projectID) + "/releases");
         }
 
-        function createSprint(projectID, title) {
-            return post("/api/projects/" + encodeURIComponent(projectID) + "/sprints", { title: title || "" });
+        function createRelease(projectID, body) {
+            return post("/api/projects/" + encodeURIComponent(projectID) + "/releases", body || {});
         }
 
-        function updateSprint(id, title, stage) {
-            return put("/api/sprints/" + encodeURIComponent(id), { title, stage });
+        function updateRelease(id, body) {
+            return put("/api/releases/" + encodeURIComponent(id), body || {});
         }
 
-        function deleteSprint(id) {
-            return del("/api/sprints/" + encodeURIComponent(id));
+        function setReleaseStatus(id, status) {
+            return post("/api/releases/" + encodeURIComponent(id) + "/status", { status });
         }
 
-        function setTicketSprint(ticketID, sprintID) {
-            return put("/api/tickets/" + encodeURIComponent(ticketID) + "/sprint", { sprint_id: sprintID });
+        function deleteRelease(id) {
+            return del("/api/releases/" + encodeURIComponent(id));
+        }
+
+        function setTicketRelease(ticketID, releaseID) {
+            return put("/api/tickets/" + encodeURIComponent(ticketID) + "/release", { release_id: releaseID });
+        }
+
+        function cloneFeature(ticketID) {
+            return post("/api/tickets/" + encodeURIComponent(ticketID) + "/clone", {});
         }
 
         function getOrg() { return get("/api/org"); }
@@ -441,11 +449,13 @@
             getTeamMembers: getTeamMembers,
             addTeamMember: addTeamMember,
             removeTeamMember: removeTeamMember,
-            listSprints: listSprints,
-            createSprint: createSprint,
-            updateSprint: updateSprint,
-            deleteSprint: deleteSprint,
-            setTicketSprint: setTicketSprint,
+            listReleases: listReleases,
+            createRelease: createRelease,
+            updateRelease: updateRelease,
+            setReleaseStatus: setReleaseStatus,
+            deleteRelease: deleteRelease,
+            setTicketRelease: setTicketRelease,
+            cloneFeature: cloneFeature,
             getOrg: getOrg,
             updateOrg: updateOrg,
             listProgrammes: listProgrammes,

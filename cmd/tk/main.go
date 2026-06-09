@@ -174,6 +174,10 @@ func run(args []string) error {
 		return runRole(trimmedArgs[1:])
 	case "story":
 		return runStory(trimmedArgs[1:])
+	case "release":
+		return runRelease(trimmedArgs[1:])
+	case "feature":
+		return runFeature(trimmedArgs[1:])
 	case "document":
 		return runDocument(trimmedArgs[1:])
 	case "workflow":

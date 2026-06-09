@@ -1181,19 +1181,19 @@ select {
     .nav-item { padding: 7px; justify-content: center; }
 }
 
-/* ── Sprint / list-view styles ──────────────────────────────────── */
+/* ── Release / list-view styles ─────────────────────────────────── */
 .ticket-list-view {
     padding: 8px 0;
 }
 
-.sprint-group {
+.release-group {
     margin-bottom: 12px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
 }
 
-.sprint-group > summary {
+.release-group > summary {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1203,24 +1203,40 @@ select {
     user-select: none;
 }
 
-/* Expand/collapse caret to the left of the sprint/backlog header. */
-.sprint-group > summary::before {
+/* Expand/collapse caret to the left of the release/feature/backlog header. */
+.release-group > summary::before {
     content: "\25B8"; /* ▸ */
     flex-shrink: 0;
     font-size: 0.72rem;
     color: var(--fg-3);
     transition: transform 0.12s ease;
 }
-.sprint-group[open] > summary::before { transform: rotate(90deg); }
+.release-group[open] > summary::before { transform: rotate(90deg); }
 
-.sprint-group[open] > summary {
+.release-group[open] > summary {
     border-bottom: 1px solid var(--border);
 }
 
-.sprint-group > summary strong {
+.release-group > summary strong {
     flex: 1;
     font-size: 0.9rem;
 }
+
+/* Nested groups (feature within release, epic within feature) indent and use a
+   lighter header so the hierarchy is readable. */
+.release-group .release-group {
+    margin: 8px 12px 8px;
+    border-radius: var(--radius);
+}
+.release-group-epic > summary {
+    background: var(--bg-2, var(--card-bg));
+    font-size: 0.85rem;
+}
+
+/* Release status chips. */
+.chip.release-status-in_design { background: var(--chip-idle-bg, #e5e7eb); color: var(--fg-2, #374151); }
+.chip.release-status-in_progress { background: var(--chip-active-bg, #dbeafe); color: #1e40af; }
+.chip.release-status-complete { background: var(--chip-success-bg, #dcfce7); color: #166534; }
 
 .ticket-list-table {
     width: 100%;
@@ -1346,14 +1362,14 @@ select {
     margin-bottom: 0.25rem;
 }
 
-.plan-sprint-group {
+.plan-release-group {
     border: 1px solid var(--border);
     border-radius: 6px;
     overflow: hidden;
     background: var(--card-bg);
 }
 
-.plan-sprint-group > summary {
+.plan-release-group > summary {
     padding: 0.5rem 0.75rem;
     cursor: pointer;
     display: flex;
@@ -1366,11 +1382,11 @@ select {
     list-style: none;
 }
 
-.plan-sprint-group[open] > summary {
+.plan-release-group[open] > summary {
     border-bottom: 1px solid var(--border);
 }
 
-.plan-sprint-group > summary strong {
+.plan-release-group > summary strong {
     flex: 1;
 }
 
@@ -1422,7 +1438,7 @@ select {
     opacity: 0.6;
 }
 
-.plan-sprint-group[data-sprint-closed] > summary {
+.plan-release-group[data-release-locked] > summary {
     opacity: 0.7;
 }
 

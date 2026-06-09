@@ -640,6 +640,42 @@ func (s *HTTPService) DeleteStory(ctx context.Context, id int64) error {
 	return s.client.DeleteStory(ctx, id)
 }
 
+func (s *HTTPService) ListReleases(ctx context.Context, projectID int64) ([]store.Release, error) {
+	return s.client.ListReleases(ctx, projectID)
+}
+
+func (s *HTTPService) GetRelease(ctx context.Context, id int64) (store.Release, error) {
+	return s.client.GetRelease(ctx, id)
+}
+
+func (s *HTTPService) CreateRelease(ctx context.Context, projectID int64, title, purpose, targetDate string) (store.Release, error) {
+	return s.client.CreateRelease(ctx, projectID, title, purpose, targetDate)
+}
+
+func (s *HTTPService) UpdateRelease(ctx context.Context, id int64, title, purpose, targetDate string) (store.Release, error) {
+	return s.client.UpdateRelease(ctx, id, title, purpose, targetDate)
+}
+
+func (s *HTTPService) SetReleaseStatus(ctx context.Context, id int64, status string) (store.Release, error) {
+	return s.client.SetReleaseStatus(ctx, id, status)
+}
+
+func (s *HTTPService) DeleteRelease(ctx context.Context, id int64) error {
+	return s.client.DeleteRelease(ctx, id)
+}
+
+func (s *HTTPService) AddFeatureToRelease(ctx context.Context, featureTicketID string, releaseID int64) error {
+	return s.client.AddFeatureToRelease(ctx, featureTicketID, releaseID)
+}
+
+func (s *HTTPService) RemoveFeatureFromRelease(ctx context.Context, featureTicketID string) error {
+	return s.client.RemoveFeatureFromRelease(ctx, featureTicketID)
+}
+
+func (s *HTTPService) CloneFeature(ctx context.Context, featureTicketID string) (store.Ticket, error) {
+	return s.client.CloneFeature(ctx, featureTicketID)
+}
+
 func (s *HTTPService) CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error) {
 	return s.client.CreateDocument(ctx, projectID, client.DocumentRequest(request))
 }
