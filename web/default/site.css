@@ -1207,8 +1207,10 @@ select {
 .release-group > summary::before {
     content: "\25B8"; /* ▸ */
     flex-shrink: 0;
-    font-size: 0.72rem;
-    color: var(--fg-3);
+    width: 1.1em;
+    font-size: 1.15rem;
+    line-height: 1;
+    color: var(--fg-2);
     transition: transform 0.12s ease;
 }
 .release-group[open] > summary::before { transform: rotate(90deg); }

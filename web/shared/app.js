@@ -3388,6 +3388,30 @@
             }).join("");
         }
 
+        // List-view expand/collapse state persists across re-renders and perspective
+        // switches. Keyed per group (release/feature/epic/backlog); an explicit entry
+        // overrides the default open state.
+        function loadListOpenState() {
+            if (state._listOpenState) return state._listOpenState;
+            let m = {};
+            try { m = JSON.parse(localStorage.getItem("site2.listOpen") || "{}") || {}; } catch (_) { m = {}; }
+            state._listOpenState = m;
+            return m;
+        }
+        function listGroupOpen(key, def) {
+            const m = loadListOpenState();
+            return Object.prototype.hasOwnProperty.call(m, key) ? Boolean(m[key]) : def;
+        }
+        function setListGroupOpen(key, open) {
+            const m = loadListOpenState();
+            m[key] = Boolean(open);
+            try { localStorage.setItem("site2.listOpen", JSON.stringify(m)); } catch (_) { /* ignore */ }
+        }
+        // openAttrFor returns ' open' / '' plus the data-ck key attribute for a group.
+        function openAttrFor(key, def) {
+            return " data-ck=\"" + escapeHTML(key) + "\"" + (listGroupOpen(key, def) ? " open" : "");
+        }
+
         function renderTicketListView() {
             if (!els.ticketListView) {
                 return;
@@ -3430,29 +3454,31 @@
             });
 
             const sortByOrder = (a, b) => (a.order || 0) - (b.order || 0);
+            // Features render newest-first (reverse order).
+            const sortFeatures = (list) => list.slice().sort(sortByOrder).reverse();
 
             // Render a feature and its epic/story subtree as nested <details>.
             function featureBlock(feature) {
                 const epics = (childrenByParent[feature.id] || []).slice().sort(sortByOrder);
                 const epicsHtml = epics.map((epic) => {
                     const leaves = (childrenByParent[epic.id] || []).slice().sort(sortByOrder);
-                    return "<details class=\"release-group release-group-epic\" open>" +
+                    return "<details class=\"release-group release-group-epic\"" + openAttrFor("e:" + epic.id, true) + ">" +
                         "<summary><strong>" + escapeHTML(epic.key || String(epic.id)) + "</strong> " + escapeHTML(epic.title || "(untitled)") +
                         " <span class=\"chip\">" + leaves.length + "</span></summary>" +
                         renderTicketListRows(leaves, false) +
                         "</details>";
                 }).join("");
-                return "<details class=\"release-group release-group-feature\" open>" +
+                return "<details class=\"release-group release-group-feature\"" + openAttrFor("f:" + feature.id, true) + ">" +
                     "<summary><strong>" + escapeHTML(feature.key || String(feature.id)) + "</strong> " + escapeHTML(feature.title || "(untitled)") +
                     " <span class=\"chip\">" + epics.length + " epics</span></summary>" +
                     (epicsHtml || "<div class=\"empty\">No epics.</div>") +
                     "</details>";
             }
 
-            function releaseBlock(release, releaseFeatures, extraClass, openAttr) {
-                const featuresHtml = releaseFeatures.slice().sort(sortByOrder).map(featureBlock).join("");
+            function releaseBlock(release, releaseFeatures, extraClass, def) {
+                const featuresHtml = sortFeatures(releaseFeatures).map(featureBlock).join("");
                 const statusLabel = release.status || "in_design";
-                return "<details class=\"release-group" + (extraClass ? " " + extraClass : "") + "\"" + openAttr + ">" +
+                return "<details class=\"release-group" + (extraClass ? " " + extraClass : "") + "\"" + openAttrFor("r:" + release.id, def) + ">" +
                     "<summary><strong>" + escapeHTML(release.title || "Release") + "</strong> " +
                     "<span class=\"chip release-status-" + escapeHTML(statusLabel) + "\">" + escapeHTML(statusLabel) + "</span> " +
                     "<span class=\"chip\">" + (release.feature_count != null ? release.feature_count : releaseFeatures.length) + " features</span> " +
@@ -3462,25 +3488,23 @@
             }
 
             const selectedReleaseNumID = state.selectedReleaseID && state.selectedReleaseID !== "backlog" ? Number(state.selectedReleaseID) : null;
-            const ordered = releases.slice().sort((a, b) => (a.id || 0) - (b.id || 0));
+            // Backlog at the top, then releases in reverse (newest first).
+            const ordered = releases.slice().sort((a, b) => (b.id || 0) - (a.id || 0));
 
             let html = "";
-            ordered.forEach((release) => {
-                const isSelected = selectedReleaseNumID === release.id;
-                const openAttr = isSelected || release.status !== "complete" ? " open" : "";
-                html += releaseBlock(release, featuresByRelease[release.id] || [], "release-group-release", openAttr);
-            });
-
             // Backlog group: features not in any release.
             if (backlogFeatures.length > 0 || state.selectedReleaseID === "backlog" || state.selectedReleaseID === "") {
-                const isSelected = state.selectedReleaseID === "backlog" || state.selectedReleaseID === "";
-                const openAttr = isSelected ? " open" : "";
-                const featuresHtml = backlogFeatures.slice().sort(sortByOrder).map(featureBlock).join("");
-                html += "<details class=\"release-group release-group-backlog\"" + openAttr + ">" +
+                const featuresHtml = sortFeatures(backlogFeatures).map(featureBlock).join("");
+                html += "<details class=\"release-group release-group-backlog\"" + openAttrFor("r:backlog", true) + ">" +
                     "<summary><strong>Backlog</strong> <span class=\"chip\">" + backlogFeatures.length + " features</span></summary>" +
                     (featuresHtml || "<div class=\"empty\">No features.</div>") +
                     "</details>";
             }
+            ordered.forEach((release) => {
+                const isSelected = selectedReleaseNumID === release.id;
+                const def = isSelected || release.status !== "complete";
+                html += releaseBlock(release, featuresByRelease[release.id] || [], "release-group-release", def);
+            });
 
             if (!html) {
                 html = "<div class=\"empty\">No tickets.</div>";
@@ -6575,6 +6599,14 @@
             });
             // Ticket list view row click
             if (els.ticketListView) {
+                // Persist expand/collapse of release/feature/epic groups. `toggle`
+                // doesn't bubble, so listen in the capture phase.
+                els.ticketListView.addEventListener("toggle", (e) => {
+                    const d = e.target;
+                    if (d && d.tagName === "DETAILS" && d.dataset && d.dataset.ck) {
+                        setListGroupOpen(d.dataset.ck, d.open);
+                    }
+                }, true);
                 els.ticketListView.addEventListener("click", (e) => {
                     const row = e.target.closest(".ticket-list-row");
                     if (!row) {
