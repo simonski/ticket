@@ -144,8 +144,9 @@
   var S_INTRO=0, S_HOLD=1, S_FADEOUT=2, S_XFADE=3;
   var state=S_INTRO, st=0;
   var clock = new THREE.Clock();
-  // Phase durations (seconds) — halved to run the landing animation twice as fast.
-  var INTRO_DUR=1.25, HOLD_DUR=0.0375, FADE_DUR=0.625, XFADE_DUR=0.25;
+  // Phase durations (seconds): animate IN, a clear WAIT, then fade OUT — the
+  // fade-out mirrors the intro (same duration) but plays it in reverse.
+  var INTRO_DUR=1.25, HOLD_DUR=0.7, FADE_DUR=1.25, XFADE_DUR=0.25;
 
   var WH=0.48, WS=0.85, WL=0.6;
 
@@ -233,31 +234,32 @@
     }
 
     if (state === S_FADEOUT) {
-      var t = Math.min(st/FADE_DUR, 1);
+      // Reverse playback of the intro: the per-cell "presence" ct runs 1 -> 0 as
+      // the intro's reveal evaluated at (1 - fadeProgress). Cells that appeared
+      // last (farthest from centre) disappear first; each one shrinks, recolours
+      // and fades exactly the way it grew in, just backwards.
+      var f = Math.min(st/FADE_DUR, 1);
       for (var i = 0; i < N; i++) {
         var cl = cells[i];
-        if (!cl.isW) continue;
+        if (!cl.isW) { setCol(cl,0,0,0,0); continue; }
         var dx = cl.c - GCOLS/2, dy = cl.r - GROWS/2;
         var dist = Math.sqrt(dx*dx+dy*dy) / (GCOLS*0.5);
-        var ct = Math.max(0, Math.min(1, (t - dist*0.3)*2.5));
+        var ct = Math.max(0, Math.min(1, ((1 - f) - dist*0.3)*2.5));
 
-        if (ct > 0.2 && ct < 1) {
-          var sc = 0.85 + 0.15*Math.sin(((1-ct)*3+cl.phase)*Math.PI*4);
-          setScale(cl, sc * (1-ct));
+        if (ct > 0 && ct < 0.8) {
+          var sc = 0.85 + 0.15*Math.sin((ct*3+cl.phase)*Math.PI*4);
+          setScale(cl, sc);
           posDirty = true;
-        } else if (ct <= 0.2) {
+        } else if (ct >= 0.8) {
           setScale(cl, 1);
           posDirty = true;
         }
 
-        var h = lerp(WH, 0, ct);
-        var s = lerp(WS, 0, ct);
-        var l = lerp(WL, 1, ct*ct);
-        var op = 1 - ct;
-        var rgb = hsl(h, s, l);
-        setCol(cl, rgb[0], rgb[1], rgb[2], op);
+        var h=lerp(0,WH,ct), s=lerp(0,WS,ct), l=lerp(1,WL,ct*ct);
+        var rgb = hsl(h,s,l);
+        setCol(cl, rgb[0], rgb[1], rgb[2], ct);
       }
-      if (t >= 1) { state = S_XFADE; st = 0; }
+      if (f >= 1) { state = S_XFADE; st = 0; }
     }
 
     if (state === S_XFADE) {

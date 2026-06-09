@@ -228,6 +228,7 @@ html.landing-active .app-shell { display: none; }
 
 /* app.js renders <button data-view="..." class="" | "active"> — no nav-item class */
 #main-nav button,
+#process-nav button,
 #admin-nav button {
     width: 100%;
     display: flex; align-items: center; gap: 9px;
@@ -243,12 +244,14 @@ html.landing-active .app-shell { display: none; }
     transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 #main-nav button:hover,
+#process-nav button:hover,
 #admin-nav button:hover {
     background: var(--sb-hover);
     border-color: hsl(22 16% 28% / 0.6);
     color: hsl(38 22% 92%);
 }
 #main-nav button.active,
+#process-nav button.active,
 #admin-nav button.active {
     background: hsl(18 44% 20%);
     border-color: hsl(18 38% 32%);
@@ -271,6 +274,7 @@ html.landing-active .app-shell { display: none; }
     stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
 }
 #main-nav button.active .nav-icon,
+#process-nav button.active .nav-icon,
 #admin-nav button.active .nav-icon {
     background: hsl(18 50% 28% / 0.5);
     color: hsl(18 70% 74%);
