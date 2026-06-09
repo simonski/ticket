@@ -3348,6 +3348,15 @@
                 els.ticketPlanView.classList.toggle("hidden", perspective !== "plan");
             }
 
+            // The sprint dropdown is a board-only filter — hide it in list/plan views.
+            if (els.boardSprintSelect) {
+                els.boardSprintSelect.classList.toggle("hidden", perspective !== "board");
+            }
+            // Reflect the active perspective on the segmented toggle buttons.
+            document.querySelectorAll("[data-perspective]").forEach((btn) => {
+                btn.classList.toggle("active", btn.dataset.perspective === perspective);
+            });
+
             if (perspective !== "board") {
                 return;
             }
@@ -3390,7 +3399,10 @@
                 return;
             }
             const sprints = state.sprints || [];
-            const tickets = sprintFilterTickets(state.tickets);
+            // The list view is a full sprint-by-sprint breakdown and has no sprint
+            // dropdown of its own, so it shows every ticket (the board view is the one
+            // filtered by the selected sprint).
+            const tickets = state.tickets || [];
 
             // Group tickets by sprint_id
             const groups = {};
