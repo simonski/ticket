@@ -884,10 +884,11 @@ select {
 .seg-btn:not(.active):hover { background: hsl(38 16% 93%); color: var(--fg); }
 .dark .seg-btn:not(.active):hover { background: hsl(22 12% 20%); }
 
-/* Icon-only segmented toggle (board/list/plan perspective switch). */
+/* Icon-only segmented toggle (board/list/plan perspective switch). Wider tap
+   targets — the icons alone were too small to click comfortably. */
 .perspective-toggle .seg-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    padding: 6px 11px;
+    padding: 7px 22px;
 }
 .perspective-toggle .seg-btn svg {
     width: 15px; height: 15px; fill: none;

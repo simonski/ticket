@@ -132,7 +132,6 @@
                             <input id="board-search" type="search" placeholder="Filter tickets" class="input-sm">
                             <label class="checkbox-label"><input id="board-hide-done" type="checkbox"> hide done</label>
                             <select id="board-sprint-select" class="select-sm"></select>
-                            <button id="new-sprint-button" class="btn" type="button">+ Sprint</button>
                             <div class="segmented perspective-toggle" role="tablist">
                                 <button class="seg-btn" type="button" data-perspective="board" title="Board view" aria-label="Board view">
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="5" height="18"/><rect x="10" y="3" width="5" height="18"/><rect x="17" y="3" width="4" height="18"/></svg>
@@ -144,7 +143,13 @@
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="18"/><rect x="13" y="3" width="8" height="9"/><rect x="13" y="14" width="8" height="7"/></svg>
                                 </button>
                             </div>
-                            <button id="new-ticket-button" class="btn btn-primary" type="button">New ticket</button>
+                            <div class="dropdown-wrap">
+                                <button id="new-menu-button" class="btn btn-primary" type="button" aria-haspopup="true" aria-expanded="false">New <span class="chevron">&#9662;</span></button>
+                                <div id="new-menu-dropdown" class="dropdown">
+                                    <button class="dropdown-item" type="button" data-new-action="ticket">Ticket</button>
+                                    <button class="dropdown-item" type="button" data-new-action="sprint">Sprint</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div id="ticket-board" class="board"></div>

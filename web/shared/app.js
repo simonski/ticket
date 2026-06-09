@@ -227,7 +227,6 @@
             boardSearch: document.getElementById("board-search"),
             boardHideDone: document.getElementById("board-hide-done"),
             boardSprintSelect: document.getElementById("board-sprint-select"),
-            newSprintButton: document.getElementById("new-sprint-button"),
             interventionList: document.getElementById("intervention-list"),
             interventionFilter: document.getElementById("intervention-filter"),
             interventionSort: document.getElementById("intervention-sort"),
@@ -6473,7 +6472,48 @@
         }
 
         function bindTicketsHandlers() {
-            document.getElementById("new-ticket-button").addEventListener("click", () => openTicketModal(emptyTicket()));
+            // "New…" dropdown: create a ticket or a sprint from one menu.
+            const newMenuButton = document.getElementById("new-menu-button");
+            const newMenuDropdown = document.getElementById("new-menu-dropdown");
+            function closeNewMenu() {
+                if (newMenuDropdown) newMenuDropdown.classList.remove("open");
+                if (newMenuButton) newMenuButton.setAttribute("aria-expanded", "false");
+            }
+            async function createSprintFromMenu() {
+                if (!state.selectedProjectID) return;
+                try {
+                    await apiClient.createSprint(state.selectedProjectID, "");
+                    await loadSprints();
+                    renderSprintSelect();
+                    renderTicketBoard();
+                    renderTicketListView();
+                    renderTicketPlanView();
+                } catch (e) {
+                    setNotice(e.message, true);
+                }
+            }
+            if (newMenuButton && newMenuDropdown) {
+                newMenuButton.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    const isOpen = newMenuDropdown.classList.toggle("open");
+                    newMenuButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
+                });
+                newMenuDropdown.addEventListener("click", (event) => {
+                    const item = event.target.closest("[data-new-action]");
+                    if (!item) return;
+                    closeNewMenu();
+                    if (item.dataset.newAction === "ticket") {
+                        openTicketModal(emptyTicket());
+                    } else if (item.dataset.newAction === "sprint") {
+                        createSprintFromMenu();
+                    }
+                });
+                document.addEventListener("click", (event) => {
+                    if (!event.target.closest("#new-menu-button") && !event.target.closest("#new-menu-dropdown")) {
+                        closeNewMenu();
+                    }
+                });
+            }
             if (els.boardSearch) {
                 els.boardSearch.addEventListener("input", () => { renderTicketBoard(); renderTicketListView(); renderTicketPlanView(); });
             }
@@ -6489,23 +6529,6 @@
                     renderTicketBoard();
                     renderTicketListView();
                     renderTicketPlanView();
-                });
-            }
-            if (els.newSprintButton) {
-                els.newSprintButton.addEventListener("click", async () => {
-                    if (!state.selectedProjectID) {
-                        return;
-                    }
-                    try {
-                        await apiClient.createSprint(state.selectedProjectID, "");
-                        await loadSprints();
-                        renderSprintSelect();
-                        renderTicketBoard();
-                        renderTicketListView();
-                        renderTicketPlanView();
-                    } catch (e) {
-                        setNotice(e.message, true);
-                    }
                 });
             }
             // Board perspective toggle buttons
