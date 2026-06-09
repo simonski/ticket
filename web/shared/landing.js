@@ -144,7 +144,8 @@
   var S_INTRO=0, S_HOLD=1, S_FADEOUT=2, S_XFADE=3;
   var state=S_INTRO, st=0;
   var clock = new THREE.Clock();
-  var INTRO_DUR=2.5, HOLD_DUR=0.075, FADE_DUR=1.25, XFADE_DUR=0.5;
+  // Phase durations (seconds) — halved to run the landing animation twice as fast.
+  var INTRO_DUR=1.25, HOLD_DUR=0.0375, FADE_DUR=0.625, XFADE_DUR=0.25;
 
   var WH=0.48, WS=0.85, WL=0.6;
 
