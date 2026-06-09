@@ -3399,10 +3399,16 @@
                 return;
             }
             const sprints = state.sprints || [];
+            // "hide done" hides finished work: both done-stage stories and old
+            // (closed) sprints.
+            const hideDone = Boolean(els.boardHideDone && els.boardHideDone.checked);
             // The list view is a full sprint-by-sprint breakdown and has no sprint
             // dropdown of its own, so it shows every ticket (the board view is the one
             // filtered by the selected sprint).
-            const tickets = state.tickets || [];
+            let tickets = state.tickets || [];
+            if (hideDone) {
+                tickets = tickets.filter((t) => String(t.stage || "").toLowerCase() !== "done");
+            }
 
             // Group tickets by sprint_id
             const groups = {};
@@ -3456,10 +3462,12 @@
                 html += sprintBlock(activeSprint, "sprint-group-active", false);
             }
 
-            // 4. Closed sprints, newest first
-            closedSprints.forEach((sprint) => {
-                html += sprintBlock(sprint, "sprint-group-closed", false);
-            });
+            // 4. Closed sprints, newest first (hidden when "hide done" is on)
+            if (!hideDone) {
+                closedSprints.forEach((sprint) => {
+                    html += sprintBlock(sprint, "sprint-group-closed", false);
+                });
+            }
 
             if (!html) {
                 html = "<div class=\"empty\">No tickets.</div>";
@@ -3475,8 +3483,15 @@
             if (perspective !== "plan") {
                 return;
             }
-            const sprints = (state.sprints || []).slice().sort((a, b) => a.number - b.number);
-            const allTickets = state.tickets || [];
+            // "hide done" hides finished work: closed (old) sprints and done stories.
+            const hideDone = Boolean(els.boardHideDone && els.boardHideDone.checked);
+            const sprints = (state.sprints || []).slice()
+                .filter((s) => !hideDone || s.stage !== "closed")
+                .sort((a, b) => a.number - b.number);
+            let allTickets = state.tickets || [];
+            if (hideDone) {
+                allTickets = allTickets.filter((t) => String(t.stage || "").toLowerCase() !== "done");
+            }
 
             const sprintTicketsMap = {};
             const backlogTickets = [];
