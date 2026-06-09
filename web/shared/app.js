@@ -4351,6 +4351,10 @@
             renderRoleEditor();
             renderAgentEditor();
             renderTeamEditor();
+            // Populates the Settings → AI Providers panel (provider list + the
+            // system/project agent-model selectors). Without this it only rendered
+            // on a select-change event, so a freshly opened panel was empty.
+            renderAgentHarnessEditor();
         }
 
         function renderProjectEditor() {
