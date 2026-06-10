@@ -1883,3 +1883,108 @@ select {
     opacity: 0.35;
     cursor: default;
 }
+
+/* ── Context graph view ───────────────────────────────────────────── */
+.context-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.context-toolbar input {
+    min-width: 220px;
+}
+.context-graph-wrap {
+    position: relative;
+    padding: 8px 12px;
+}
+.context-graph {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 320px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+}
+.context-graph-wrap .empty {
+    padding: 28px 16px;
+}
+.context-edge {
+    stroke: var(--card-border);
+    stroke-width: 1.5;
+}
+.context-edge.dimmed {
+    opacity: 0.18;
+}
+.context-node {
+    cursor: pointer;
+}
+.context-node circle {
+    fill: var(--fg-2);
+    stroke: var(--card);
+    stroke-width: 2;
+}
+.context-node-ticket circle {
+    fill: var(--accent);
+}
+.context-node-document circle {
+    fill: hsl(150 45% 42%);
+}
+.context-node-url circle {
+    fill: hsl(210 60% 52%);
+}
+.context-node text {
+    fill: var(--fg-2);
+    font-size: 11px;
+    pointer-events: none;
+}
+.context-node:hover circle {
+    stroke: var(--fg);
+}
+.context-node.dimmed {
+    opacity: 0.22;
+}
+.context-node.focus circle {
+    stroke: var(--fg);
+    stroke-width: 2.5;
+}
+.context-node.focus text {
+    fill: var(--fg);
+    font-weight: 600;
+}
+.context-node.matched circle {
+    stroke: var(--accent);
+    stroke-width: 3;
+}
+.context-node.matched text {
+    fill: var(--fg);
+}
+.context-legend {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 6px 16px 14px;
+    flex-wrap: wrap;
+}
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--fg-2);
+}
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.legend-ticket {
+    background: var(--accent);
+}
+.legend-document {
+    background: hsl(150 45% 42%);
+}
+.legend-url {
+    background: hsl(210 60% 52%);
+}

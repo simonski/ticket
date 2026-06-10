@@ -514,6 +514,32 @@
                     </div>
                 </section>
 
+                <!-- Context graph -->
+                <section id="view-context" class="view">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2>Context</h2>
+                                <p class="meta">How stories, documents, and links connect across the project.</p>
+                            </div>
+                            <div class="context-toolbar">
+                                <input id="context-search-input" placeholder="Search context&hellip;" aria-label="Search context">
+                                <button id="context-clear-focus" class="btn btn-ghost hidden" type="button">Clear focus</button>
+                            </div>
+                        </div>
+                        <div class="context-graph-wrap">
+                            <svg id="context-graph" class="context-graph" role="img" aria-label="Project context graph"></svg>
+                            <div id="context-empty" class="empty hidden">No context yet. Attach documents, links, or tickets to a story from its Properties tab, or create documents — they all become part of the graph.</div>
+                        </div>
+                        <div class="context-legend">
+                            <span class="legend-item"><span class="legend-dot legend-ticket"></span> Ticket</span>
+                            <span class="legend-item"><span class="legend-dot legend-document"></span> Document</span>
+                            <span class="legend-item"><span class="legend-dot legend-url"></span> Link</span>
+                            <span class="meta">Click a node to open it. Focused stories show their direct context; everything else is dimmed.</span>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Interventions -->
                 <section id="view-interventions" class="view">
                     <div class="card">
@@ -1086,6 +1112,9 @@
                         </select>
                         <input id="ticket-context-target" placeholder="Document id, https:// URL, or ticket key">
                         <button id="add-ticket-context-button" class="btn" type="button">Attach</button>
+                    </div>
+                    <div class="form-actions" style="padding-top:6px">
+                        <button id="ticket-context-graph-button" class="btn btn-ghost" type="button">View in graph</button>
                     </div>
                 </div>
                 <div class="modal-section">

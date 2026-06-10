@@ -29,6 +29,9 @@
             myProjectAccessRequests: [],
             myNotifications: [],
             documents: [],
+            contextGraph: null,
+            contextFocusKey: null,
+            contextMatches: null,
             tickets: [],
             interventions: [],
             interventionReport: null,
@@ -114,6 +117,7 @@
             { view: "workflows", label: "Workflows", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
             { view: "roles", label: "Roles", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8a3 3 0 1 0 0.001 0\"></path><path d=\"M17 16a3 3 0 1 0 0.001 0\"></path><path d=\"M9.5 10.5l5 3\"></path></svg>" },
             { view: "documents", label: "Documents", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 3h7l5 5v13H7z\"></path><path d=\"M14 3v5h5\"></path><path d=\"M9 13h8\"></path><path d=\"M9 17h8\"></path></svg>" },
+            { view: "context", label: "Context", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"6\" cy=\"6\" r=\"2.5\"></circle><circle cx=\"18\" cy=\"8\" r=\"2.5\"></circle><circle cx=\"12\" cy=\"18\" r=\"2.5\"></circle><path d=\"M8 7l7.5 1\"></path><path d=\"M7 8l4 8\"></path><path d=\"M17 10l-4 6\"></path></svg>" },
             { view: "teams", label: "Teams", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 11a2.5 2.5 0 1 0 0.001 0\"></path><path d=\"M16 9a2 2 0 1 0 0.001 0\"></path><path d=\"M4 19a4 4 0 0 1 8 0\"></path><path d=\"M14 19a3 3 0 0 1 6 0\"></path></svg>" },
             { view: "programmes", label: "Programmes", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 3h7v7H3z\"/><path d=\"M14 3h7v7h-7z\"/><path d=\"M3 14h7v7H3z\"/><path d=\"M14 14h7v7h-7z\"/></svg>" },
             { view: "settings", label: "Settings", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M12 17v4\"></path><path d=\"M4.9 6.3l2.8 2\"></path><path d=\"M16.3 15.7l2.8 2\"></path><path d=\"M3 12h4\"></path><path d=\"M17 12h4\"></path><path d=\"M4.9 17.7l2.8-2\"></path><path d=\"M16.3 8.3l2.8-2\"></path><circle cx=\"12\" cy=\"12\" r=\"3.5\"></circle></svg>" },
@@ -1604,6 +1608,9 @@
             }
             if (viewName === "admin-summary") {
                 renderAdminSummary();
+            }
+            if (viewName === "context") {
+                refreshContextView();
             }
             if (viewName === "settings") {
                 let tab = "organisation";
@@ -6969,6 +6976,41 @@
                     addTicketContext();
                 });
             }
+            const ticketContextGraphButton = document.getElementById("ticket-context-graph-button");
+            if (ticketContextGraphButton) {
+                ticketContextGraphButton.addEventListener("click", () => {
+                    const ticket = state.activeTicket;
+                    if (!ticket || !ticket.id) return;
+                    closeTicketModal();
+                    focusTicketInContextGraph(ticket.id);
+                });
+            }
+            const contextGraphEl = document.getElementById("context-graph");
+            if (contextGraphEl) {
+                contextGraphEl.addEventListener("click", (event) => {
+                    const node = event.target.closest("[data-node-key]");
+                    if (!node) return;
+                    openContextNode(node.dataset.nodeType, node.dataset.nodeId);
+                });
+            }
+            const contextClearFocusButton = document.getElementById("context-clear-focus");
+            if (contextClearFocusButton) {
+                contextClearFocusButton.addEventListener("click", () => {
+                    state.contextFocusKey = null;
+                    renderContextView();
+                });
+            }
+            const contextSearchInput = document.getElementById("context-search-input");
+            if (contextSearchInput) {
+                let contextSearchTimer = null;
+                contextSearchInput.addEventListener("input", () => {
+                    clearTimeout(contextSearchTimer);
+                    contextSearchTimer = setTimeout(() => {
+                        runContextSearch(contextSearchInput.value)
+                            .catch((e) => setNotice(e.message || "Context search failed", true));
+                    }, 250);
+                });
+            }
             if (els.ticketContext) {
                 els.ticketContext.addEventListener("click", (event) => {
                     const button = event.target.closest("[data-remove-ticket-context]");
@@ -7933,6 +7975,207 @@
             } catch (error) {
                 setNotice(error.message, true);
             }
+        }
+
+        // ── Context view ────────────────────────────────────────────────────
+        // Renders the project context graph (GET /api/projects/{ref}/context) as
+        // an SVG node-link map. Nodes are tickets, documents, and URLs; clicking
+        // one opens it. A focused story shows its direct context, rest dimmed.
+
+        function contextNodeKey(type, id) {
+            return String(type) + ":" + String(id);
+        }
+
+        // layoutContextGraph computes node positions with a small deterministic
+        // force simulation: nodes seeded on a circle, pairwise repulsion, springs
+        // along edges, gentle centering. Deterministic so renders are stable.
+        function layoutContextGraph(graph, width, height) {
+            const keys = graph.nodes.map((n) => contextNodeKey(n.type, n.id));
+            const index = new Map(keys.map((key, i) => [key, i]));
+            const cx = width / 2;
+            const cy = height / 2;
+            const seedRadius = Math.min(width, height) * 0.38;
+            const count = Math.max(1, graph.nodes.length);
+            const pts = graph.nodes.map((n, i) => {
+                const angle = (2 * Math.PI * i) / count;
+                const jitter = 0.6 + 0.4 * (((i * 7919) % 97) / 97);
+                return { x: cx + seedRadius * jitter * Math.cos(angle), y: cy + seedRadius * jitter * Math.sin(angle) };
+            });
+            const links = graph.edges.map((e) => ({
+                a: index.get(contextNodeKey(e.source_type, e.source_id)),
+                b: index.get(contextNodeKey(e.target_type, e.target_id)),
+            })).filter((l) => l.a !== undefined && l.b !== undefined && l.a !== l.b);
+
+            const iterations = 180;
+            for (let iter = 0; iter < iterations; iter++) {
+                const heat = 1 - iter / iterations;
+                for (let i = 0; i < pts.length; i++) {
+                    for (let j = i + 1; j < pts.length; j++) {
+                        let dx = pts[j].x - pts[i].x;
+                        let dy = pts[j].y - pts[i].y;
+                        const d2 = dx * dx + dy * dy || 1;
+                        const d = Math.sqrt(d2);
+                        const push = Math.min(10, 2600 / d2) * heat;
+                        dx /= d;
+                        dy /= d;
+                        pts[i].x -= dx * push;
+                        pts[i].y -= dy * push;
+                        pts[j].x += dx * push;
+                        pts[j].y += dy * push;
+                    }
+                }
+                links.forEach((l) => {
+                    const a = pts[l.a];
+                    const b = pts[l.b];
+                    const dx = b.x - a.x;
+                    const dy = b.y - a.y;
+                    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+                    const pull = ((d - 120) / d) * 0.18 * heat;
+                    a.x += dx * pull;
+                    a.y += dy * pull;
+                    b.x -= dx * pull;
+                    b.y -= dy * pull;
+                });
+                pts.forEach((p) => {
+                    p.x += (cx - p.x) * 0.012 * heat;
+                    p.y += (cy - p.y) * 0.012 * heat;
+                });
+            }
+            pts.forEach((p) => {
+                p.x = Math.max(60, Math.min(width - 60, p.x));
+                p.y = Math.max(36, Math.min(height - 36, p.y));
+            });
+            return { index, pts };
+        }
+
+        async function loadContextGraph() {
+            if (!state.selectedProjectID) {
+                state.contextGraph = { nodes: [], edges: [] };
+                return;
+            }
+            state.contextGraph = await api("/api/projects/" + state.selectedProjectID + "/context");
+        }
+
+        function contextFocusNeighbors(graph, focusKey) {
+            const neighbors = new Set();
+            if (!focusKey) return neighbors;
+            neighbors.add(focusKey);
+            (graph.edges || []).forEach((e) => {
+                const a = contextNodeKey(e.source_type, e.source_id);
+                const b = contextNodeKey(e.target_type, e.target_id);
+                if (a === focusKey) neighbors.add(b);
+                if (b === focusKey) neighbors.add(a);
+            });
+            return neighbors;
+        }
+
+        function renderContextView() {
+            const svg = document.getElementById("context-graph");
+            if (!svg) return;
+            const emptyEl = document.getElementById("context-empty");
+            const clearBtn = document.getElementById("context-clear-focus");
+            if (clearBtn) clearBtn.classList.toggle("hidden", !state.contextFocusKey);
+            const graph = state.contextGraph;
+            if (!graph || !Array.isArray(graph.nodes) || !graph.nodes.length) {
+                svg.innerHTML = "";
+                if (emptyEl) emptyEl.classList.remove("hidden");
+                return;
+            }
+            if (emptyEl) emptyEl.classList.add("hidden");
+
+            const width = 960;
+            const height = 620;
+            svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+            const layout = layoutContextGraph(graph, width, height);
+            const focusKey = state.contextFocusKey;
+            const neighbors = contextFocusNeighbors(graph, focusKey);
+            const matches = state.contextMatches;
+
+            const edgesHtml = (graph.edges || []).map((e) => {
+                const aKey = contextNodeKey(e.source_type, e.source_id);
+                const bKey = contextNodeKey(e.target_type, e.target_id);
+                const ai = layout.index.get(aKey);
+                const bi = layout.index.get(bKey);
+                if (ai === undefined || bi === undefined) return "";
+                const a = layout.pts[ai];
+                const b = layout.pts[bi];
+                const inFocus = !focusKey || aKey === focusKey || bKey === focusKey;
+                return "<line class=\"context-edge" + (inFocus ? "" : " dimmed") + "\" x1=\"" + a.x.toFixed(1) +
+                    "\" y1=\"" + a.y.toFixed(1) + "\" x2=\"" + b.x.toFixed(1) + "\" y2=\"" + b.y.toFixed(1) + "\"></line>";
+            }).join("");
+
+            const nodesHtml = graph.nodes.map((node, i) => {
+                const key = contextNodeKey(node.type, node.id);
+                const p = layout.pts[i];
+                const inFocus = !focusKey || neighbors.has(key);
+                const matched = matches instanceof Set && matches.has(key);
+                let label = String(node.title || node.id || "");
+                if (label.length > 26) label = label.slice(0, 25) + "…";
+                const classes = ["context-node", "context-node-" + node.type];
+                if (!inFocus) classes.push("dimmed");
+                if (matched) classes.push("matched");
+                if (focusKey === key) classes.push("focus");
+                return "<g class=\"" + classes.join(" ") + "\" data-node-key=\"" + escapeHTML(key) +
+                    "\" data-node-type=\"" + escapeHTML(node.type) + "\" data-node-id=\"" + escapeHTML(node.id) +
+                    "\" transform=\"translate(" + p.x.toFixed(1) + "," + p.y.toFixed(1) + ")\" role=\"button\" tabindex=\"0\">" +
+                    "<title>" + escapeHTML(node.type + ": " + (node.title || node.id)) + "</title>" +
+                    "<circle r=\"" + (focusKey === key ? 13 : 9) + "\"></circle>" +
+                    "<text y=\"" + (focusKey === key ? 28 : 22) + "\" text-anchor=\"middle\">" + escapeHTML(label) + "</text>" +
+                    "</g>";
+            }).join("");
+
+            svg.innerHTML = edgesHtml + nodesHtml;
+        }
+
+        async function refreshContextView() {
+            try {
+                await loadContextGraph();
+            } catch (error) {
+                state.contextGraph = { nodes: [], edges: [] };
+                setNotice(error.message || "Failed to load context graph", true);
+            }
+            renderContextView();
+        }
+
+        // openContextNode opens whatever the node represents: ticket modal,
+        // document editor, or the external URL in a new tab.
+        function openContextNode(nodeType, nodeID) {
+            if (nodeType === "ticket") {
+                const ticket = (state.tickets || []).find((t) => String(t.id) === String(nodeID));
+                if (ticket) openTicketModal(ticket);
+                return;
+            }
+            if (nodeType === "document") {
+                state.selectedDocumentID = Number(nodeID);
+                switchView("documents");
+                renderAll();
+                return;
+            }
+            if (nodeType === "url") {
+                window.open(String(nodeID), "_blank", "noopener,noreferrer");
+            }
+        }
+
+        // focusTicketInContextGraph is the "View in graph" entry point from the
+        // ticket modal: jump to the Context view centered on that story.
+        function focusTicketInContextGraph(ticketID) {
+            state.contextFocusKey = contextNodeKey("ticket", ticketID);
+            state.contextMatches = null;
+            const searchInput = document.getElementById("context-search-input");
+            if (searchInput) searchInput.value = "";
+            switchView("context");
+        }
+
+        async function runContextSearch(query) {
+            const trimmed = String(query || "").trim();
+            if (!trimmed) {
+                state.contextMatches = null;
+                renderContextView();
+                return;
+            }
+            const nodes = await api("/api/projects/" + state.selectedProjectID + "/context/search?q=" + encodeURIComponent(trimmed));
+            state.contextMatches = new Set((nodes || []).map((n) => contextNodeKey(n.type, n.id)));
+            renderContextView();
         }
 
         function renderTicketTimeEntries() {

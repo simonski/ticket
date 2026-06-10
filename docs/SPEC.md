@@ -1370,6 +1370,13 @@ refiner replies, proposed-breakdown reordering before approval, ticket context
 attachments (documents/URLs/tickets), document management with file upload,
 plan/quota administration, and an AI-provider (agent-model) settings panel.
 
+The **Context view** (Process nav → Context) renders the project context graph
+(5.24) as an interactive SVG node-link map: tickets, documents, and URLs are
+color-coded nodes, clicking a node opens it, and a search box highlights
+matches via `/context/search`. "View in graph" in a ticket's Context section
+jumps to the graph focused on that story with its direct context highlighted
+and everything else dimmed.
+
 ---
 
 ## 16. Terminal UI (TUI)

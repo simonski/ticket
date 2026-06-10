@@ -542,6 +542,51 @@ function installSite2Mock(page, seed = {}) {
         const ref = path.split("/")[3];
         return json(db.projectHistoryByProject[String(ref)] || []);
       }
+      if (path.match(/^\/api\/projects\/\d+\/context$/) && method === "GET") {
+        const edges = Object.keys(db.contextByTicket).reduce((all, key) => all.concat(db.contextByTicket[key]), []);
+        const nodes = [];
+        const seen = new Set();
+        const addNode = (type, id, title) => {
+          const nodeKey = type + ":" + id;
+          if (seen.has(nodeKey)) return;
+          seen.add(nodeKey);
+          nodes.push({ type, id: String(id), title });
+        };
+        db.documents.forEach((documentItem) => addNode("document", documentItem.document_id, documentItem.title));
+        edges.forEach((edge) => {
+          [[edge.source_type, edge.source_id], [edge.target_type, edge.target_id]].forEach(([type, id]) => {
+            if (type === "ticket") {
+              const ticket = db.tickets.find((item) => item.ticket_id === id);
+              addNode("ticket", id, ticket ? ticket.title : id);
+            } else if (type === "url") {
+              addNode("url", id, edge.title || id);
+            } else if (type === "document") {
+              const documentItem = db.documents.find((item) => item.document_id === Number(id));
+              addNode("document", id, documentItem ? documentItem.title : id);
+            }
+          });
+        });
+        return json({ nodes, edges });
+      }
+      if (path.match(/^\/api\/projects\/\d+\/context\/search$/) && method === "GET") {
+        const q = String(url.searchParams.get("q") || "").toLowerCase();
+        const nodes = [];
+        if (q) {
+          db.documents.forEach((documentItem) => {
+            const haystack = [documentItem.title, documentItem.description, documentItem.notes, documentItem.content].join(" ").toLowerCase();
+            if (haystack.includes(q)) {
+              nodes.push({ type: "document", id: String(documentItem.document_id), title: documentItem.title });
+            }
+          });
+          db.tickets.forEach((ticket) => {
+            const haystack = [ticket.ticket_id, ticket.title, ticket.description || ""].join(" ").toLowerCase();
+            if (haystack.includes(q)) {
+              nodes.push({ type: "ticket", id: ticket.ticket_id, title: ticket.title });
+            }
+          });
+        }
+        return json(nodes);
+      }
       if (path.match(/^\/api\/projects\/\d+\/documents$/) && method === "GET") {
         const id = Number(path.split("/")[3]);
         return json(db.documents.filter((documentItem) => documentItem.project_id === id));
@@ -1799,6 +1844,32 @@ test("attaches and removes context from the ticket modal", async ({ page }) => {
       expect.objectContaining({ method: "DELETE", path: "/api/tickets/OPS-101/context/91" }),
     ]),
   );
+});
+
+test("renders the context graph and focuses a story from the ticket modal", async ({ page }) => {
+  // The Context view draws the project graph from the context endpoint.
+  await page.getByRole("button", { name: "Context" }).click();
+  await expect(page.locator("#context-graph [data-node-key='document:1']")).toBeVisible();
+  await expect(page.locator("#context-graph [data-node-key='ticket:OPS-101']")).toBeVisible();
+  await expect(page.locator("#context-graph [data-node-key='url:https://example.com/runbook']")).toBeVisible();
+
+  // Search highlights matching nodes via the context search endpoint.
+  await page.locator("#context-search-input").fill("Runbook");
+  await expect(page.locator("#context-graph .context-node.matched")).toHaveCount(1);
+  await expect(page.locator("#context-graph .context-node.matched")).toHaveAttribute("data-node-key", "document:1");
+
+  // "View in graph" from a story's Context section focuses that story.
+  await page.getByRole("button", { name: "Board" }).click();
+  await page.locator("#view-tickets").getByText("Move me").click();
+  await page.locator("[data-ticket-tab='properties']").click();
+  await page.getByRole("button", { name: "View in graph" }).click();
+  await expect(page.locator("#view-context")).toHaveClass(/active/);
+  await expect(page.locator("#context-graph [data-node-key='ticket:OPS-101']")).toHaveClass(/focus/);
+
+  // Non-neighbors are dimmed while focused; clearing focus restores them.
+  await expect(page.locator("#context-graph .context-node.dimmed")).not.toHaveCount(0);
+  await page.locator("#context-clear-focus").click();
+  await expect(page.locator("#context-graph .context-node.dimmed")).toHaveCount(0);
 });
 
 test("reorders the proposed breakdown from the refinement panel", async ({ page }) => {
