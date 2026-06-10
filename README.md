@@ -9,6 +9,11 @@ It operates as a client/server system:
 
 Architecture and design notes are in [docs/DESIGN.md](./docs/DESIGN.md).
 
+The mission — what this program is meant to be — is captured in
+[docs/FACTORY.md](./docs/FACTORY.md): a single, technology-neutral
+specification of the software factory (vision, requirements, SDLC, and
+worked examples), complete enough to rebuild the system from scratch.
+
 
 
 ---
