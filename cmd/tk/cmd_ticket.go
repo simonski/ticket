@@ -913,13 +913,13 @@ func runGet(args []string) error {
 	ticketRef := strings.TrimSpace(*id)
 	if ticketRef == "" {
 		// No ID: fall back to the most recently updated ticket in the project.
-		_, svc, resolvedProject, err := resolveCurrentProjectClient()
-		if err != nil {
-			return err
+		_, projectSvc, resolvedProject, resolveErr := resolveCurrentProjectClient()
+		if resolveErr != nil {
+			return resolveErr
 		}
-		tickets, err := svc.ListTicketsFiltered(context.Background(), resolvedProject.ID, "", "", "", "", "", "", 0, false)
-		if err != nil {
-			return err
+		tickets, listErr := projectSvc.ListTicketsFiltered(context.Background(), resolvedProject.ID, "", "", "", "", "", "", 0, false)
+		if listErr != nil {
+			return listErr
 		}
 		if len(tickets) == 0 {
 			return errors.New("no tickets in project")

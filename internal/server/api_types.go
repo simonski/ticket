@@ -218,6 +218,17 @@ type ticketHealthRequest struct {
 	Score int `json:"score"`
 }
 
+type ticketChildrenReorderRequest struct {
+	Order []string `json:"order"`
+}
+
+type ticketContextRequest struct {
+	TargetType string `json:"target_type"`
+	TargetID   string `json:"target_id"`
+	Relation   string `json:"relation,omitempty"`
+	Title      string `json:"title,omitempty"`
+}
+
 type commentRequest struct {
 	Comment string `json:"comment"`
 }

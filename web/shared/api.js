@@ -395,6 +395,35 @@
             return post("/api/tickets/" + encodeURIComponent(ticketID) + "/clone", {});
         }
 
+        function listTicketContext(ticketID) {
+            return get("/api/tickets/" + encodeURIComponent(ticketID) + "/context");
+        }
+
+        function addTicketContext(ticketID, targetType, targetID, relation, title) {
+            return post("/api/tickets/" + encodeURIComponent(ticketID) + "/context", {
+                target_type: targetType,
+                target_id: targetID,
+                relation: relation || "",
+                title: title || "",
+            });
+        }
+
+        function removeTicketContext(ticketID, edgeID) {
+            return del("/api/tickets/" + encodeURIComponent(ticketID) + "/context/" + encodeURIComponent(edgeID));
+        }
+
+        function getProjectContextGraph(projectRef) {
+            return get("/api/projects/" + encodeURIComponent(projectRef) + "/context");
+        }
+
+        function searchProjectContext(projectRef, query) {
+            return get("/api/projects/" + encodeURIComponent(projectRef) + "/context/search?q=" + encodeURIComponent(query || ""));
+        }
+
+        function reorderTicketChildren(ticketID, order) {
+            return post("/api/tickets/" + encodeURIComponent(ticketID) + "/children/reorder", { order: order || [] });
+        }
+
         function getOrg() { return get("/api/org"); }
         function updateOrg(name, domain, description, logoURL) {
             return put("/api/org", { name, domain, description, logo_url: logoURL });
@@ -456,6 +485,12 @@
             deleteRelease: deleteRelease,
             setTicketRelease: setTicketRelease,
             cloneFeature: cloneFeature,
+            listTicketContext: listTicketContext,
+            addTicketContext: addTicketContext,
+            removeTicketContext: removeTicketContext,
+            getProjectContextGraph: getProjectContextGraph,
+            searchProjectContext: searchProjectContext,
+            reorderTicketChildren: reorderTicketChildren,
             getOrg: getOrg,
             updateOrg: updateOrg,
             listProgrammes: listProgrammes,

@@ -3051,7 +3051,6 @@ func TestRunProjectRepo(t *testing.T) {
 	}
 }
 
-
 func TestRunProjectRemoteBeforeInit(t *testing.T) {
 	homeDir := t.TempDir()
 	repoDir := filepath.Join(t.TempDir(), "repo")

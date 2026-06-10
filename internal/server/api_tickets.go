@@ -533,6 +533,90 @@ func (r *router) registerTicketHandlers() {
 				writeJSON(w, http.StatusOK, approved)
 				return
 			}
+			if len(parts) == 3 && parts[1] == "children" && parts[2] == "reorder" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload ticketChildrenReorderRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				children, err := store.ReorderChildTickets(r.Context(), db, id, payload.Order, user.Username, user.ID)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				notify("ticket_updated", ticketRef.ProjectID, ticketRef.ID)
+				writeJSON(w, http.StatusOK, children)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "context" {
+				switch r.Method {
+				case http.MethodGet:
+					if !canReadProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					edges, err := store.ListContextEdgesForNode(r.Context(), db, store.ContextNodeTicket, id)
+					if err != nil {
+						writeStoreError(w, err)
+						return
+					}
+					writeJSON(w, http.StatusOK, edges)
+					return
+				case http.MethodPost:
+					if !canWriteProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					var payload ticketContextRequest
+					if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+						writeError(w, http.StatusBadRequest, "invalid json body")
+						return
+					}
+					edge, err := store.AddContextEdge(r.Context(), db, ticketRef.ProjectID, store.ContextNodeTicket, id, payload.TargetType, payload.TargetID, payload.Relation, payload.Title, user.ID)
+					if err != nil {
+						writeStoreError(w, err)
+						return
+					}
+					if err := store.AddHistoryEvent(r.Context(), db, ticketRef.ProjectID, ticketRef.ID, "ticket_context_added", map[string]any{
+						"edge_id":     edge.ID,
+						"target_type": edge.TargetType,
+						"target_id":   edge.TargetID,
+						"relation":    edge.Relation,
+						"actor":       user.Username,
+					}, user.ID); err != nil {
+						writeStoreError(w, err)
+						return
+					}
+					notify("ticket_updated", ticketRef.ProjectID, ticketRef.ID)
+					writeJSON(w, http.StatusCreated, edge)
+					return
+				default:
+					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+					return
+				}
+			}
+			if len(parts) == 3 && parts[1] == "context" && r.Method == http.MethodDelete {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var edgeID int64
+				if _, err := fmt.Sscan(parts[2], &edgeID); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid context edge id")
+					return
+				}
+				if err := store.RemoveContextEdge(r.Context(), db, ticketRef.ProjectID, edgeID); err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				notify("ticket_updated", ticketRef.ProjectID, ticketRef.ID)
+				writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
+				return
+			}
 			if len(parts) == 2 && parts[1] == "inbox" && r.Method == http.MethodGet {
 				if !canViewInterventions(role) {
 					writeAuthError(w, store.ErrForbidden)

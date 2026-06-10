@@ -1847,9 +1847,39 @@ select {
     margin: 6px 0 4px;
 }
 .refinement-child {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
     padding: 6px 8px;
     border: 1px solid var(--card-border);
     border-radius: 6px;
     background: var(--card);
     margin-bottom: 6px;
+}
+.refinement-child-body {
+    flex: 1;
+    min-width: 0;
+}
+.refinement-child-reorder {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.refinement-reorder-btn {
+    border: 1px solid var(--card-border);
+    background: var(--card);
+    color: var(--fg-2);
+    border-radius: 4px;
+    font-size: 0.6rem;
+    line-height: 1;
+    padding: 3px 6px;
+    cursor: pointer;
+}
+.refinement-reorder-btn:hover:not(:disabled) {
+    color: var(--fg);
+    border-color: var(--fg-2);
+}
+.refinement-reorder-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
 }

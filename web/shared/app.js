@@ -1,4 +1,8 @@
-        const apiClient = window.TicketAPI.createClient();
+        // Browser tests install window.__site2MockFetch before the app boots so the
+        // whole API surface can be mocked without a server (tests/playwright/site2.spec.js).
+        const apiClient = window.TicketAPI.createClient(
+            window.__site2MockFetch ? { fetch: window.__site2MockFetch } : undefined,
+        );
         const api = apiClient.request;
         const apiWithFallback = apiClient.requestWithFallback;
         const state = {
@@ -246,6 +250,10 @@
             ticketDependencies: document.getElementById("ticket-dependencies"),
             ticketDependencyInput: document.getElementById("ticket-dependency-input"),
             addTicketDependencyButton: document.getElementById("add-ticket-dependency-button"),
+            ticketContext: document.getElementById("ticket-context"),
+            ticketContextType: document.getElementById("ticket-context-type"),
+            ticketContextTarget: document.getElementById("ticket-context-target"),
+            addTicketContextButton: document.getElementById("add-ticket-context-button"),
             ticketTimeEntries: document.getElementById("ticket-time-entries"),
             ticketTimeTotal: document.getElementById("ticket-time-total"),
             ticketTimeMinutes: document.getElementById("ticket-time-minutes"),
@@ -6751,6 +6759,18 @@
                 });
             }
 
+            const refinementBreakdownEl = document.getElementById("refinement-breakdown");
+            if (refinementBreakdownEl) {
+                refinementBreakdownEl.addEventListener("click", (event) => {
+                    const button = event.target.closest("[data-reorder]");
+                    if (!button || button.disabled) return;
+                    const ticket = state.activeTicket;
+                    if (!ticket || !ticket.id) return;
+                    reorderBreakdownChild(ticket, button.dataset.child, button.dataset.reorder)
+                        .catch((e) => setNotice(e.message || "Failed to reorder breakdown", true));
+                });
+            }
+
             els.projectMenuButton.addEventListener("click", (event) => {
                 event.stopPropagation();
                 els.accountMenuDropdown.classList.remove("open");
@@ -6944,6 +6964,20 @@
                 }
                 removeTicketDependency(button.dataset.removeTicketDependency);
             });
+            if (els.addTicketContextButton) {
+                els.addTicketContextButton.addEventListener("click", () => {
+                    addTicketContext();
+                });
+            }
+            if (els.ticketContext) {
+                els.ticketContext.addEventListener("click", (event) => {
+                    const button = event.target.closest("[data-remove-ticket-context]");
+                    if (!button) {
+                        return;
+                    }
+                    removeTicketContext(button.dataset.removeTicketContext);
+                });
+            }
             els.addTicketTimeButton.addEventListener("click", () => {
                 addTicketTimeEntry();
             });
@@ -7107,6 +7141,9 @@
             });
             loadTicketDependencies(ticket.id).catch((error) => {
                 els.ticketDependencies.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
+            });
+            loadTicketContext(ticket.id).catch((error) => {
+                if (els.ticketContext) els.ticketContext.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
             });
             loadTicketTime(ticket.id).catch((error) => {
                 els.ticketTimeEntries.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
@@ -7286,6 +7323,36 @@
             setNotice(text, true);
         }
 
+        // refinementBreakdownChildren returns the proposed breakdown stories for an
+        // idea in their user-set priority order (sort_order, id as tie-break).
+        function refinementBreakdownChildren(ticket) {
+            return (state.tickets || [])
+                .filter((t) => t.parent_id === ticket.id)
+                .sort((a, b) => (a.order || 0) - (b.order || 0) ||
+                    String(a.id).localeCompare(String(b.id)));
+        }
+
+        // reorderBreakdownChild moves one proposed story up or down in the breakdown
+        // and persists the full order so the human can reprioritize before sign-off.
+        async function reorderBreakdownChild(ticket, childID, direction) {
+            const ids = refinementBreakdownChildren(ticket).map((c) => c.id);
+            const index = ids.indexOf(childID);
+            const swapWith = direction === "up" ? index - 1 : index + 1;
+            if (index < 0 || swapWith < 0 || swapWith >= ids.length) return;
+            const tmp = ids[index];
+            ids[index] = ids[swapWith];
+            ids[swapWith] = tmp;
+            const updated = await api("/api/tickets/" + ticket.id + "/children/reorder", {
+                method: "POST",
+                body: JSON.stringify({ order: ids }),
+            });
+            (updated || []).map(normalizeTicket).forEach((fresh) => {
+                const existing = (state.tickets || []).find((t) => t.id === fresh.id);
+                if (existing) existing.order = fresh.order;
+            });
+            renderRefinementPanel(ticket);
+        }
+
         function renderRefinementPanel(ticket) {
             const panel = document.getElementById("refinement-panel");
             if (!panel) return;
@@ -7311,13 +7378,18 @@
             if (approveBox && breakdown) {
                 if (ticket.recommended_ready) {
                     approveBox.classList.remove("hidden");
-                    const children = (state.tickets || []).filter((t) => t.parent_id === ticket.id);
+                    const children = refinementBreakdownChildren(ticket);
                     if (children.length) {
-                        breakdown.innerHTML = "<div class=\"refinement-subheading\">Proposed breakdown</div>" +
-                            children.map((c) =>
-                                "<div class=\"refinement-child\"><strong>" + escapeHTML(c.title || "(untitled)") + "</strong>" +
+                        breakdown.innerHTML = "<div class=\"refinement-subheading\">Proposed breakdown — reorder before approving</div>" +
+                            children.map((c, i) =>
+                                "<div class=\"refinement-child\" data-child-id=\"" + escapeHTML(c.id) + "\">" +
+                                "<span class=\"refinement-child-reorder\">" +
+                                "<button type=\"button\" class=\"refinement-reorder-btn\" data-reorder=\"up\" data-child=\"" + escapeHTML(c.id) + "\"" + (i === 0 ? " disabled" : "") + " title=\"Move up\" aria-label=\"Move up\">&#9650;</button>" +
+                                "<button type=\"button\" class=\"refinement-reorder-btn\" data-reorder=\"down\" data-child=\"" + escapeHTML(c.id) + "\"" + (i === children.length - 1 ? " disabled" : "") + " title=\"Move down\" aria-label=\"Move down\">&#9660;</button>" +
+                                "</span>" +
+                                "<span class=\"refinement-child-body\"><strong>" + (i + 1) + ". " + escapeHTML(c.title || "(untitled)") + "</strong>" +
                                 (c.description ? "<div class=\"meta\">" + escapeHTML(c.description) + "</div>" : "") +
-                                "</div>"
+                                "</span></div>"
                             ).join("");
                     } else {
                         breakdown.innerHTML = "";
@@ -7781,6 +7853,83 @@
                 await api("/api/dependencies?" + query.toString(), { method: "DELETE" });
                 await loadTicketDependencies(state.activeTicket.id);
                 setNotice("Dependency removed.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        // Context links (GOAL.md context graph): documents, URLs, and other tickets
+        // attached to this ticket as supporting context.
+        function contextEdgeLabel(edge) {
+            const isSource = state.activeTicket && edge.source_type === "ticket" &&
+                edge.source_id === state.activeTicket.id;
+            const type = isSource ? edge.target_type : edge.source_type;
+            const id = isSource ? edge.target_id : edge.source_id;
+            if (type === "url") {
+                return { type: type, text: edge.title || id, href: id };
+            }
+            return { type: type, text: (type === "document" ? "doc " : "") + id, href: "" };
+        }
+
+        function renderTicketContext() {
+            if (!els.ticketContext) return;
+            if (!Array.isArray(state.ticketContext) || !state.ticketContext.length) {
+                els.ticketContext.innerHTML = "<div class=\"empty\">No context attached yet.</div>";
+                return;
+            }
+            els.ticketContext.innerHTML = state.ticketContext.map((edge) => {
+                const label = contextEdgeLabel(edge);
+                const body = label.href
+                    ? "<a href=\"" + escapeHTML(label.href) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + escapeHTML(label.text) + "</a>"
+                    : escapeHTML(label.text);
+                return "<div class=\"history-item\"><strong>" + body + "</strong><div class=\"meta\">" +
+                    escapeHTML(label.type + " · " + (edge.relation || "references")) +
+                    "</div><button type=\"button\" data-remove-ticket-context=\"" + String(edge.edge_id) + "\">Remove</button></div>";
+            }).join("");
+        }
+
+        async function loadTicketContext(ticketID) {
+            if (!els.ticketContext) return;
+            if (!ticketID) {
+                state.ticketContext = [];
+                renderTicketContext();
+                return;
+            }
+            state.ticketContext = await api("/api/tickets/" + ticketID + "/context");
+            renderTicketContext();
+        }
+
+        async function addTicketContext() {
+            if (!state.activeTicket || !state.activeTicket.id) {
+                return;
+            }
+            const targetType = els.ticketContextType.value;
+            const targetID = els.ticketContextTarget.value.trim();
+            if (!targetID) {
+                setNotice("Context target is required.", true);
+                return;
+            }
+            try {
+                await api("/api/tickets/" + state.activeTicket.id + "/context", {
+                    method: "POST",
+                    body: JSON.stringify({ target_type: targetType, target_id: targetID }),
+                });
+                els.ticketContextTarget.value = "";
+                await loadTicketContext(state.activeTicket.id);
+                setNotice("Context attached.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        async function removeTicketContext(edgeID) {
+            if (!state.activeTicket || !state.activeTicket.id) {
+                return;
+            }
+            try {
+                await api("/api/tickets/" + state.activeTicket.id + "/context/" + edgeID, { method: "DELETE" });
+                await loadTicketContext(state.activeTicket.id);
+                setNotice("Context removed.");
             } catch (error) {
                 setNotice(error.message, true);
             }

@@ -50,6 +50,63 @@ function installSite2Mock(page, seed = {}) {
           archived: false,
           workflow_id: null,
         },
+        {
+          ticket_id: "OPS-200",
+          project_id: 1,
+          type: "story",
+          title: "Refine me",
+          description: "An idea being broken down",
+          acceptance_criteria: "",
+          status: "open",
+          stage: "refine",
+          state: "idle",
+          priority: 1,
+          order: 2,
+          estimate_effort: 0,
+          health_score: 0,
+          draft: true,
+          recommended_ready: true,
+          archived: false,
+          workflow_id: null,
+        },
+        {
+          ticket_id: "OPS-201",
+          project_id: 1,
+          parent_id: "OPS-200",
+          type: "story",
+          title: "Breakdown story A",
+          description: "",
+          acceptance_criteria: "",
+          status: "open",
+          stage: "refine",
+          state: "idle",
+          priority: 1,
+          order: 1,
+          estimate_effort: 0,
+          health_score: 0,
+          draft: true,
+          archived: false,
+          workflow_id: null,
+        },
+        {
+          ticket_id: "OPS-202",
+          project_id: 1,
+          parent_id: "OPS-200",
+          type: "story",
+          title: "Breakdown story B",
+          description: "",
+          acceptance_criteria: "",
+          status: "open",
+          stage: "refine",
+          state: "idle",
+          priority: 1,
+          order: 2,
+          estimate_effort: 0,
+          health_score: 0,
+          draft: true,
+          archived: false,
+          workflow_id: null,
+        },
       ],
       commentsByTicket: {
         "OPS-101": [{ author: "admin", text: "Initial note", date: "now" }],
@@ -60,6 +117,10 @@ function installSite2Mock(page, seed = {}) {
         "OPS-101": [{ id: 71, project_id: 1, ticket_id: "OPS-101", depends_on: "OPS-100", created_by: "admin", created_at: "now" }],
       },
       nextDependencyID: 72,
+      contextByTicket: {
+        "OPS-101": [{ edge_id: 91, project_id: 1, source_type: "ticket", source_id: "OPS-101", target_type: "url", target_id: "https://example.com/runbook", relation: "references", title: "Runbook", created_by: "admin", created_at: "now" }],
+      },
+      nextContextEdgeID: 92,
       timeEntriesByTicket: {
         "OPS-101": [{ time_entry_id: 81, ticket_id: "OPS-101", user_id: "admin", minutes: 30, note: "Initial effort", created_at: "now" }],
       },
@@ -757,6 +818,50 @@ function installSite2Mock(page, seed = {}) {
         };
         db.timeEntriesByTicket[id].push(entry);
         return json(entry, 201);
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/context$/) && method === "GET") {
+        const id = path.split("/")[3];
+        return json(db.contextByTicket[id] || []);
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/context$/) && method === "POST") {
+        const id = path.split("/")[3];
+        if (!db.contextByTicket[id]) {
+          db.contextByTicket[id] = [];
+        }
+        const edge = {
+          edge_id: db.nextContextEdgeID++,
+          project_id: 1,
+          source_type: "ticket",
+          source_id: id,
+          target_type: String(body.target_type || ""),
+          target_id: String(body.target_id || ""),
+          relation: String(body.relation || "") || "references",
+          title: String(body.title || ""),
+          created_by: "admin",
+          created_at: "now",
+        };
+        db.contextByTicket[id].push(edge);
+        return json(edge, 201);
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/context\/\d+$/) && method === "DELETE") {
+        const parts = path.split("/");
+        const id = parts[3];
+        const edgeID = Number(parts[5]);
+        db.contextByTicket[id] = (db.contextByTicket[id] || []).filter((edge) => edge.edge_id !== edgeID);
+        return json({ status: "removed" });
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/children\/reorder$/) && method === "POST") {
+        const parentID = path.split("/")[3];
+        const order = Array.isArray(body.order) ? body.order : [];
+        const children = db.tickets.filter((item) => item.parent_id === parentID);
+        order.forEach((childID, index) => {
+          const child = children.find((item) => item.ticket_id === childID);
+          if (child) {
+            child.order = index + 1;
+          }
+        });
+        children.sort((a, b) => (a.order || 0) - (b.order || 0));
+        return json(children);
       }
       if (path.match(/^\/api\/tickets\/[^/]+$/) && method === "PUT") {
         const id = last(path.split("/"));
@@ -1665,6 +1770,54 @@ test("manages labels, dependencies, and time from the ticket modal", async ({ pa
       expect.objectContaining({ method: "POST", path: "/api/tickets/OPS-101/labels", body: { label_id: 51 } }),
       expect.objectContaining({ method: "POST", path: "/api/dependencies", body: expect.objectContaining({ ticket_id: "OPS-101", depends_on: "OPS-102" }) }),
       expect.objectContaining({ method: "POST", path: "/api/tickets/OPS-101/time", body: { minutes: 15, note: "Refactor" } }),
+    ]),
+  );
+});
+
+test("attaches and removes context from the ticket modal", async ({ page }) => {
+  await page.getByText("Move me").click();
+  await page.locator("[data-ticket-tab='properties']").click();
+  await expect(page.locator("#ticket-context")).toBeVisible();
+  await expect(page.locator("#ticket-context")).toContainText("Runbook");
+
+  await page.locator("#ticket-context-type").selectOption("url");
+  await page.locator("#ticket-context-target").fill("https://example.com/spec");
+  await page.getByRole("button", { name: "Attach" }).click();
+  await expect(page.locator("#ticket-context")).toContainText("https://example.com/spec");
+
+  await page.locator("#ticket-context [data-remove-ticket-context='91']").click();
+  await expect(page.locator("#ticket-context")).not.toContainText("Runbook");
+
+  const requests = await page.evaluate(() => window.__site2Requests);
+  expect(requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        method: "POST",
+        path: "/api/tickets/OPS-101/context",
+        body: expect.objectContaining({ target_type: "url", target_id: "https://example.com/spec" }),
+      }),
+      expect.objectContaining({ method: "DELETE", path: "/api/tickets/OPS-101/context/91" }),
+    ]),
+  );
+});
+
+test("reorders the proposed breakdown from the refinement panel", async ({ page }) => {
+  await page.getByText("Refine me").click();
+  await page.locator("[data-ticket-tab='refinement']").click();
+  await expect(page.locator("#refinement-breakdown")).toContainText("Breakdown story A");
+
+  // Story A is first; move it down so the order becomes B, A.
+  await page.locator("#refinement-breakdown [data-child-id='OPS-201'] [data-reorder='down']").click();
+  await expect(page.locator("#refinement-breakdown .refinement-child").first()).toContainText("Breakdown story B");
+
+  const requests = await page.evaluate(() => window.__site2Requests);
+  expect(requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        method: "POST",
+        path: "/api/tickets/OPS-200/children/reorder",
+        body: { order: ["OPS-202", "OPS-201"] },
+      }),
     ]),
   );
 });

@@ -724,4 +724,3 @@ func TestRemoteHelpersAndValidationBranches(t *testing.T) {
 		t.Fatal("RemoveRemote(empty) removed = true, want false")
 	}
 }
-

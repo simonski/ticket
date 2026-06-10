@@ -151,6 +151,7 @@ func UpdateAgent(ctx context.Context, db *sql.DB, id string, params AgentUpdateP
 	setClauses = append(setClauses, "updated_at = CURRENT_TIMESTAMP")
 
 	args = append(args, id)
+	// #nosec G202 -- setClauses are constant strings; all values are bound via ? placeholders
 	query := "UPDATE users SET " + strings.Join(setClauses, ", ") + " WHERE user_id = ? AND user_type = 'agent'"
 	if _, err := db.ExecContext(ctx, query, args...); err != nil {
 		return Agent{}, err

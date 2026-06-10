@@ -189,6 +189,11 @@ func (r *router) registerProjectHandlers() {
 				return
 			}
 		}
+		if (len(parts) == 2 || len(parts) == 3) && parts[1] == "context" {
+			if handled := handleProjectContext(w, r, db, parts[0], parts); handled {
+				return
+			}
+		}
 		if len(parts) == 2 && parts[1] == "access-requests" {
 			user, err := requireUser(db, r)
 			if err != nil {

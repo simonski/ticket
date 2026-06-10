@@ -1076,6 +1076,19 @@
                     </div>
                 </div>
                 <div class="modal-section">
+                    <div class="section-heading">Context</div>
+                    <div id="ticket-context" class="tag-row"></div>
+                    <div class="inline-add">
+                        <select id="ticket-context-type">
+                            <option value="document">Document</option>
+                            <option value="url">URL</option>
+                            <option value="ticket">Ticket</option>
+                        </select>
+                        <input id="ticket-context-target" placeholder="Document id, https:// URL, or ticket key">
+                        <button id="add-ticket-context-button" class="btn" type="button">Attach</button>
+                    </div>
+                </div>
+                <div class="modal-section">
                     <div class="section-heading">Time log</div>
                     <div id="ticket-time-total" class="meta"></div>
                     <div id="ticket-time-entries" class="item-list"></div>

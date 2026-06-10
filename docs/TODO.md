@@ -1,3 +1,12 @@
+FOLLOW-UPS (2026-06-10)
+    - Revive tests/playwright/site2.spec.js: the harness is fixed (make test-browser-site2
+      serves web/default+web/shared via tests/serve-site.py and the app honours
+      window.__site2MockFetch again), and the context/reorder tests pass, but ~28 older
+      tests predate the site2→default UI rename and need their selectors/flows updated.
+      Once green, wire test-browser-site2 into test-all.
+    - Enforce the ticket parenting matrix (SPEC.md 5.4.2): validateTicketParenting
+      currently only validates type names, not the feature→epic→story hierarchy.
+
 THE GOAL
     PLANNING
     1. create a goal

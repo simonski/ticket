@@ -46,7 +46,7 @@ func (r *router) registerOrgHandlers() {
 				Description string `json:"description"`
 				LogoURL     string `json:"logo_url"`
 			}
-			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+			if decodeErr := json.NewDecoder(req.Body).Decode(&payload); decodeErr != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}

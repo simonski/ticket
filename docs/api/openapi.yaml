@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Ticket API
-  version: 0.1.1086
+  version: 0.1.1087
   description: |
     RESTful API for the Ticket project and issue management system.
     All endpoints are under `/api/`. Authentication uses Bearer tokens
@@ -1017,6 +1017,58 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    ContextEdge:
+      type: object
+      properties:
+        edge_id:
+          type: integer
+          format: int64
+        project_id:
+          type: integer
+          format: int64
+        source_type:
+          type: string
+          enum: [ticket, document, url]
+        source_id:
+          type: string
+        target_type:
+          type: string
+          enum: [ticket, document, url]
+        target_id:
+          type: string
+        relation:
+          type: string
+        title:
+          type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ContextNode:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [ticket, document, url]
+        id:
+          type: string
+        title:
+          type: string
+
+    ContextGraph:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContextNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContextEdge'
 
     Document:
       type: object
@@ -7312,6 +7364,240 @@ paths:
                 items:
                   $ref: '#/components/schemas/Dependency'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/context:
+    get:
+      tags: [Context]
+      summary: List context links attached to a ticket
+      operationId: listTicketContext
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Context edge list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContextEdge'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Context]
+      summary: Attach context (document, URL, or ticket) to a ticket
+      operationId: addTicketContext
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_type, target_id]
+              properties:
+                target_type:
+                  type: string
+                  enum: [ticket, document, url]
+                target_id:
+                  type: string
+                  description: Ticket key, numeric document id, or http(s) URL
+                relation:
+                  type: string
+                  default: references
+                title:
+                  type: string
+                  description: Display title (used for url targets)
+      responses:
+        '201':
+          description: Context edge created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextEdge'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/context/{edge_id}:
+    delete:
+      tags: [Context]
+      summary: Remove a context link from a ticket
+      operationId: removeTicketContext
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: edge_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Context edge removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/children/reorder:
+    post:
+      tags: [Tickets]
+      summary: Reorder a ticket's children (decomposition reprioritization)
+      operationId: reorderTicketChildren
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order]
+              properties:
+                order:
+                  type: array
+                  description: Child ticket keys in the desired order; omitted children keep their relative order after the listed ones
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Children in their new order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_ref}/context:
+    get:
+      tags: [Context]
+      summary: Get the project context graph (nodes and edges)
+      operationId: getProjectContextGraph
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project id or prefix
+      responses:
+        '200':
+          description: Context graph
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextGraph'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_ref}/context/search:
+    get:
+      tags: [Context]
+      summary: Search context nodes by text
+      operationId: searchProjectContext
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project id or prefix
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Text to match against document title/description/notes/content and ticket key/title/description
+      responses:
+        '200':
+          description: Matching context nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContextNode'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':

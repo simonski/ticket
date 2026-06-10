@@ -301,14 +301,14 @@ func runDemo(args []string) error {
 
 	// Remove auto-generated private and public placeholder projects from store.Init
 	// (admin private workspace, bootstrap ticket tracker project, public placeholder)
-	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
-		return fmt.Errorf("disabling fk for cleanup: %w", err)
+	if _, execErr := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
+		return fmt.Errorf("disabling fk for cleanup: %w", execErr)
 	}
-	if _, err := db.ExecContext(ctx, `DELETE FROM projects WHERE visibility = 'private' OR (prefix = 'PUB' AND title = 'Public')`); err != nil {
-		return fmt.Errorf("removing placeholder projects: %w", err)
+	if _, execErr := db.ExecContext(ctx, `DELETE FROM projects WHERE visibility = 'private' OR (prefix = 'PUB' AND title = 'Public')`); execErr != nil {
+		return fmt.Errorf("removing placeholder projects: %w", execErr)
 	}
-	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
-		return fmt.Errorf("re-enabling fk after cleanup: %w", err)
+	if _, execErr := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); execErr != nil {
+		return fmt.Errorf("re-enabling fk after cleanup: %w", execErr)
 	}
 
 	// Get admin user
@@ -318,8 +318,8 @@ func runDemo(args []string) error {
 	}
 
 	// Set organisation name
-	if _, err := store.UpdateOrg(ctx, db, "Acme Corp", "acme.example.com", "Acme Corporation — demo organisation", ""); err != nil {
-		return fmt.Errorf("setting org: %w", err)
+	if _, orgErr := store.UpdateOrg(ctx, db, "Acme Corp", "acme.example.com", "Acme Corporation — demo organisation", ""); orgErr != nil {
+		return fmt.Errorf("setting org: %w", orgErr)
 	}
 	fmt.Printf("  ✓ Organisation set to %q\n", "Acme Corp")
 
@@ -355,10 +355,10 @@ func runDemo(args []string) error {
 	// Create persona users (up to 8 from the pool, then synthetic)
 	for i := 0; i < numUsers; i++ {
 		var u store.User
-		var err error
+		var createErr error
 		if i < len(personaPool) {
 			p := personaPool[i]
-			u, err = store.CreateUserWithParams(ctx, db, store.UserCreateParams{
+			u, createErr = store.CreateUserWithParams(ctx, db, store.UserCreateParams{
 				Username:               p.username,
 				Email:                  p.email,
 				PlainPassword:          "password",
@@ -367,8 +367,8 @@ func runDemo(args []string) error {
 				SkipPasswordValidation: true,
 				SkipProvisioning:       true,
 			})
-			if err != nil {
-				return fmt.Errorf("creating user %s: %w", p.username, err)
+			if createErr != nil {
+				return fmt.Errorf("creating user %s: %w", p.username, createErr)
 			}
 			// Update display name via direct SQL
 			if _, sqlErr := db.ExecContext(ctx, `UPDATE users SET display_name = ? WHERE user_id = ?`, p.displayName, u.ID); sqlErr != nil {
@@ -380,7 +380,7 @@ func runDemo(args []string) error {
 			username := fmt.Sprintf("ddev%02d", n)
 			domain := demoDomains[i%len(demoDomains)]
 			email := fmt.Sprintf("dev%02d@%s", n, domain)
-			u, err = store.CreateUserWithParams(ctx, db, store.UserCreateParams{
+			u, createErr = store.CreateUserWithParams(ctx, db, store.UserCreateParams{
 				Username:               username,
 				Email:                  email,
 				PlainPassword:          "password",
@@ -389,8 +389,8 @@ func runDemo(args []string) error {
 				SkipPasswordValidation: true,
 				SkipProvisioning:       true,
 			})
-			if err != nil {
-				return fmt.Errorf("creating user %s: %w", username, err)
+			if createErr != nil {
+				return fmt.Errorf("creating user %s: %w", username, createErr)
 			}
 		}
 		users = append(users, u)
@@ -414,9 +414,9 @@ func runDemo(args []string) error {
 		{username: "refiner-agent", role: "refiner"},
 	}
 	for i, da := range demoAgents {
-		agent, _, err := store.CreateAgent(ctx, db, "password")
-		if err != nil {
-			return fmt.Errorf("creating agent %s: %w", da.username, err)
+		agent, _, agentErr := store.CreateAgent(ctx, db, "password")
+		if agentErr != nil {
+			return fmt.Errorf("creating agent %s: %w", da.username, agentErr)
 		}
 		demoAgents[i].id = agent.ID
 		displayName := da.username + " agent"
@@ -437,17 +437,13 @@ func runDemo(args []string) error {
 	engIndices := []int{0, 1, 2, 6, 7}
 	for _, idx := range engIndices {
 		if idx < len(users) {
-			if _, err := store.AddTeamMember(ctx, db, engTeam.ID, users[idx].ID, "member", ""); err != nil {
-				// ignore duplicate errors
-				_ = err
-			}
+			// ignore duplicate errors
+			_, _ = store.AddTeamMember(ctx, db, engTeam.ID, users[idx].ID, "member", "")
 		}
 	}
 	// Add synthetic devs to engineering
 	for i := len(personaPool); i < len(users); i++ {
-		if _, err := store.AddTeamMember(ctx, db, engTeam.ID, users[i].ID, "member", ""); err != nil {
-			_ = err
-		}
+		_, _ = store.AddTeamMember(ctx, db, engTeam.ID, users[i].ID, "member", "")
 	}
 
 	pqTeam, err := store.CreateTeam(ctx, db, "Product & QA", nil)
@@ -457,9 +453,7 @@ func runDemo(args []string) error {
 	// tom=5, lisa=4
 	for _, idx := range []int{4, 5} {
 		if idx < len(users) {
-			if _, err := store.AddTeamMember(ctx, db, pqTeam.ID, users[idx].ID, "member", ""); err != nil {
-				_ = err
-			}
+			_, _ = store.AddTeamMember(ctx, db, pqTeam.ID, users[idx].ID, "member", "")
 		}
 	}
 
@@ -472,9 +466,7 @@ func runDemo(args []string) error {
 		}
 		// james=3
 		if 3 < len(users) {
-			if _, err := store.AddTeamMember(ctx, db, devopsTeam.ID, users[3].ID, "member", ""); err != nil {
-				_ = err
-			}
+			_, _ = store.AddTeamMember(ctx, db, devopsTeam.ID, users[3].ID, "member", "")
 		}
 		teamsCreated = 3
 	}
@@ -496,15 +488,15 @@ func runDemo(args []string) error {
 				pool:        "mixed",
 			}
 		}
-		proj, err := store.CreateProjectWithParams(ctx, db, store.ProjectCreateParams{
+		proj, projErr := store.CreateProjectWithParams(ctx, db, store.ProjectCreateParams{
 			Prefix:      def.prefix,
 			Title:       def.title,
 			Description: def.description,
 			CreatedBy:   adminUser.ID,
 			WorkflowID:  &agileWorkflowID,
 		})
-		if err != nil {
-			return fmt.Errorf("creating project %s: %w", def.title, err)
+		if projErr != nil {
+			return fmt.Errorf("creating project %s: %w", def.title, projErr)
 		}
 		projects = append(projects, proj)
 	}
@@ -760,7 +752,7 @@ func runDemo(args []string) error {
 	commentIdx := 0
 	for commentIdx < numComments {
 		// Pick a random ticket by index
-		ticketLocalIdx := rand.Intn(numTickets)
+		ticketLocalIdx := rand.Intn(numTickets) // #nosec G404 -- demo data seeding, not security-sensitive
 		// Determine project and local ticket index
 		pi := ticketLocalIdx % len(projects)
 		pd := projectData[pi]
@@ -770,11 +762,12 @@ func runDemo(args []string) error {
 		fillIn := commentFillins[commentIdx%len(commentFillins)]
 		var commentText string
 		verbCount := strings.Count(tmpl, "%")
-		if verbCount > 0 && strings.Contains(tmpl, "%s") {
+		switch {
+		case verbCount > 0 && strings.Contains(tmpl, "%s"):
 			commentText = fmt.Sprintf(tmpl, fillIn)
-		} else if strings.Contains(tmpl, "%%") {
+		case strings.Contains(tmpl, "%%"):
 			commentText = fmt.Sprintf(tmpl, fillIn)
-		} else {
+		default:
 			commentText = tmpl
 		}
 		_ = pd

@@ -16,13 +16,12 @@ make setup                # Install all dev dependencies (Go modules + Node + Pl
 make build                # Build binary to ./bin/tk and increment the patch version
 make build-dev            # Build binary to ./bin/tk without changing the version
 make test                 # Ultra-fast default: unit tests only
-make test-fast            # Recommended developer loop: unit + JS API + Go API smoke
+make test-fast            # Recommended developer loop: unit + Go API smoke
 make test-api-smoke       # Fast Go API smoke packages (internal/client + internal/server)
 make test-cli             # Heavier CLI package tests
 make test-contract        # Heavier libticket contract tests
-make test-api-js          # JavaScript API client-library tests (web/site2/api.test.js)
 make test-api-cli         # CLI/API interface tests (cmd + client + server + contract)
-make test-api             # API interface suites: test-api-js + test-api-cli
+make test-api             # Alias for test-api-cli
 make test-browser         # Fast browser smoke Playwright suite
 make test-browser-full    # Full browser end-to-end Playwright suite
 make test-quickstart      # Executable QUICKSTART/TUTORIAL docs tests
@@ -55,7 +54,7 @@ Playwright browser tests are in `tests/playwright/` (12 spec files). Run with `m
 
 - Default inner loop: `make test` + `make test-fast` + targeted package tests.
 - If API contract/surface changes (`docs/api/openapi.yaml`, `internal/server`, `internal/client`, `cmd/tk` handlers), run `make test-api`.
-- If web/site2 UX changes, run `make test-browser` while iterating, then `make test-browser-full`.
+- If web UI (web/default, web/shared) UX changes, run `make test-browser` while iterating, then `make test-browser-full`.
 - Before finishing a feature or opening a PR, run `make test-all` and `make lint`.
 
 ## Architecture

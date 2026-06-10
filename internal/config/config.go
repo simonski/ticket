@@ -563,24 +563,6 @@ func sortUniqueRemotes(remotes []Remote) []Remote {
 	return filtered
 }
 
-func samePath(a, b string) bool {
-	a = filepath.Clean(strings.TrimSpace(a))
-	b = filepath.Clean(strings.TrimSpace(b))
-	if a == "" || b == "" {
-		return false
-	}
-	if a == b {
-		return true
-	}
-	if resolvedA, err := filepath.EvalSymlinks(a); err == nil {
-		a = filepath.Clean(resolvedA)
-	}
-	if resolvedB, err := filepath.EvalSymlinks(b); err == nil {
-		b = filepath.Clean(resolvedB)
-	}
-	return a == b
-}
-
 // FindGitRoot walks up the directory tree from startDir looking for a .git
 // directory. Returns the parent of .git/ (the project root). Stops at the
 // filesystem root.

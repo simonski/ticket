@@ -14,8 +14,8 @@ module.exports = defineConfig({
     headless: true,
   },
   webServer: {
-    command: `python3 -m http.server ${port} -d web`,
-    url: `http://127.0.0.1:${port}/site2`,
+    command: `python3 serve-site.py ${port}`,
+    url: `http://127.0.0.1:${port}/`,
     reuseExistingServer: true,
     timeout: 30000,
   },

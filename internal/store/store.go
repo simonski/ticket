@@ -127,8 +127,8 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 					return stageErr
 				}
 				if isBacklog {
-					if err := SetWorkflowStageBacklog(ctx, db, stage.ID, true); err != nil {
-						return err
+					if backlogErr := SetWorkflowStageBacklog(ctx, db, stage.ID, true); backlogErr != nil {
+						return backlogErr
 					}
 				}
 			}
@@ -647,6 +647,21 @@ CREATE TABLE IF NOT EXISTS document_files (
 	FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS context_edges (
+	edge_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	project_id INTEGER NOT NULL,
+	source_type TEXT NOT NULL,
+	source_id TEXT NOT NULL,
+	target_type TEXT NOT NULL,
+	target_id TEXT NOT NULL,
+	relation TEXT NOT NULL DEFAULT 'references',
+	title TEXT NOT NULL DEFAULT '',
+	created_by TEXT,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(project_id, source_type, source_id, target_type, target_id, relation),
+	FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS ticket_phase_signoffs (
 	ticket_id TEXT NOT NULL,
 	phase TEXT NOT NULL,
@@ -751,6 +766,9 @@ CREATE INDEX IF NOT EXISTS idx_messages_to_user_id ON messages(to_user_id);
 CREATE INDEX IF NOT EXISTS idx_documents_project_id ON documents(project_id);
 CREATE INDEX IF NOT EXISTS idx_document_labels_label_id ON document_labels(label_id);
 CREATE INDEX IF NOT EXISTS idx_document_files_document_id ON document_files(document_id);
+CREATE INDEX IF NOT EXISTS idx_context_edges_project_id ON context_edges(project_id);
+CREATE INDEX IF NOT EXISTS idx_context_edges_source ON context_edges(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_context_edges_target ON context_edges(target_type, target_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_phase_signoffs_ticket_id ON ticket_phase_signoffs(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_phase_signoffs_phase ON ticket_phase_signoffs(phase);
 CREATE INDEX IF NOT EXISTS idx_inbox_entries_project_id ON inbox_entries(project_id);
@@ -855,6 +873,26 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 				content BLOB NOT NULL,
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
+			)
+		`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(ctx, db, "context_edges") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE context_edges (
+				edge_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				source_type TEXT NOT NULL,
+				source_id TEXT NOT NULL,
+				target_type TEXT NOT NULL,
+				target_id TEXT NOT NULL,
+				relation TEXT NOT NULL DEFAULT 'references',
+				title TEXT NOT NULL DEFAULT '',
+				created_by TEXT,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				UNIQUE(project_id, source_type, source_id, target_type, target_id, relation),
+				FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE
 			)
 		`); err != nil {
 			return err
