@@ -2,6 +2,9 @@
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
+# Release tag in the shared tap repo is project-prefixed (ticket-vX.Y.Z) so it
+# never collides with sibling projects that publish to the same repo.
+RELEASE_TAG   := ticket-v$(VERSION)
 GITHUB_REPO   := simonski/ticket
 # Release binaries are hosted on the PUBLIC tap repo so `brew install` can
 # download them anonymously even when the source repo ($(GITHUB_REPO)) is
@@ -379,12 +382,12 @@ homebrew: release-formula
 	@echo "Homebrew tap updated."
 
 release-publish: release-build release-checksums release-sbom
-	@if gh release view v$(VERSION) --repo $(DIST_REPO) >/dev/null 2>&1; then \
-		echo "Release v$(VERSION) already exists; aborting."; \
+	@if gh release view $(RELEASE_TAG) --repo $(DIST_REPO) >/dev/null 2>&1; then \
+		echo "Release $(RELEASE_TAG) already exists; aborting."; \
 		exit 1; \
 	fi
-	@echo "Creating GitHub release v$(VERSION) on $(DIST_REPO)..."
-	@gh release create v$(VERSION) \
+	@echo "Creating GitHub release $(RELEASE_TAG) on $(DIST_REPO)..."
+	@gh release create $(RELEASE_TAG) \
 		--repo $(DIST_REPO) \
 		--title "ticket v$(VERSION)" \
 		--notes "Release v$(VERSION)" \
@@ -394,7 +397,7 @@ release-publish: release-build release-checksums release-sbom
 		$(DIST_DIR)/tk_$(VERSION)_linux_arm64.tar.gz \
 		$(DIST_DIR)/checksums.txt \
 		$(DIST_DIR)/sbom.cdx.json
-	@echo "Release v$(VERSION) published."
+	@echo "Release $(RELEASE_TAG) published."
 	@$(MAKE) homebrew
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
