@@ -1,4 +1,4 @@
-.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-cli test-browser test-browser-smoke test-browser-full test-browser-site2 test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint vulncheck ci-bootstrap ci-bootstrap-verify ci-bootstrap-browser ci-bootstrap-publish ci ci-verify ci-browser ci-publish clean release release-prepare release-build release-checksums release-formula homebrew release-sbom release-publish release-clean docker docker-push publish docker-up docker-down deploy
+.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-cli test-browser test-browser-smoke test-browser-full test-browser-site2 test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint vulncheck ci-bootstrap ci-bootstrap-verify ci-bootstrap-browser ci-bootstrap-publish ci ci-verify ci-browser ci-publish clean release release-prepare release-build release-checksums release-formula homebrew release-sbom release-publish release-commit release-clean docker docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -408,7 +408,23 @@ release-publish: release-build release-checksums release-sbom
 	@echo "    brew install simonski/tap/ticket"
 	@echo ""
 
-release: release-publish
+release-commit:
+	@echo "Committing release $(RELEASE_TAG)..."
+	@git add cmd/tk/VERSION docs/api/openapi.yaml homebrew/ticket.rb
+	@if git diff --cached --quiet; then \
+		echo "No release files changed; nothing to commit."; \
+	else \
+		git commit -m "Release $(RELEASE_TAG)" && \
+		git push; \
+	fi
+
+# Full end-to-end release. Each step runs as a recursive sub-make so that
+# $(VERSION) (expanded at parse time) is re-read from cmd/tk/VERSION AFTER the
+# bump — otherwise publish would reuse the old, already-released version.
+release:
+	@$(MAKE) release-prepare
+	@$(MAKE) release-publish
+	@$(MAKE) release-commit
 
 # ─── docker ───────────────────────────────────────────────────────────────────
 
