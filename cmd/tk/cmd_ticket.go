@@ -778,8 +778,7 @@ func runList(args []string) error {
 			agentUsernames[a.Username] = true
 		}
 	}
-	printListProjectHeader(project)
-	printTicketTable(tickets, parentKeys, agentUsernames, statusUnicode, *includeAll)
+	printTicketTable(tickets, parentKeys, agentUsernames, statusUnicode, *includeAll, projectHeaderLabel(project))
 	return nil
 }
 

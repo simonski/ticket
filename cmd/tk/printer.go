@@ -191,16 +191,21 @@ func printProjectTable(projects []store.Project, currentProjectID string, workfl
 	printBoxTable(" \tID\tPREFIX\tTITLE\tSTATUS\tWorkflow\tGIT\tDESCRIPTION", rows)
 }
 
-func printListProjectHeader(project store.Project) {
+// projectHeaderLabel builds the single-line project descriptor shown in the
+// ticket list header, e.g. "PROJECT  TK — ticket (3)".
+func projectHeaderLabel(project store.Project) string {
 	label := strings.TrimSpace(project.Prefix)
 	if label == "" {
 		label = strconv.FormatInt(project.ID, 10)
 	}
 	if strings.TrimSpace(project.Title) != "" {
-		fmt.Printf("PROJECT  %s — %s (%d)\n\n", label, project.Title, project.ID)
-		return
+		return fmt.Sprintf("PROJECT  %s — %s (%d)", label, project.Title, project.ID)
 	}
-	fmt.Printf("PROJECT  %s (%d)\n\n", label, project.ID)
+	return fmt.Sprintf("PROJECT  %s (%d)", label, project.ID)
+}
+
+func printListProjectHeader(project store.Project) {
+	fmt.Printf("%s\n\n", projectHeaderLabel(project))
 }
 
 func printProjectAccessRequestTable(requests []store.ProjectAccessRequest) {
@@ -732,7 +737,7 @@ func ticketTitleDepth(treePrefix string) int {
 	return depth
 }
 
-func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agentUsernames map[string]bool, statusUnicode, includeArchived bool) {
+func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agentUsernames map[string]bool, statusUnicode, includeArchived bool, headerLabel string) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
 		return
@@ -979,6 +984,10 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	}
 
 	if !useColor {
+		if headerLabel != "" {
+			fmt.Println(headerLabel)
+			fmt.Println()
+		}
 		for _, l := range display {
 			if l.isBlank {
 				fmt.Println()
@@ -1077,7 +1086,25 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 
 	// Render inside a rounded Unicode box with per-column coloring.
 	border := strings.Repeat("─", maxW+2)
-	fmt.Println("╭" + border + "╮")
+	// Embed the project header in the top border, e.g.
+	//   ╭─ PROJECT  TK — ticket (3) ───────────╮
+	// followed by an empty bordered line before the table.
+	if headerLabel != "" {
+		label := headerLabel
+		// Inner border width is maxW+2; layout is "─ " + label + " " + fill,
+		// so label fits in maxW-2 runes leaving at least one trailing dash.
+		if runeCount(label) > maxW-2 {
+			label = truncateRunes(label, maxW-2)
+		}
+		fill := maxW - 1 - runeCount(label)
+		if fill < 1 {
+			fill = 1
+		}
+		fmt.Println("╭─ " + label + " " + strings.Repeat("─", fill) + "╮")
+		fmt.Printf("│ %s │\n", strings.Repeat(" ", maxW))
+	} else {
+		fmt.Println("╭" + border + "╮")
+	}
 	for _, l := range display {
 		if l.isBlank {
 			fmt.Printf("│ %s │\n", strings.Repeat(" ", maxW))

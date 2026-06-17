@@ -2268,6 +2268,14 @@ func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 	if !strings.Contains(listOut, "ID") || !strings.Contains(listOut, "TYPE") || !strings.Contains(listOut, "TITLE") {
 		t.Fatalf("list output should include the ticket table header after project context:\n%s", listOut)
 	}
+	// Project context, then a blank line, then the ticket table header.
+	listLines := strings.Split(listOut, "\n")
+	if len(listLines) < 3 || strings.TrimSpace(listLines[1]) != "" {
+		t.Fatalf("project context should be followed by a blank line before the table:\n%s", listOut)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(listLines[2]), "ID") {
+		t.Fatalf("ticket table header should follow the blank line:\n%s", listOut)
+	}
 }
 
 func TestRunListTruncatesMultilineTicketTitles(t *testing.T) {
