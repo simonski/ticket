@@ -3,30 +3,30 @@
 class Ticket < Formula
   desc "A local-first ticket system for engineers — epics, stories, bugs, requirements, decisions"
   homepage "https://github.com/simonski/ticket"
-  version "0.1.1091"
+  version "0.1.1092"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/simonski/homebrew-tap/releases/download/v0.1.1091/tk_0.1.1091_darwin_arm64.tar.gz"
-      sha256 "fc27bd647dd3e14533d8fb6f2c525a5bad17c9f878e323b162278cb9d26a5064"
+      url "https://github.com/simonski/homebrew-tap/releases/download/ticket-v0.1.1092/tk_0.1.1092_darwin_arm64.tar.gz"
+      sha256 "b9608e01bdd9578eb0641674ed4a75ae10300243e9d267448cb6fc7e2b8d552d"
     end
 
     on_intel do
-      url "https://github.com/simonski/homebrew-tap/releases/download/v0.1.1091/tk_0.1.1091_darwin_amd64.tar.gz"
-      sha256 "242f401a7c4ba1ff998d834487d7c283db481de886e90870ef0cc32b84f148f3"
+      url "https://github.com/simonski/homebrew-tap/releases/download/ticket-v0.1.1092/tk_0.1.1092_darwin_amd64.tar.gz"
+      sha256 "34f9bd3ae8694ad310715646cf4e9cbde181f5077417acfb38bd0002cc9a53c7"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/simonski/homebrew-tap/releases/download/v0.1.1091/tk_0.1.1091_linux_arm64.tar.gz"
-      sha256 "af66ec607ca8e23805680a095ab866a55baec73110e5e198faa526cd1fbfee9f"
+      url "https://github.com/simonski/homebrew-tap/releases/download/ticket-v0.1.1092/tk_0.1.1092_linux_arm64.tar.gz"
+      sha256 "20bf13d23b3252d3c8422911f31ceb7c4875e8efe603ebb700f1b4e74dd09744"
     end
 
     on_intel do
-      url "https://github.com/simonski/homebrew-tap/releases/download/v0.1.1091/tk_0.1.1091_linux_amd64.tar.gz"
-      sha256 "6b679edab18d661563e02a6d75988b25c00c44ffdb276696a7b132e406906bbb"
+      url "https://github.com/simonski/homebrew-tap/releases/download/ticket-v0.1.1092/tk_0.1.1092_linux_amd64.tar.gz"
+      sha256 "72eb527af6c876ed1b063f45df238be73bfe23f4aba64fc9cf25d0e67e04d1c6"
     end
   end
 
@@ -35,6 +35,6 @@ class Ticket < Formula
   end
 
   test do
-    assert_match "0.1.1091", shell_output("#{bin}/tk version")
+    assert_match "0.1.1092", shell_output("#{bin}/tk version")
   end
 end
