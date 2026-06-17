@@ -3,9 +3,13 @@
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
 GITHUB_REPO   := simonski/ticket
+# Release binaries are hosted on the PUBLIC tap repo so `brew install` can
+# download them anonymously even when the source repo ($(GITHUB_REPO)) is
+# private. The formula urls in homebrew/ticket.rb.tmpl point at this repo.
+DIST_REPO     := simonski/homebrew-tap
+TAP_REPO      := simonski/homebrew-tap
 GHCR_IMAGE    := ghcr.io/simonski/ticket
 DIST_DIR      := dist
-HOMEBREW_TAP_REPO := https://github.com/simonski/homebrew-tap.git
 RELEASE_DARWIN_ARM64 := $(DIST_DIR)/tk_$(VERSION)_darwin_arm64.tar.gz
 RELEASE_DARWIN_AMD64 := $(DIST_DIR)/tk_$(VERSION)_darwin_amd64.tar.gz
 RELEASE_LINUX_AMD64  := $(DIST_DIR)/tk_$(VERSION)_linux_amd64.tar.gz
@@ -330,7 +334,11 @@ release-sbom:
 	@cyclonedx-gomod mod -json -output $(DIST_DIR)/sbom.cdx.json .
 	@echo "SBOM written to $(DIST_DIR)/sbom.cdx.json"
 
-release-formula: release-checksums
+# NB: no build dependency on purpose — this reads the already-built artifacts in
+# $(DIST_DIR) so the formula checksums match the tarballs that were uploaded to
+# the release. Run release-checksums (or release) first. Rebuilding here would
+# regenerate the tarballs (tar/gzip embed mtimes) and produce mismatched sha256s.
+release-formula:
 	@echo "Generating homebrew/ticket.rb for v$(VERSION)..."
 	@for f in $(RELEASE_TARBALLS); do \
 		if [ ! -f "$$f" ]; then \
@@ -359,7 +367,7 @@ homebrew: release-formula
 	@echo "Updating homebrew tap..."
 	@TAP_DIR=$$(mktemp -d) && \
 		trap "rm -rf $$TAP_DIR" EXIT && \
-		git clone $(HOMEBREW_TAP_REPO) "$$TAP_DIR" && \
+		gh repo clone $(TAP_REPO) "$$TAP_DIR" && \
 		cp homebrew/ticket.rb "$$TAP_DIR/Formula/ticket.rb" && \
 		if [ -z "$$(git -C "$$TAP_DIR" status --porcelain -- Formula/ticket.rb)" ]; then \
 			echo "Homebrew tap already up to date."; \
@@ -371,15 +379,15 @@ homebrew: release-formula
 	@echo "Homebrew tap updated."
 
 release-publish: release-build release-checksums release-sbom
-	@if gh release view v$(VERSION) --repo $(GITHUB_REPO) >/dev/null 2>&1; then \
+	@if gh release view v$(VERSION) --repo $(DIST_REPO) >/dev/null 2>&1; then \
 		echo "Release v$(VERSION) already exists; aborting."; \
 		exit 1; \
 	fi
-	@echo "Creating GitHub release v$(VERSION)..."
+	@echo "Creating GitHub release v$(VERSION) on $(DIST_REPO)..."
 	@gh release create v$(VERSION) \
-		--repo $(GITHUB_REPO) \
-		--title "v$(VERSION)" \
-		--generate-notes \
+		--repo $(DIST_REPO) \
+		--title "ticket v$(VERSION)" \
+		--notes "Release v$(VERSION)" \
 		$(DIST_DIR)/tk_$(VERSION)_darwin_arm64.tar.gz \
 		$(DIST_DIR)/tk_$(VERSION)_darwin_amd64.tar.gz \
 		$(DIST_DIR)/tk_$(VERSION)_linux_amd64.tar.gz \
