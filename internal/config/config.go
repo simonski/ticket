@@ -17,6 +17,11 @@ const (
 	ModeRemote = "remote"
 )
 
+// DefaultRemoteURL is the fallback remote server used when neither TICKET_URL
+// nor a stored location is configured. The CLI entry point sets this for real
+// (non-test) binaries; tests leave it empty so they resolve to a local store.
+var DefaultRemoteURL string
+
 // Resolved holds the parsed result of config.Location.
 type Resolved struct {
 	Mode      string // "local" or "remote"
@@ -148,9 +153,9 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	credentialLocation := firstNonEmpty(envValue("TICKET_URL"), cfg.Location)
-	if envURL := envValue("TICKET_URL"); envURL != "" {
-		cfg.Location = envURL
+	credentialLocation := firstNonEmpty(envValue("TICKET_URL"), cfg.Location, DefaultRemoteURL)
+	if credentialLocation != "" {
+		cfg.Location = credentialLocation
 	}
 	if resolved, rErr := ResolveLocation(credentialLocation); rErr == nil && resolved.Mode == ModeRemote {
 		if remote, ok := creds.Remote(credentialLocation); ok {

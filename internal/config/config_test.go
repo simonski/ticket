@@ -256,6 +256,40 @@ func TestLoadUsesDefaultRemoteAndStoredCredentials(t *testing.T) {
 	}
 }
 
+func TestLoadFallsBackToDefaultRemoteForStoredCredentials(t *testing.T) {
+	// Reproduces the case where TICKET_URL is unset and no location is stored
+	// in preferences, but credentials were saved under the default remote URL
+	// (as `tk login` does). Load() must still surface that stored token.
+	setupConfigTestHome(t)
+	t.Setenv("TICKET_URL", "")
+
+	prev := DefaultRemoteURL
+	DefaultRemoteURL = "https://ticket.example.com"
+	t.Cleanup(func() { DefaultRemoteURL = prev })
+
+	if err := SaveCredentials(Credentials{
+		Remotes: map[string]RemoteCredentials{
+			"https://ticket.example.com": {Username: "admin", Token: "stored-token"},
+		},
+	}); err != nil {
+		t.Fatalf("SaveCredentials() error = %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Location != "https://ticket.example.com" {
+		t.Fatalf("Load().Location = %q, want default remote URL", cfg.Location)
+	}
+	if cfg.Username != "admin" {
+		t.Fatalf("Load().Username = %q, want stored username", cfg.Username)
+	}
+	if cfg.Token != "stored-token" {
+		t.Fatalf("Load().Token = %q, want stored token", cfg.Token)
+	}
+}
+
 func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
 	t.Setenv("TICKET_HOME", "")
 

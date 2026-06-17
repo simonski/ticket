@@ -18,6 +18,16 @@ import (
 
 const defaultTicketURL = "https://ticket.simonski.com"
 
+// init wires the default remote URL into the config package so that credential
+// resolution (config.Load) and connection resolution agree on the target
+// server when nothing is explicitly configured. Test binaries leave it unset
+// so they continue to resolve to a local store.
+func init() {
+	if !isTestBinary() {
+		config.DefaultRemoteURL = defaultTicketURL
+	}
+}
+
 var runtimeProjectOverride string
 
 func setProjectOverride(projectRef string) {
