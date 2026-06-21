@@ -13,7 +13,7 @@ Compile
 
 ```bash
 make setup                # Install all dev dependencies (Go modules + Node + Playwright)
-make build                # Build binary to ./bin/tk and increment the patch version
+make build                # Build binary to ./bin/tk (does not change the version)
 make build-dev            # Build binary to ./bin/tk without changing the version
 make test                 # Ultra-fast default: unit tests only
 make test-fast            # Recommended developer loop: unit + Go API smoke
@@ -38,9 +38,10 @@ make lint                 # Run golangci-lint on all packages
 make dev                  # Print env vars for local development mode
 ```
 
-> `make build` increments the patch version in `cmd/tk/VERSION` on every
-> invocation. Use `make build-dev` when you want a development build without
-> changing the version.
+> `make build` does not change the version. The patch version in
+> `cmd/tk/VERSION` (and the `version:` in `docs/api/openapi.yaml`) is only
+> bumped when publishing/releasing — `make publish` and `make release` — so
+> day-to-day builds never churn those files.
 
 Run a single test: `go test ./internal/store/ -run TestTicketLifecycle`
 
