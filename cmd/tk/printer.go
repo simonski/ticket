@@ -737,7 +737,7 @@ func ticketTitleDepth(treePrefix string) int {
 	return depth
 }
 
-func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agentUsernames map[string]bool, statusUnicode, includeArchived bool, headerLabel string) {
+func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agentUsernames map[string]bool, statusUnicode, includeArchived bool, headerLabel string, prByTicket map[string]string) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
 		return
@@ -772,13 +772,20 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		}
 	}
 
-	showOpen := includeArchived // only show OPEN column when mixed open/closed
+	showOpen := includeArchived   // only show OPEN column when mixed open/closed
+	showPR := len(prByTicket) > 0 // only show PR column when some ticket has a PR
 
 	makeHeader := func() string {
+		cols := "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tDRAFT"
 		if showOpen {
-			return "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tDRAFT\tCOMPLETE\tASSIGNEE\tPRIORITY"
+			cols += "\tCOMPLETE"
 		}
-		return "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tDRAFT\tASSIGNEE\tPRIORITY"
+		cols += "\tASSIGNEE"
+		if showPR {
+			cols += "\tPR"
+		}
+		cols += "\tPRIORITY"
+		return cols
 	}
 
 	// Maximum display width for the assignee column.
@@ -810,12 +817,20 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		if t.Draft {
 			draft = "yes"
 		}
+		row := fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s", key, t.Type, title, t.Stage, t.State, draft)
 		if showOpen {
-			return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
-				key, t.Type, title, t.Stage, t.State, draft, ticketCompleteLabel(t), assignee, t.Priority)
+			row += "\t" + ticketCompleteLabel(t)
 		}
-		return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
-			key, t.Type, title, t.Stage, t.State, draft, assignee, t.Priority)
+		row += "\t" + assignee
+		if showPR {
+			pr := "-"
+			if v := strings.TrimSpace(prByTicket[t.ID]); v != "" {
+				pr = v
+			}
+			row += "\t" + pr
+		}
+		row += fmt.Sprintf("\t%d", t.Priority)
+		return row
 	}
 
 	// Pass 1: render with a sentinel title to locate where the title column

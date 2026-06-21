@@ -2260,6 +2260,33 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 	}
 }
 
+func TestRunListShowsPullRequestColumn(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	withPR := createLocalTask(t, []string{"add", "Has a PR"})
+	createLocalTask(t, []string{"add", "No PR"})
+
+	pr, err := svc.CreatePullRequest(context.Background(), libticket.PullRequestRequest{
+		TicketID: withPR, Repository: "github.com/acme/w", SourceBranch: "f",
+	})
+	if err != nil {
+		t.Fatalf("CreatePullRequest() error = %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := run([]string{"ls", "-nocolor"}); err != nil {
+			t.Fatalf("ls error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "PR") {
+		t.Fatalf("ls output missing PR column header:\n%s", out)
+	}
+	if !strings.Contains(out, fmt.Sprintf("#%d", pr.ID)) {
+		t.Fatalf("ls output missing PR id #%d:\n%s", pr.ID, out)
+	}
+}
+
 func TestRunListShowsActiveTicketsFirstWithSeparator(t *testing.T) {
 	setupLocalCLI(t)
 
