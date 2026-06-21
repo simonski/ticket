@@ -33,9 +33,9 @@ func (e *SchemaVersionError) Error() string {
 		displayPath = "database"
 	}
 	if e.UpgradeNeeded {
-		command := "tk upgrade-database"
+		command := "tk admin upgrade-database"
 		if path != "" {
-			command = fmt.Sprintf("tk upgrade-database -f %s", shellQuotePath(path))
+			command = fmt.Sprintf("tk admin upgrade-database -f %s", shellQuotePath(path))
 		}
 		return fmt.Sprintf("%s is schema version %d; this tk binary expects schema version %d; run `%s` to upgrade it (the server also upgrades automatically on startup)", displayPath, e.Found, e.Current, command)
 	}

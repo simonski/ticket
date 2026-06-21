@@ -62,7 +62,7 @@ func runUpgradeDatabase(args []string) error {
 		return err
 	}
 	if len(fs.Args()) != 0 {
-		return errors.New("usage: tk upgrade-database [-f <db>] [-no-backup]")
+		return errors.New("usage: tk admin upgrade-database [-f <db>] [-no-backup]")
 	}
 
 	path := strings.TrimSpace(*dbPath)

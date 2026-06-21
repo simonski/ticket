@@ -7289,12 +7289,12 @@ func TestRunUpgradeDatabaseUpgradesLegacyDatabaseInPlace(t *testing.T) {
 	legacyPath, ticketID := createLegacyDatabaseForCLI(t)
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"upgrade-database", "-f", legacyPath}); err != nil {
-			t.Fatalf("upgrade-database error = %v", err)
+		if err := run([]string{"admin", "upgrade-database", "-f", legacyPath}); err != nil {
+			t.Fatalf("admin upgrade-database error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "upgraded") {
-		t.Fatalf("upgrade-database output = %q, want upgrade confirmation", output)
+		t.Fatalf("admin upgrade-database output = %q, want upgrade confirmation", output)
 	}
 	// The database is upgraded in place: the same path is now at the current version.
 	if got, err := store.DetectSchemaVersion(legacyPath); err != nil {

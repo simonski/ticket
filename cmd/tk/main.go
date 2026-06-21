@@ -136,8 +136,6 @@ func run(args []string) error {
 		return runVersion(trimmedArgs[1:])
 	case "upgrade":
 		return runUpgrade(trimmedArgs[1:])
-	case "upgrade-database":
-		return runUpgradeDatabase(trimmedArgs[1:])
 	case "register":
 		return runRegister(trimmedArgs[1:])
 	case "login":
@@ -329,7 +327,7 @@ func shouldRouteToActionNamespace(args []string) bool {
 		return false
 	}
 	switch command {
-	case "help", "version", "upgrade", "upgrade-database", "status", "whoami",
+	case "help", "version", "upgrade", "status", "whoami",
 		"login", "logout", "register", "init", "initdb", "server", "orchestrator",
 		"config", "project", "workflow", "team", "user", "role", "idea", "decision",
 		"story", "document", "label", "dep", "time", "doctor", "summary",

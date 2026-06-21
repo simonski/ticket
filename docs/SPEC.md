@@ -809,7 +809,7 @@ The binary is named `ticket` with the alias `tk`.
 | `tk admin config` | Manage server registration settings |
 | `tk export -o file.json` | Export all data to JSON snapshot |
 | `tk import -i file.json` | Restore from snapshot |
-| `tk upgrade-database -o file.db` | Port an older database into a fresh file |
+| `tk admin upgrade-database [-f db]` | Upgrade the database schema in place (the server also auto-upgrades on startup) |
 
 ### 12.3 Projects
 

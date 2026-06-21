@@ -149,6 +149,8 @@ func runAdmin(args []string) error {
 		return runAgent(args[1:])
 	case "user":
 		return runUser(args[1:])
+	case "upgrade-database":
+		return runUpgradeDatabase(args[1:])
 	default:
 		fmt.Println(adminUsage)
 		return fmt.Errorf("unknown admin command %q", args[0])

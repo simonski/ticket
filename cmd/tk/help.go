@@ -60,9 +60,9 @@ var helpIndex = map[string]commandHelp{
 		example: "tk upgrade",
 	},
 	"upgrade-database": {
-		usage:   "tk upgrade-database [-f <db>] [-no-backup]",
+		usage:   "tk admin upgrade-database [-f <db>] [-no-backup]",
 		details: []string{"Server-side maintenance command. Upgrades a ticket database IN PLACE: it applies any pending additive schema migrations (missing tables and columns) and stamps the current schema version. Existing data is preserved.", "Use this to repair a database that is missing a column the running binary expects (for example a 500 with `no such column`).", "Resolves the database from `-f`, otherwise the configured/local database. A timestamped `.bak-<timestamp>` copy is written first unless `-no-backup` is given.", "The tk server performs this same upgrade automatically on startup, so usually you only need to deploy the new binary and restart."},
-		example: "tk upgrade-database -f /data/ticket.db",
+		example: "tk admin upgrade-database -f /data/ticket.db",
 	},
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password> | -token <token> | --passkey] [-url <server-url>]",
@@ -524,7 +524,7 @@ func renderRootUsage() string {
 		{"admin config", "Manage server registration settings"},
 		{"admin export", "Export entities to a JSON snapshot"},
 		{"admin import", "Import entities from a JSON snapshot"},
-		{"upgrade-database", "Upgrade the database schema in place"},
+		{"admin upgrade-database", "Upgrade the database schema in place"},
 		{"admin role", "Manage roles (ls, new, get, update, rm)"},
 		{"admin workflow", "Manage workflows (ls, new, get, rm, set, unset)"},
 		{"admin team", "Manage teams (ls, new, update, rm)"},
@@ -718,6 +718,7 @@ var adminUsage = renderNamespaceUsage("ADMIN", "tk admin <command> [flags]", [][
 	{"team", "Manage teams"},
 	{"agent", "Manage agents"},
 	{"user", "Manage users"},
+	{"upgrade-database", "Upgrade the database schema in place"},
 })
 
 const configUsage = `Usage: tk admin config <command> [flags]
