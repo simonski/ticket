@@ -99,7 +99,7 @@ func runFile(file, ticketBin string, verbose bool) (pass, fail, skip int, err er
 	defer os.RemoveAll(tmpDir)
 	repoDir := filepath.Join(tmpDir, "repo")
 	homeDir := filepath.Join(tmpDir, "home")
-	ticketHome := filepath.Join(homeDir, ".ticket")
+	ticketHome := filepath.Join(homeDir, ".config", "ticket")
 	err = os.MkdirAll(repoDir, 0o750)
 	if err != nil {
 		return 0, 0, 0, err

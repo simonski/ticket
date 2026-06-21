@@ -305,44 +305,24 @@ func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
 	}
 }
 
-func TestHomeFallsBackToLegacyDotTicketWhenPresent(t *testing.T) {
+func TestHomeIgnoresLegacyDotTicket(t *testing.T) {
 	tempHome := t.TempDir()
 	t.Setenv("TICKET_HOME", "")
 	t.Setenv("HOME", tempHome)
 
-	legacy := filepath.Join(tempHome, ".ticket")
-	if err := os.MkdirAll(legacy, 0o700); err != nil {
-		t.Fatalf("MkdirAll(legacy) error = %v", err)
-	}
-
-	got, err := Home()
-	if err != nil {
-		t.Fatalf("Home() error = %v", err)
-	}
-	if got != legacy {
-		t.Fatalf("Home() = %q, want legacy %q", got, legacy)
-	}
-}
-
-func TestHomePrefersDotConfigWhenBothExist(t *testing.T) {
-	tempHome := t.TempDir()
-	t.Setenv("TICKET_HOME", "")
-	t.Setenv("HOME", tempHome)
-
+	// A legacy ~/.ticket directory is no longer consulted; Home() always
+	// resolves to ~/.config/ticket.
 	if err := os.MkdirAll(filepath.Join(tempHome, ".ticket"), 0o700); err != nil {
 		t.Fatalf("MkdirAll(legacy) error = %v", err)
 	}
-	newDir := filepath.Join(tempHome, ".config", "ticket")
-	if err := os.MkdirAll(newDir, 0o700); err != nil {
-		t.Fatalf("MkdirAll(new) error = %v", err)
-	}
 
 	got, err := Home()
 	if err != nil {
 		t.Fatalf("Home() error = %v", err)
 	}
-	if got != newDir {
-		t.Fatalf("Home() = %q, want %q", got, newDir)
+	want := filepath.Join(tempHome, ".config", "ticket")
+	if got != want {
+		t.Fatalf("Home() = %q, want %q", got, want)
 	}
 }
 
