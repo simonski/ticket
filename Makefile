@@ -25,9 +25,8 @@ default: help
 
 help:
 	@printf "Available targets:\n\n"
-	@printf "  make build           Build tk binary into ./bin/tk.\n"
-	@printf "                       Also increments the patch version in ./VERSION.\n"
-	@printf "  make build-dev       Build tk binary into ./bin/tk without changing the version.\n"
+	@printf "  make build           Build tk binary into ./bin/tk (does not change the version).\n"
+	@printf "  make build-dev       Build tk binary into ./bin/tk (alias of build; no version change).\n"
 	@printf "  make build-linux     Build a linux/amd64 tk binary into ./bin/tk-linux using BuildKit.\n"
 	@printf "  make caddy           Run local HTTPS reverse proxy https://ticket.localhost -> http://localhost:8080.\n"
 	@printf "  make sync-openapi-version Sync openapi.yaml version with cmd/tk/VERSION.\n"
@@ -70,7 +69,7 @@ help:
 	@printf "\n"
 	@printf "Docker targets:\n\n"
 	@printf "  make docker    Build the local Docker image only.\n"
-	@printf "  make publish         Build the image and push versioned + latest tags to GHCR.\n"
+	@printf "  make publish         Bump version, build + push versioned + latest tags to GHCR, commit the bump.\n"
 	@printf "  make docker-up       Start deploy/compose.yaml using deploy/.env.\n"
 	@printf "  make docker-down     Stop deploy/compose.yaml using deploy/.env.\n"
 	@printf "\n"
@@ -88,9 +87,10 @@ help:
 	@printf "  make release-clean   Remove the ./dist directory.\n"
 	@printf "\n"
 
-build:
-	@$(MAKE) release-prepare
-	@$(MAKE) build-bin
+# build compiles the binary WITHOUT touching the version. The version (and the
+# openapi.yaml version) only advance when publishing/releasing (see publish /
+# release), so day-to-day builds never churn cmd/tk/VERSION or docs/api/openapi.yaml.
+build: build-bin
 
 build-dev:
 	@$(MAKE) build-bin
@@ -437,7 +437,14 @@ docker-push: docker
 	docker push $(GHCR_IMAGE):$(VERSION)
 	docker push $(GHCR_IMAGE):latest
 
-publish: docker-push
+# publish bumps the version (and syncs openapi.yaml), builds and pushes the
+# image for that version, then commits the version files. Bumping lives here —
+# not in build — so the version only advances when we actually publish.
+# Each step is a separate $(MAKE) so $(VERSION) is re-read after the bump.
+publish:
+	@$(MAKE) release-prepare
+	@$(MAKE) docker-push
+	@$(MAKE) release-commit
 
 docker-up:
 	docker compose --env-file deploy/.env -f deploy/compose.yaml up -d
