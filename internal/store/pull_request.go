@@ -153,11 +153,11 @@ func GetPullRequest(ctx context.Context, db *sql.DB, id int64) (PullRequest, err
 	return pr, nil
 }
 
-func listPullRequests(ctx context.Context, db *sql.DB, where string, arg any) ([]PullRequest, error) {
-	rows, err := db.QueryContext(ctx, `SELECT `+pullRequestColumns+` FROM pull_requests WHERE `+where+` ORDER BY id DESC`, arg)
-	if err != nil {
-		return nil, err
-	}
+const listPullRequestsByTicketQuery = `SELECT ` + pullRequestColumns + ` FROM pull_requests WHERE ticket_id = ? ORDER BY id DESC`
+
+const listPullRequestsByProjectQuery = `SELECT ` + pullRequestColumns + ` FROM pull_requests WHERE project_id = ? ORDER BY id DESC`
+
+func scanPullRequests(rows *sql.Rows) ([]PullRequest, error) {
 	defer rows.Close()
 	prs := make([]PullRequest, 0)
 	for rows.Next() {
@@ -172,10 +172,18 @@ func listPullRequests(ctx context.Context, db *sql.DB, where string, arg any) ([
 
 // ListPullRequestsByTicket returns all pull requests linked to a ticket.
 func ListPullRequestsByTicket(ctx context.Context, db *sql.DB, ticketID string) ([]PullRequest, error) {
-	return listPullRequests(ctx, db, "ticket_id = ?", strings.TrimSpace(ticketID))
+	rows, err := db.QueryContext(ctx, listPullRequestsByTicketQuery, strings.TrimSpace(ticketID))
+	if err != nil {
+		return nil, err
+	}
+	return scanPullRequests(rows)
 }
 
 // ListPullRequestsByProject returns all pull requests in a project.
 func ListPullRequestsByProject(ctx context.Context, db *sql.DB, projectID int64) ([]PullRequest, error) {
-	return listPullRequests(ctx, db, "project_id = ?", projectID)
+	rows, err := db.QueryContext(ctx, listPullRequestsByProjectQuery, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return scanPullRequests(rows)
 }
