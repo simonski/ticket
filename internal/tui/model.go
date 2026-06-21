@@ -54,6 +54,10 @@ type ticketCreatedMsg store.Ticket
 type updateAvailableMsg string
 type errMsg struct{ err error }
 type projectsLoadedMsg []store.Project
+type pullRequestsLoadedMsg struct {
+	ticketID string
+	prs      []store.PullRequest
+}
 type workflowLoadedMsg []store.WorkflowWithStages
 type rolesLoadedMsg []store.Role
 type onboardingLoadedMsg struct {
@@ -109,10 +113,11 @@ type Model struct {
 	offset   int
 
 	// detail / edit
-	selected    *store.Ticket
-	form        editForm
-	newForm     *newTicketForm
-	projectForm *projectEditForm
+	selected             *store.Ticket
+	selectedPullRequests []store.PullRequest
+	form                 editForm
+	newForm              *newTicketForm
+	projectForm          *projectEditForm
 
 	// settings / theme picker
 	settingsCursor int
@@ -276,6 +281,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.projectCursor = i
 				break
 			}
+		}
+
+	case pullRequestsLoadedMsg:
+		// Only apply if it still matches the selected ticket (avoid stale results).
+		if m.selected != nil && m.selected.ID == msg.ticketID {
+			m.selectedPullRequests = msg.prs
 		}
 
 	case workflowLoadedMsg:
@@ -537,7 +548,9 @@ func (m Model) handleKeyList(key string) (tea.Model, tea.Cmd) {
 		if m.cursor < len(m.items) {
 			t := m.items[m.cursor].ticket
 			m.selected = &t
+			m.selectedPullRequests = nil
 			m.mode = modeDetail
+			return m, loadPullRequests(m.svc, t.ID)
 		}
 	case "e":
 		if m.cursor < len(m.items) {
@@ -572,12 +585,16 @@ func (m Model) handleKeyDetail(key string) (tea.Model, tea.Cmd) {
 			m.cursor--
 			t := m.items[m.cursor].ticket
 			m.selected = &t
+			m.selectedPullRequests = nil
+			return m, loadPullRequests(m.svc, t.ID)
 		}
 	case "down", "j", "s":
 		if m.cursor < len(m.items)-1 {
 			m.cursor++
 			t := m.items[m.cursor].ticket
 			m.selected = &t
+			m.selectedPullRequests = nil
+			return m, loadPullRequests(m.svc, t.ID)
 		}
 	}
 	return m, nil
@@ -1389,6 +1406,18 @@ func (m Model) viewDetail() []string {
 		addBlock("ticket guidance", guidanceText)
 	}
 
+	if len(m.selectedPullRequests) > 0 {
+		lines = append(lines, labelStyle.Render(padRight(" pull requests", inner)))
+		for _, pr := range m.selectedPullRequests {
+			line := fmt.Sprintf("  #%d %s (%s) %s → %s", pr.ID, pr.Status, pr.Provider, pr.SourceBranch, pr.TargetBranch)
+			if strings.TrimSpace(pr.URL) != "" {
+				line += "  " + pr.URL
+			}
+			lines = append(lines, valStyle.Render(padRight(truncate(line, inner-2), inner)))
+		}
+		lines = append(lines, "")
+	}
+
 	for len(lines) < m.height-3 {
 		lines = append(lines, lipgloss.NewStyle().Background(th.Bg).Render(strings.Repeat(" ", inner)))
 	}
@@ -2005,6 +2034,20 @@ func tickCmd() tea.Cmd {
 func loadTickets(svc libticket.Service, cfg config.Config) tea.Cmd {
 	return func() tea.Msg {
 		return loadTicketsSync(svc, cfg)
+	}
+}
+
+// loadPullRequests fetches a ticket's pull requests for the detail view.
+func loadPullRequests(svc libticket.Service, ticketID string) tea.Cmd {
+	return func() tea.Msg {
+		if strings.TrimSpace(ticketID) == "" {
+			return pullRequestsLoadedMsg{ticketID: ticketID}
+		}
+		prs, err := svc.ListPullRequestsByTicket(context.Background(), ticketID)
+		if err != nil {
+			return pullRequestsLoadedMsg{ticketID: ticketID}
+		}
+		return pullRequestsLoadedMsg{ticketID: ticketID, prs: prs}
 	}
 }
 
