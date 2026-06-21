@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -50,31 +49,60 @@ func runUpgrade(args []string) error {
 	return nil
 }
 
+// runUpgradeDatabase upgrades a database IN PLACE, applying any pending additive
+// schema migrations (missing tables/columns) and stamping the current schema
+// version. It takes a timestamped .bak copy first unless -no-backup is given.
+// The tk server also performs this upgrade automatically on startup.
 func runUpgradeDatabase(args []string) error {
 	fs := flag.NewFlagSet("upgrade-database", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	outputPath := fs.String("o", filepath.Join("new_database", "ticket.db"), "target database file")
+	dbPath := fs.String("f", "", "SQLite database file (default: resolved/local database)")
+	noBackup := fs.Bool("no-backup", false, "skip the safety backup taken before upgrading")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if len(fs.Args()) != 0 {
-		return errors.New("usage: tk upgrade-database [-o <target-db>]")
+		return errors.New("usage: tk upgrade-database [-f <db>] [-no-backup]")
 	}
-	resolved, err := config.ResolveURL()
+
+	path := strings.TrimSpace(*dbPath)
+	if path == "" {
+		if resolved, err := config.ResolveURL(); err == nil {
+			path = strings.TrimSpace(resolved.DBPath)
+		}
+	}
+	if path == "" {
+		def, err := defaultDatabasePath()
+		if err != nil {
+			return err
+		}
+		path = def
+	}
+	if path == "" {
+		return errors.New("could not resolve a local database; pass -f <db>")
+	}
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("database not found at %s: %w", path, err)
+	}
+
+	if !*noBackup {
+		backup := fmt.Sprintf("%s.bak-%s", path, time.Now().Format("20060102-150405"))
+		if err := store.BackupDatabase(path, backup); err != nil {
+			return fmt.Errorf("backup failed: %w", err)
+		}
+		fmt.Printf("backup written: %s\n", backup)
+	}
+
+	from, err := store.UpgradeInPlace(context.Background(), path)
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(resolved.DBPath) == "" {
-		return errors.New("ticket upgrade-database is a server-side maintenance command; pass -f <source-db> to select the database file")
+	if from == store.CurrentSchemaVersion {
+		fmt.Printf("upgraded %s in place (schema version %d; re-applied pending column migrations)\n", path, store.CurrentSchemaVersion)
+	} else {
+		fmt.Printf("upgraded %s in place (schema version %d -> %d)\n", path, from, store.CurrentSchemaVersion)
 	}
-	target := strings.TrimSpace(*outputPath)
-	if target == "" {
-		return errors.New("usage: tk upgrade-database [-o <target-db>]")
-	}
-	if err := store.UpgradeDatabase(context.Background(), resolved.DBPath, target); err != nil {
-		return err
-	}
-	fmt.Printf("upgraded database from %s to %s\n", resolved.DBPath, target)
+	fmt.Println("restart the tk server to pick up the upgraded database")
 	return nil
 }
 

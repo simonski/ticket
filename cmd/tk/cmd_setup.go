@@ -721,6 +721,14 @@ func runServer(args []string) error {
 		listenAddr = fmt.Sprintf(":%d", *port)
 	}
 
+	// Auto-upgrade the database schema in place before serving. This applies any
+	// pending additive migrations (missing tables/columns) so a freshly deployed
+	// binary works against an older database without manual intervention. A new
+	// deployment with no database yet is skipped here and created by store.Open.
+	if autoUpgradeErr := autoUpgradeDatabase(resolvedDBPath); autoUpgradeErr != nil {
+		return autoUpgradeErr
+	}
+
 	db, err := store.Open(resolvedDBPath)
 	if err != nil {
 		return err
@@ -793,6 +801,36 @@ func runServer(args []string) error {
 		fmt.Println("server stopped")
 		return nil
 	}
+}
+
+// autoUpgradeDatabase upgrades the database at dbPath in place when it is behind
+// the current schema version, taking a timestamped backup first. A missing or
+// empty database is left for store.Open to create.
+func autoUpgradeDatabase(dbPath string) error {
+	if _, err := os.Stat(dbPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	version, err := store.DetectSchemaVersion(dbPath)
+	if err != nil {
+		// Empty/unreadable database: store.Open will create or report it.
+		return nil //nolint:nilerr // intentional: defer DB creation/validation to store.Open
+	}
+	if version >= store.CurrentSchemaVersion {
+		return nil
+	}
+	backup := fmt.Sprintf("%s.bak-%s", dbPath, time.Now().Format("20060102-150405"))
+	if backupErr := store.BackupDatabase(dbPath, backup); backupErr != nil {
+		return fmt.Errorf("pre-upgrade backup failed: %w", backupErr)
+	}
+	from, upErr := store.UpgradeInPlace(context.Background(), dbPath)
+	if upErr != nil {
+		return fmt.Errorf("database upgrade failed: %w", upErr)
+	}
+	fmt.Printf("auto-upgraded database %s (schema version %d -> %d); backup: %s\n", dbPath, from, store.CurrentSchemaVersion, backup)
+	return nil
 }
 
 // openServerLogFile opens (creating if needed) a server log file for appending.
