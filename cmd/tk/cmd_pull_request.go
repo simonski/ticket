@@ -22,7 +22,10 @@ Commands:
                                         Open a pull request for a ticket. Repository,
                                         branches, and provider are inferred from the
                                         project repos and the current git branch.
-  ls     [-id] <ticket-id>             List a ticket's pull requests
+  ls     [[-id] <ticket-id>] [-open|-closed|-all]
+                                        List pull requests. With no ticket, lists the
+                                        current project's PRs (open by default; -closed
+                                        or -all to widen). With a ticket, lists its PRs.
   get    <pr-id>                       Show a pull request
 
 Shortcut: tk pr <ticket-id> lists that ticket's pull requests.`
@@ -145,15 +148,21 @@ func runPullRequestCreate(args []string) error {
 func runPullRequestList(args []string) error {
 	fs := flag.NewFlagSet("pr ls", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	idFlag := fs.String("id", "", "ticket id")
+	idFlag := fs.String("id", "", "ticket id (list this ticket's PRs)")
+	openFlag := fs.Bool("open", false, "only open/draft pull requests")
+	closedFlag := fs.Bool("closed", false, "only merged/closed pull requests")
+	allFlag := fs.Bool("all", false, "all pull requests regardless of status")
 	positional, err := parseFlagsWithPositionals(fs, args)
 	if err != nil {
 		return err
 	}
-	ticketArg, rest, err := resolveIDFlag(*idFlag, positional)
-	if err != nil || len(rest) != 0 {
-		return errors.New("usage: tk pr ls [-id] <ticket-id>")
+	ticketArg := strings.TrimSpace(*idFlag)
+	if ticketArg == "" && len(positional) == 1 {
+		ticketArg = strings.TrimSpace(positional[0])
+	} else if (ticketArg != "" && len(positional) > 0) || len(positional) > 1 {
+		return errors.New("usage: tk pr ls [[-id] <ticket-id>] [-open|-closed|-all]")
 	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -163,29 +172,82 @@ func runPullRequestList(args []string) error {
 		return err
 	}
 	ctx := context.Background()
-	ticket, err := svc.GetTicket(ctx, normalizeBareTicketRef(cfg, svc, ticketArg))
+
+	var (
+		prs   []store.PullRequest
+		scope string
+		// Project-wide listing defaults to open; a single ticket defaults to all.
+		defaultClosed = false
+		showAll       = *allFlag
+	)
+	if ticketArg != "" {
+		ticket, ticketErr := svc.GetTicket(ctx, normalizeBareTicketRef(cfg, svc, ticketArg))
+		if ticketErr != nil {
+			return ticketErr
+		}
+		prs, err = svc.ListPullRequestsByTicket(ctx, ticket.ID)
+		scope = ticket.ID
+		if !*openFlag && !*closedFlag {
+			showAll = true // a specific ticket shows all of its PRs by default
+		}
+	} else {
+		_, projectSvc, project, projErr := resolveCurrentProjectClient()
+		if projErr != nil {
+			return projErr
+		}
+		prs, err = projectSvc.ListPullRequestsByProject(ctx, strconv.FormatInt(project.ID, 10))
+		scope = project.Prefix
+	}
 	if err != nil {
 		return err
 	}
-	prs, err := svc.ListPullRequestsByTicket(ctx, ticket.ID)
-	if err != nil {
-		return err
+
+	if *closedFlag {
+		defaultClosed = true
 	}
+	filtered := filterPullRequestsByStatus(prs, defaultClosed, showAll)
+
 	if outputJSON {
-		return printJSON(prs)
+		return printJSON(filtered)
 	}
-	if len(prs) == 0 {
-		fmt.Printf("no pull requests for %s\n", ticket.ID)
+	if len(filtered) == 0 {
+		fmt.Printf("no pull requests for %s\n", scope)
 		return nil
 	}
-	for _, pr := range prs {
-		line := fmt.Sprintf("#%d  %s  %s  %s → %s", pr.ID, pr.Status, pr.Provider, pr.SourceBranch, pr.TargetBranch)
+	for _, pr := range filtered {
+		line := fmt.Sprintf("#%d  %s  %s  %s  %s → %s", pr.ID, pr.TicketID, pr.Status, pr.Provider, pr.SourceBranch, pr.TargetBranch)
 		if strings.TrimSpace(pr.URL) != "" {
 			line += "  " + pr.URL
 		}
 		fmt.Println(line)
 	}
 	return nil
+}
+
+// pullRequestIsClosed reports whether a PR status is in the closed set
+// (merged or closed) versus the open set (draft or open).
+func pullRequestIsClosed(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case store.PullRequestStatusMerged, store.PullRequestStatusClosed:
+		return true
+	default:
+		return false
+	}
+}
+
+// filterPullRequestsByStatus returns all PRs when all is true, otherwise the
+// closed set when wantClosed is true, otherwise the open set.
+func filterPullRequestsByStatus(prs []store.PullRequest, wantClosed, all bool) []store.PullRequest {
+	if all {
+		return prs
+	}
+	out := make([]store.PullRequest, 0, len(prs))
+	for _, pr := range prs {
+		if pullRequestIsClosed(pr.Status) == wantClosed {
+			out = append(out, pr)
+		}
+	}
+	return out
 }
 
 func runPullRequestGet(args []string) error {

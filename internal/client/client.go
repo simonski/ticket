@@ -1887,6 +1887,23 @@ func (c *Client) ListPullRequestsByTicket(ctx context.Context, ticketID string) 
 	return prs, err
 }
 
+func (c *Client) ListPullRequestsByProject(ctx context.Context, projectRef string) ([]store.PullRequest, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		project, err := store.GetProject(ctx, db, projectRef)
+		if err != nil {
+			return nil, err
+		}
+		return store.ListPullRequestsByProject(ctx, db, project.ID)
+	}
+	var prs []store.PullRequest
+	err := c.doJSON(ctx, http.MethodGet, "/api/projects/"+url.PathEscape(strings.TrimSpace(projectRef))+"/pull-requests", nil, &prs)
+	return prs, err
+}
+
 func (c *Client) UnsetTicketParent(ctx context.Context, id, message string) (store.Ticket, error) {
 	current, err := c.GetTicketByID(ctx, id)
 	if err != nil {

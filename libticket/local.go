@@ -1329,6 +1329,18 @@ func (s *LocalService) ListPullRequestsByTicket(ctx context.Context, ticketID st
 	return store.ListPullRequestsByTicket(ctx, db, ticketID)
 }
 
+func (s *LocalService) ListPullRequestsByProject(ctx context.Context, projectRef string) ([]store.PullRequest, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	project, err := store.GetProject(ctx, db, projectRef)
+	if err != nil {
+		return nil, err
+	}
+	return store.ListPullRequestsByProject(ctx, db, project.ID)
+}
+
 func (s *LocalService) UnsetTicketParent(ctx context.Context, id, message string) (store.Ticket, error) {
 	current, err := s.GetTicketByID(ctx, id)
 	if err != nil {
