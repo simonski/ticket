@@ -2743,6 +2743,64 @@ func TestRunProjectUpdateRePrefixesProject(t *testing.T) {
 	}
 }
 
+func TestRunProjectUpdateAcceptsPositionalIDBeforeFlags(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix: "POS",
+		Title:  "Positional Update",
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	// `tk project update 5 -prefix ATOM` must behave like the -id form, even
+	// though the positional id precedes the flag.
+	updateOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "update", fmt.Sprintf("%d", project.ID), "-prefix", "ATOM"}); err != nil {
+			t.Fatalf("project update <id> -prefix error = %v", err)
+		}
+	})
+	if !strings.Contains(updateOutput, "prefix: ATOM") {
+		t.Fatalf("project update output missing new prefix:\n%s", updateOutput)
+	}
+
+	updated, err := svc.GetProject(context.Background(), fmt.Sprintf("%d", project.ID))
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+	if updated.Prefix != "ATOM" {
+		t.Fatalf("project prefix = %q, want ATOM", updated.Prefix)
+	}
+}
+
+func TestRunStatusSurfacesConnectionErrorInBothModes(t *testing.T) {
+	t.Setenv("TICKET_HOME", t.TempDir())
+	t.Setenv("TICKET_URL", "http://127.0.0.1:0")
+	t.Setenv("TICKET_USERNAME", "admin")
+	t.Setenv("TICKET_PASSWORD", "secret12")
+
+	// Non-JSON mode surfaces the connection error.
+	if err := run([]string{"status"}); err == nil {
+		t.Fatal("status (non-json) error = nil, want connection error")
+	}
+
+	// JSON mode must be consistent: surface the same error AND include it in
+	// the JSON payload (previously -json swallowed the error).
+	jsonOutput := captureStdout(t, func() {
+		if err := run([]string{"status", "-json"}); err == nil {
+			t.Fatal("status -json error = nil, want connection error")
+		}
+	})
+	if !strings.Contains(jsonOutput, "\"ERROR\"") {
+		t.Fatalf("status -json payload missing ERROR field:\n%s", jsonOutput)
+	}
+	if !strings.Contains(jsonOutput, "\"CONNECTED\": false") {
+		t.Fatalf("status -json payload missing CONNECTED=false:\n%s", jsonOutput)
+	}
+}
+
 func TestRunProjectListMarksRepoResolvedCurrentProject(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)

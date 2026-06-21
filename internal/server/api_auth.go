@@ -232,28 +232,9 @@ func (r *router) registerAuthHandlers() {
 			return
 		}
 		runningChats := sharedChatRuntime.runningProcessCount()
-		user, err := userFromRequest(db, r)
-		if err != nil {
-			if errors.Is(err, store.ErrUnauthorized) {
-				writeJSON(w, http.StatusOK, map[string]any{
-					"status":                    "ok",
-					"authenticated":             false,
-					"registration_enabled":      registrationEnabled,
-					"registration_auto_approve": registrationAutoApprove,
-					"chat_enabled":              chatEnabled,
-					"chat_max_connections":      chatLimits.MaxConnections,
-					"chat_max_duration_minutes": chatLimits.MaxDurationMin,
-					"chat_running_processes":    runningChats,
-					"server_version":            version,
-				})
-				return
-			}
-			writeAuthError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		payload := map[string]any{
 			"status":                    "ok",
-			"authenticated":             true,
+			"authenticated":             false,
 			"registration_enabled":      registrationEnabled,
 			"registration_auto_approve": registrationAutoApprove,
 			"chat_enabled":              chatEnabled,
@@ -261,7 +242,21 @@ func (r *router) registerAuthHandlers() {
 			"chat_max_duration_minutes": chatLimits.MaxDurationMin,
 			"chat_running_processes":    runningChats,
 			"server_version":            version,
-			"user":                      user,
-		})
+		}
+		user, err := userFromRequest(db, r)
+		switch {
+		case err == nil:
+			payload["authenticated"] = true
+			payload["user"] = user
+		case errors.Is(err, store.ErrUnauthorized):
+			// Not logged in: a normal, healthy unauthenticated response.
+		default:
+			// A real lookup failure (e.g. a schema problem). Report it as a
+			// degraded status but still return server_version so callers like
+			// `tk status` can always see the server version.
+			payload["status"] = "degraded"
+			payload["auth_error"] = err.Error()
+		}
+		writeJSON(w, http.StatusOK, payload)
 	})
 }
