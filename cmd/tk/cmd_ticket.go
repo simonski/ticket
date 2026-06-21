@@ -806,7 +806,37 @@ func runList(args []string) error {
 			agentUsernames[a.Username] = true
 		}
 	}
-	printTicketTable(tickets, parentKeys, agentUsernames, statusUnicode, *includeAll, projectHeaderLabel(project))
+	// Build a per-ticket PR summary so the table can show a PR column (TK-83).
+	// Shows the latest PR (highest id) as "#id status", with "+N" when a ticket
+	// has more than one. The column only renders when some ticket has a PR.
+	prByTicket := make(map[string]string)
+	if prs, prErr := api.ListPullRequestsByProject(context.Background(), fmt.Sprintf("%d", project.ID)); prErr == nil {
+		type prAgg struct {
+			latest store.PullRequest
+			count  int
+		}
+		agg := make(map[string]*prAgg)
+		for _, pr := range prs {
+			a := agg[pr.TicketID]
+			if a == nil {
+				a = &prAgg{}
+				agg[pr.TicketID] = a
+			}
+			a.count++
+			if pr.ID >= a.latest.ID {
+				a.latest = pr
+			}
+		}
+		for ticketID, a := range agg {
+			// Compact, fixed-width-friendly: latest PR id, "+N" for extras.
+			summary := fmt.Sprintf("#%d", a.latest.ID)
+			if a.count > 1 {
+				summary += fmt.Sprintf("+%d", a.count-1)
+			}
+			prByTicket[ticketID] = summary
+		}
+	}
+	printTicketTable(tickets, parentKeys, agentUsernames, statusUnicode, *includeAll, projectHeaderLabel(project), prByTicket)
 	return nil
 }
 
