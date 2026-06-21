@@ -120,6 +120,26 @@ func TestViewDetailShowsExtendedTicketContext(t *testing.T) {
 	}
 }
 
+func TestViewDetailShowsPullRequests(t *testing.T) {
+	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
+	m.width = 100
+	m.height = 30
+	m.project = store.Project{ID: 1, Prefix: "PRJ", Title: "Alpha", Status: "open"}
+	selected := store.Ticket{ID: "PRJ-2", Type: "task", Title: "Work", Stage: store.StageDevelop, State: store.StateActive, Status: "develop/active"}
+	m.selected = &selected
+	m.selectedPullRequests = []store.PullRequest{{
+		ID: 5, TicketID: "PRJ-2", Status: "open", Provider: "github",
+		SourceBranch: "feature/PRJ-2", TargetBranch: "main", URL: "https://github.com/acme/w/pull/5",
+	}}
+
+	out := strings.Join(m.viewDetail(), "\n")
+	for _, needle := range []string{"pull requests", "#5", "feature/PRJ-2", "github", "https://github.com/acme/w/pull/5"} {
+		if !strings.Contains(out, needle) {
+			t.Fatalf("detail view missing %q:\n%s", needle, out)
+		}
+	}
+}
+
 func TestProjectEditAndNewTicketViewsShowLifecycleFields(t *testing.T) {
 	projectWorkflowID := int64(3)
 	ticketWorkflowID := int64(5)

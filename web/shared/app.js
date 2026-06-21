@@ -244,6 +244,7 @@
             workflowRoleBank: document.getElementById("workflow-role-bank"),
             workflowValidationSummary: document.getElementById("workflow-validation-summary"),
             ticketModal: document.getElementById("ticket-modal"),
+            ticketPullRequests: document.getElementById("ticket-pull-requests"),
             ticketHistory: document.getElementById("ticket-history"),
             ticketComments: document.getElementById("ticket-comments"),
             ticketCommentInput: document.getElementById("ticket-comment-input"),
@@ -7169,6 +7170,9 @@
                 }
             }
             els.ticketModal.classList.add("open");
+            loadTicketPullRequests(ticket.id).catch((error) => {
+                if (els.ticketPullRequests) els.ticketPullRequests.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
+            });
             loadTicketHistory(ticket.id).catch((error) => {
                 els.ticketHistory.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
             });
@@ -7195,6 +7199,35 @@
             // Always open on the Details panel first; the Refinement tab is one click
             // away for stories in refinement.
             switchTicketTab("details");
+        }
+
+        // loadTicketPullRequests fetches and renders a ticket's pull requests
+        // (repo, branches, status, provider, url). The section hides when empty.
+        async function loadTicketPullRequests(ticketID) {
+            const section = document.getElementById("ticket-pull-requests-section");
+            const list = els.ticketPullRequests;
+            if (!list) return;
+            if (!ticketID) {
+                if (section) section.classList.add("hidden");
+                list.innerHTML = "";
+                return;
+            }
+            const prs = await api("/api/tickets/" + ticketID + "/pull-requests");
+            if (!Array.isArray(prs) || !prs.length) {
+                if (section) section.classList.add("hidden");
+                list.innerHTML = "";
+                return;
+            }
+            if (section) section.classList.remove("hidden");
+            list.innerHTML = prs.map((pr) => {
+                const branches = escapeHTML((pr.source_branch || "?") + " → " + (pr.target_branch || "?"));
+                const meta = escapeHTML("#" + pr.id + " · " + (pr.status || "open") + " · " + (pr.provider || "none"));
+                const repo = pr.repository ? "<div class=\"meta\">" + escapeHTML(pr.repository) + "</div>" : "";
+                const link = pr.url
+                    ? "<a href=\"" + escapeHTML(pr.url) + "\" target=\"_blank\" rel=\"noopener\">" + escapeHTML(pr.url) + "</a>"
+                    : "";
+                return "<div class=\"history-item\"><div>" + meta + " — " + branches + "</div>" + repo + (link ? "<div>" + link + "</div>" : "") + "</div>";
+            }).join("");
         }
 
         // loadTicketPrompt fetches and renders the agent prompt preview for a ticket.
