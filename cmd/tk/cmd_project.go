@@ -333,11 +333,14 @@ func runProject(args []string) error {
 		fmt.Println("default project cleared")
 		return nil
 	case "update":
+		// Resolve an explicit target so we don't require a current project.
+		// Supports both `tk project update -id 5` and the positional form
+		// `tk project update 5` (where the ref may be an id, prefix, or alias).
+		ref := ""
 		if containsFlag(args[1:], "-id") {
-			// Parse -id from args so we don't require a current project
 			fs := flag.NewFlagSet("project update id", flag.ContinueOnError)
 			fs.SetOutput(io.Discard)
-			idFlag := fs.Int64("id", 0, "")
+			idFlag := fs.String("id", "", "")
 			// Absorb all other flags so Parse doesn't fail on them
 			fs.String("title", "", "")
 			fs.String("prefix", "", "")
@@ -347,12 +350,19 @@ func runProject(args []string) error {
 			fs.String("git", "", "")
 			fs.String("status", "", "")
 			fs.Int64("workflow", 0, "")
-			if err := fs.Parse(args[1:]); err != nil {
+			if _, err := parseFlagsWithPositionals(fs, args[1:]); err != nil {
 				return err
 			}
-			if *idFlag > 0 {
-				return runProjectByID(svc, *idFlag, args)
+			ref = strings.TrimSpace(*idFlag)
+		} else if len(args) > 1 && !strings.HasPrefix(args[1], "-") {
+			ref = strings.TrimSpace(args[1])
+		}
+		if ref != "" {
+			project, err := svc.GetProject(context.Background(), ref)
+			if err != nil {
+				return err
 			}
+			return runProjectByID(svc, project.ID, args)
 		}
 		project, err := requireCurrentProject(cfg, svc)
 		if err != nil {
@@ -694,7 +704,9 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		gitShort := fs.String("git", "", "project git repository (shorthand for -git-repository)")
 		status := fs.String("status", "", "project status (open|closed)")
 		workflowID := fs.Int64("workflow", 0, "workflow ID to associate with project")
-		if err := fs.Parse(args[1:]); err != nil {
+		// parseFlagsWithPositionals so a positional project ref before flags
+		// (tk project update 5 -prefix ATOM) does not stop flag parsing.
+		if _, err := parseFlagsWithPositionals(fs, args[1:]); err != nil {
 			return err
 		}
 		if *idFlag > 0 {

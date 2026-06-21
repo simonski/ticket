@@ -170,8 +170,17 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, _ bool) error {
 			"TICKET_PASSWORD": passwordDisplay,
 			"SERVER_VERSION":  valueOrDefault(serverVersion, "UNSET"),
 			"CLIENT_VERSION":  clientVersion,
+			"CONNECTED":       connected,
 		}
-		return printJSON(payload)
+		if statusErr != nil {
+			payload["ERROR"] = statusErr.Error()
+		}
+		if err := printJSON(payload); err != nil {
+			return err
+		}
+		// Surface the connection error in JSON mode too, so behaviour is
+		// consistent with the non-JSON path (which also returns it).
+		return statusErr
 	}
 	lines := []statusLine{
 		{key: "TICKET_URL", value: valueOrDefault(serverURL, "UNSET"), color: urlColor},
