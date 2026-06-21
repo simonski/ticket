@@ -329,6 +329,27 @@ CREATE TABLE IF NOT EXISTS releases (
 	FOREIGN KEY(project_id) REFERENCES projects(project_id)
 );
 
+CREATE TABLE IF NOT EXISTS pull_requests (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	project_id INTEGER NOT NULL,
+	ticket_id TEXT NOT NULL,
+	title TEXT NOT NULL DEFAULT '',
+	description TEXT NOT NULL DEFAULT '',
+	repository TEXT NOT NULL DEFAULT '',
+	source_branch TEXT NOT NULL DEFAULT '',
+	target_branch TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL DEFAULT 'open',
+	provider TEXT NOT NULL DEFAULT 'none',
+	url TEXT NOT NULL DEFAULT '',
+	created_by TEXT,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	merged_at TEXT,
+	FOREIGN KEY(project_id) REFERENCES projects(project_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(created_by) REFERENCES users(user_id)
+);
+
 CREATE TABLE IF NOT EXISTS tickets (
 	ticket_id TEXT PRIMARY KEY,
 	project_id INTEGER NOT NULL,
@@ -779,6 +800,9 @@ CREATE INDEX IF NOT EXISTS idx_user_notifications_status ON user_notifications(s
 
 CREATE INDEX IF NOT EXISTS idx_time_entries_ticket_id ON time_entries(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_pull_requests_ticket_id ON pull_requests(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_pull_requests_project_id ON pull_requests(project_id);
 
 `
 
@@ -1633,6 +1657,40 @@ CREATE TABLE user_notifications (
 	// Add release_id column to tickets if it doesn't exist yet.
 	if !columnExists(ctx, db, "tickets", "release_id") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN release_id INTEGER REFERENCES releases(id)`); err != nil {
+			return err
+		}
+	}
+
+	// Add pull_requests table if it doesn't exist yet (existing databases).
+	if !tableExists(ctx, db, "pull_requests") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE pull_requests (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				ticket_id TEXT NOT NULL,
+				title TEXT NOT NULL DEFAULT '',
+				description TEXT NOT NULL DEFAULT '',
+				repository TEXT NOT NULL DEFAULT '',
+				source_branch TEXT NOT NULL DEFAULT '',
+				target_branch TEXT NOT NULL DEFAULT '',
+				status TEXT NOT NULL DEFAULT 'open',
+				provider TEXT NOT NULL DEFAULT 'none',
+				url TEXT NOT NULL DEFAULT '',
+				created_by TEXT,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				merged_at TEXT,
+				FOREIGN KEY(project_id) REFERENCES projects(project_id),
+				FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+				FOREIGN KEY(created_by) REFERENCES users(user_id)
+			)
+		`); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_pull_requests_ticket_id ON pull_requests(ticket_id)`); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_pull_requests_project_id ON pull_requests(project_id)`); err != nil {
 			return err
 		}
 	}
