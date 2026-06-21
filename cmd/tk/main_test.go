@@ -4824,6 +4824,39 @@ func TestRunPullRequestListProjectWideWithStatusFilters(t *testing.T) {
 	}
 }
 
+func TestRunUpdateContentOnlyDoesNotAdvanceLifecycleOrAssign(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	id := createLocalTask(t, []string{"add", "Refine me"})
+	before, err := svc.GetTicket(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetTicket(before) error = %v", err)
+	}
+	if before.Stage != "design" || before.State != "idle" {
+		t.Fatalf("precondition: ticket should start design/idle, got %s/%s", before.Stage, before.State)
+	}
+
+	// Content-only update: no -status/-assignee passed.
+	if err := run([]string{"update", "-id", id, "-title", "Refined title", "-desc", "tidy", "-ac", "tidy ac"}); err != nil {
+		t.Fatalf("update error = %v", err)
+	}
+
+	after, err := svc.GetTicket(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetTicket(after) error = %v", err)
+	}
+	if after.Title != "Refined title" {
+		t.Fatalf("title not updated: %q", after.Title)
+	}
+	if after.Stage != "design" || after.State != "idle" {
+		t.Fatalf("content edit must not advance lifecycle; got %s/%s", after.Stage, after.State)
+	}
+	if strings.TrimSpace(after.Assignee) != "" {
+		t.Fatalf("content edit must not assign; got assignee %q", after.Assignee)
+	}
+}
+
 func TestRunGetAcceptsPositionalID(t *testing.T) {
 	setupLocalCLI(t)
 	taskID := createLocalTask(t, []string{"add", "Positional ID Get"})
