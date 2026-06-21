@@ -163,7 +163,7 @@ reading live ticket state, logging time, creating bugs, and recording decisions.
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_HOME` | Override the global Ticket home directory (default `~/.ticket`) |
+| `TICKET_HOME` | Override the global Ticket home directory (default `~/.config/ticket`) |
 | `TICKET_URL` | Base URL for the running Ticket server (defaults to `https://ticket.simonski.com` when unset) |
 | `TICKET_USERNAME` | Username for API authentication |
 | `TICKET_PASSWORD` | Password for API authentication |
@@ -175,4 +175,4 @@ reading live ticket state, logging time, creating bugs, and recording decisions.
 
 Set `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` to connect the CLI to a server.
 
-Global client configuration lives in `~/.ticket/` (or `$TICKET_HOME/`): `preferences.json` for TUI settings and `credentials.json` for stored tokens. There is no per-repository config file.
+Global client configuration lives in `~/.config/ticket/` (or `$TICKET_HOME/`): `preferences.json` for TUI settings and `credentials.json` for stored tokens. There is no per-repository config file.

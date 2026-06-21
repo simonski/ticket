@@ -322,6 +322,11 @@ func LocalDBPath() (string, error) {
 
 // Home returns the global Ticket home directory used for credentials,
 // preferences, and the central local database.
+//
+// The default location is ~/.config/ticket. For backward compatibility, a
+// legacy ~/.ticket directory is still honoured (read and written) when the new
+// location does not yet exist, so existing installs keep working without any
+// destructive move. New installs use ~/.config/ticket.
 func Home() (string, error) {
 	if dir := envValue("TICKET_HOME"); dir != "" {
 		return dir, nil
@@ -330,7 +335,17 @@ func Home() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(userHome, ".ticket"), nil
+	newDir := filepath.Join(userHome, ".config", "ticket")
+	legacyDir := filepath.Join(userHome, ".ticket")
+	if !pathExists(newDir) && pathExists(legacyDir) {
+		return legacyDir, nil
+	}
+	return newDir, nil
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func (cfg Config) RemoteByName(name string) (Remote, bool) {

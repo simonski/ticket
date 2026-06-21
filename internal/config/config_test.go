@@ -291,43 +291,58 @@ func TestLoadFallsBackToDefaultRemoteForStoredCredentials(t *testing.T) {
 }
 
 func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
+	tempHome := t.TempDir()
 	t.Setenv("TICKET_HOME", "")
+	t.Setenv("HOME", tempHome)
 
 	got, err := Home()
 	if err != nil {
 		t.Fatalf("Home() error = %v", err)
 	}
-	homeDir, _ := os.UserHomeDir()
-	want := filepath.Join(homeDir, ".ticket")
+	want := filepath.Join(tempHome, ".config", "ticket")
 	if got != want {
 		t.Fatalf("Home() = %q, want %q", got, want)
 	}
 }
 
-func TestHomeWalksUpToFindDotTicket(t *testing.T) {
+func TestHomeFallsBackToLegacyDotTicketWhenPresent(t *testing.T) {
+	tempHome := t.TempDir()
 	t.Setenv("TICKET_HOME", "")
+	t.Setenv("HOME", tempHome)
+
+	legacy := filepath.Join(tempHome, ".ticket")
+	if err := os.MkdirAll(legacy, 0o700); err != nil {
+		t.Fatalf("MkdirAll(legacy) error = %v", err)
+	}
+
 	got, err := Home()
 	if err != nil {
 		t.Fatalf("Home() error = %v", err)
 	}
-	homeDir, _ := os.UserHomeDir()
-	want := filepath.Join(homeDir, ".ticket")
-	if got != want {
-		t.Fatalf("Home() = %q, want %q", got, want)
+	if got != legacy {
+		t.Fatalf("Home() = %q, want legacy %q", got, legacy)
 	}
 }
 
-func TestHomeDefaultsToLocalDotTicketWhenNoneFound(t *testing.T) {
+func TestHomePrefersDotConfigWhenBothExist(t *testing.T) {
+	tempHome := t.TempDir()
 	t.Setenv("TICKET_HOME", "")
+	t.Setenv("HOME", tempHome)
+
+	if err := os.MkdirAll(filepath.Join(tempHome, ".ticket"), 0o700); err != nil {
+		t.Fatalf("MkdirAll(legacy) error = %v", err)
+	}
+	newDir := filepath.Join(tempHome, ".config", "ticket")
+	if err := os.MkdirAll(newDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll(new) error = %v", err)
+	}
 
 	got, err := Home()
 	if err != nil {
 		t.Fatalf("Home() error = %v", err)
 	}
-	homeDir, _ := os.UserHomeDir()
-	want := filepath.Join(homeDir, ".ticket")
-	if got != want {
-		t.Fatalf("Home() = %q, want %q", got, want)
+	if got != newDir {
+		t.Fatalf("Home() = %q, want %q", got, newDir)
 	}
 }
 

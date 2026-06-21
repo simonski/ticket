@@ -71,9 +71,9 @@ Single Go binary (`cmd/tk/main.go`) providing four interfaces to the same data:
 - **Server** — SQLite-backed HTTP API and web UI.
 - **Client** — CLI/TUI connect via `internal/client` to a configured server remote.
 
-Routing is determined from the environment plus repo-local project binding: `TICKET_URL` selects the server, repo-local `.ticket/config.json` stores the active `project_id`, and `~/.ticket/credentials.json` stores reusable remote session credentials.
+Routing is determined from the environment plus repo-local project binding: `TICKET_URL` selects the server, repo-local `.ticket/config.json` stores the active `project_id`, and `~/.config/ticket/credentials.json` stores reusable remote session credentials.
 
-`$TICKET_HOME` controls the data directory. If unset, the CLI walks up from `cwd` looking for a `.git` directory, then uses `.ticket/` as a sibling. `~/.ticket/preferences.json` stores TUI preferences, `~/.ticket/credentials.json` stores per-remote credentials keyed by canonical URL, and `-f /path` is a per-command local database override.
+`$TICKET_HOME` controls the data directory. If unset, the CLI walks up from `cwd` looking for a `.git` directory, then uses `.ticket/` as a sibling. `~/.config/ticket/preferences.json` stores TUI preferences, `~/.config/ticket/credentials.json` stores per-remote credentials keyed by canonical URL, and `-f /path` is a per-command local database override.
 
 ### Key Packages
 

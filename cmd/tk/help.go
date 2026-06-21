@@ -31,7 +31,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"initdb": {
 		usage:   "tk initdb [<path>] [-f <db-path>] [--force] [-password <password>] [-populate]",
-		details: []string{"Creates or ensures a SQLite database backend and bootstraps the fixed `admin` account (default `admin/password`).", "Default location is `~/.ticket/ticket.db`; use `-f` to choose a different file.", "If `--force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
+		details: []string{"Creates or ensures a SQLite database backend and bootstraps the fixed `admin` account (default `admin/password`).", "Default location is `~/.config/ticket/ticket.db`; use `-f` to choose a different file.", "If `--force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
 		example: "tk initdb . --force -password secret -populate",
 	},
 	"export": {
@@ -66,7 +66,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password> | -token <token> | --passkey] [-url <server-url>]",
-		details: []string{"Logs into the configured server and stores the session token in `~/.ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password`, `-token`, or `--passkey`, then prompts.", "`--passkey` starts a browser-assisted passkey flow for the resolved username. Enroll a passkey first with `tk user passkey enroll`."},
+		details: []string{"Logs into the configured server and stores the session token in `~/.config/ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password`, `-token`, or `--passkey`, then prompts.", "`--passkey` starts a browser-assisted passkey flow for the resolved username. Enroll a passkey first with `tk user passkey enroll`."},
 		example: "tk login -token tk_abc123 -url https://ticket.simonski.com",
 	},
 	"register": {
@@ -76,7 +76,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"logout": {
 		usage:   "tk logout [-url <server-url>]",
-		details: []string{"Logs out from the configured server and removes the active `.ticket/credentials.json` session token."},
+		details: []string{"Logs out from the configured server and removes the active `~/.config/ticket/credentials.json` session token."},
 		example: "tk logout",
 	},
 	"status": {
@@ -368,7 +368,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"config": {
 		usage:   "tk admin config <get|ls|list|registration-enable|registration-disable|registration-autoapprove-enable|registration-autoapprove-disable> [key]",
-		details: []string{"Only server-backed registration settings remain here, under the admin namespace.", "Runtime client configuration now comes from environment variables such as `TICKET_URL`, `TICKET_PROJECT`, and stored credentials in `~/.ticket/credentials.json`."},
+		details: []string{"Only server-backed registration settings remain here, under the admin namespace.", "Runtime client configuration now comes from environment variables such as `TICKET_URL`, `TICKET_PROJECT`, and stored credentials in `~/.config/ticket/credentials.json`."},
 		example: "tk admin config ls",
 	},
 	"admin": {

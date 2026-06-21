@@ -20,14 +20,14 @@ The system has four interfaces:
 The repository also contains a static `VERSION` file. `make build` increments the patch version before compiling the binary and copies that value into the embedded build asset used by `tk version`.
 
 `tk` now splits state between a global home and per-project routing. `$TICKET_HOME`
-(default `~/.ticket`) stores the shared local database, TUI preferences, and
+(default `~/.config/ticket`) stores the shared local database, TUI preferences, and
 remote credentials. `tk` walks up from the current working directory looking for
 `.ticket/config.json` first, then `.git`, and uses that root for repo-local
 project routing. The steady-state model is:
 
-- global `~/.ticket/preferences.json` stores TUI-only state
+- global `~/.config/ticket/preferences.json` stores TUI-only state
 - repo-local `.ticket/config.json` stores `project_id`
-- `~/.ticket/credentials.json` stores credentials per canonical remote URL
+- `~/.config/ticket/credentials.json` stores credentials per canonical remote URL
 
 In remote mode the CLI also sends the nearest git `origin` URL from the current
 working tree (walking upward until `$HOME`). Server-side project resolution uses

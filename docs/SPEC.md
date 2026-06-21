@@ -754,7 +754,7 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_HOME` | Global Ticket home directory (default `~/.ticket`) |
+| `TICKET_HOME` | Global Ticket home directory (default `~/.config/ticket`) |
 | `TICKET_TIMEOUT` | Remote HTTP timeout in seconds |
 | `TICKET_TRUSTED_PROXY_CIDRS` | Comma-separated CIDRs trusted for forwarded proxy headers |
 | `AGENT_ID` | Agent UUID for worker mode |
@@ -763,7 +763,7 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 
 ### 11.2 Config Resolution
 
-1. Resolve `$TICKET_HOME` from the environment or default it to `~/.ticket`
+1. Resolve `$TICKET_HOME` from the environment or default it to `~/.config/ticket`
 2. Read `TICKET_URL` to determine the target server
 3. Walk up from the current directory looking for the nearest `.ticket/config.json`
 4. Overlay repo-local `project_id` routing from that file when present
@@ -1347,7 +1347,7 @@ Indexes on: `sessions(user_id, token)`, `tickets(project_id, parent_id, assignee
 
 ### 14.5 Initialization
 
-`tk initdb` creates the database, schema, admin user, default workflow (`design → develop → test → done`), a default project with prefix `TK`, and the appropriate local-remote wiring (`~/.ticket/ticket.db` for `tk initdb`, `./.ticket/ticket.db` for `tk initdb .`). Remote project resolution then uses explicit project selection, nearest-git-remote discovery, or the user's default project without a separate repo bootstrap step.
+`tk initdb` creates the database, schema, admin user, default workflow (`design → develop → test → done`), a default project with prefix `TK`, and the appropriate local-remote wiring (`~/.config/ticket/ticket.db` for `tk initdb`, `./.ticket/ticket.db` for `tk initdb .`). Remote project resolution then uses explicit project selection, nearest-git-remote discovery, or the user's default project without a separate repo bootstrap step.
 
 ---
 
