@@ -146,6 +146,16 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, _ bool) error {
 		if connected && status.User != nil && strings.TrimSpace(status.User.Username) != "" {
 			username = strings.TrimSpace(status.User.Username)
 		}
+		// The server returns its version on an unauthenticated status call, so
+		// fetch it even when the authenticated call failed (bad credentials,
+		// auth/schema problems). The server version should always be visible
+		// when the server is reachable.
+		if serverVersion == "" {
+			anonSvc := libticket.NewHTTP(config.Config{Location: strings.TrimSpace(serverURL)})
+			if anonStatus, anonErr := anonSvc.Status(context.Background()); anonErr == nil {
+				serverVersion = strings.TrimSpace(anonStatus.ServerVersion)
+			}
+		}
 	}
 	urlColor := "\x1b[31m"
 	if connected {

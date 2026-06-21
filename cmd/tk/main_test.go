@@ -2775,6 +2775,26 @@ func TestRunProjectUpdateAcceptsPositionalIDBeforeFlags(t *testing.T) {
 	}
 }
 
+func TestRunStatusShowsServerVersionWhenAuthFails(t *testing.T) {
+	setupLocalCLI(t)
+	// Valid server, but wrong credentials: the authenticated status call fails,
+	// yet the server version must still be shown (fetched unauthenticated).
+	t.Setenv("TICKET_PASSWORD", "wrong-password-zz")
+
+	jsonOutput := captureStdout(t, func() {
+		// run returns the auth error; we only care about the printed payload.
+		_ = run([]string{"status", "-json"})
+	})
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOutput), &payload); err != nil {
+		t.Fatalf("status -json parse error = %v\n%s", err, jsonOutput)
+	}
+	if got := payload["SERVER_VERSION"]; got == "UNSET" || got == nil || got == "" {
+		t.Fatalf("SERVER_VERSION = %v, want the server version even when auth fails:\n%s", got, jsonOutput)
+	}
+}
+
 func TestRunStatusSurfacesConnectionErrorInBothModes(t *testing.T) {
 	t.Setenv("TICKET_HOME", t.TempDir())
 	t.Setenv("TICKET_URL", "http://127.0.0.1:0")
