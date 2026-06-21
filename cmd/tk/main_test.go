@@ -170,7 +170,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  admin config",
 		"  admin export",
 		"  admin import",
-		"  upgrade-database",
+		"  admin upgrade-database",
 		"  admin role",
 		"  admin workflow",
 		"  admin team",
@@ -2175,6 +2175,45 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestRunListShowsActiveTicketsFirstWithSeparator(t *testing.T) {
+	setupLocalCLI(t)
+
+	idleA := createLocalTask(t, []string{"add", "Idle A"})
+	activeID := createLocalTask(t, []string{"add", "Active one"})
+	idleB := createLocalTask(t, []string{"add", "Idle B"})
+
+	if err := run([]string{"claim", activeID}); err != nil {
+		t.Fatalf("claim error = %v", err)
+	}
+	if err := run([]string{"active", activeID}); err != nil {
+		t.Fatalf("active error = %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := run([]string{"ls", "-nocolor"}); err != nil {
+			t.Fatalf("ls error = %v", err)
+		}
+	})
+
+	ai := strings.Index(out, activeID)
+	bi := strings.Index(out, idleA)
+	ci := strings.Index(out, idleB)
+	if ai < 0 || bi < 0 || ci < 0 {
+		t.Fatalf("ls output missing ticket ids:\n%s", out)
+	}
+	if ai > bi || ai > ci {
+		t.Fatalf("active ticket should be listed first:\n%s", out)
+	}
+	rule := strings.Repeat("─", 10)
+	sep := strings.Index(out, rule)
+	if sep < 0 {
+		t.Fatalf("ls output missing active/inactive separator:\n%s", out)
+	}
+	if !(ai < sep && sep < bi && sep < ci) {
+		t.Fatalf("separator should sit between active and idle tickets:\n%s", out)
 	}
 }
 

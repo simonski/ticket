@@ -789,7 +789,14 @@ func runList(args []string) error {
 		return printJSON(tickets)
 	}
 	effectiveUpdatedAt := effectiveTicketUpdatedAt(tickets)
+	// Active tickets float to the top (TK-73); within each group keep the
+	// most-recent-first ordering. printTicketTable draws a separator between the
+	// leading active block and the rest.
 	sort.SliceStable(tickets, func(i, j int) bool {
+		ai, aj := ticketIsActive(tickets[i]), ticketIsActive(tickets[j])
+		if ai != aj {
+			return ai
+		}
 		return ticketListMoreRecent(tickets[i], tickets[j], effectiveUpdatedAt)
 	})
 	// Build agent username set so we can prefix agent assignees.
@@ -801,6 +808,11 @@ func runList(args []string) error {
 	}
 	printTicketTable(tickets, parentKeys, agentUsernames, statusUnicode, *includeAll, projectHeaderLabel(project))
 	return nil
+}
+
+// ticketIsActive reports whether a ticket is in the active state.
+func ticketIsActive(t store.Ticket) bool {
+	return strings.EqualFold(strings.TrimSpace(t.State), "active")
 }
 
 func runBoard(args []string) error {

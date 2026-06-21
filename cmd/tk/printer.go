@@ -746,6 +746,22 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	// Reorder tickets into tree (parent-before-children) order and get per-ticket prefixes.
 	tickets, treePfx := buildTreeDisplay(tickets)
 
+	// Active tickets are ordered first by the caller (TK-73). Find where the
+	// leading active block ends so we can draw a horizontal separator between
+	// the active tickets and the rest.
+	activeLeading := 0
+	for _, t := range tickets {
+		if strings.EqualFold(strings.TrimSpace(t.State), "active") {
+			activeLeading++
+		} else {
+			break
+		}
+	}
+	separatorBefore := -1
+	if activeLeading > 0 && activeLeading < len(tickets) {
+		separatorBefore = activeLeading
+	}
+
 	useColor := isTerminal() && !noColorOutput
 
 	// Get terminal width; default to 120 for non-terminal output.
@@ -919,11 +935,12 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	// immediately after each ticket row that has a title longer than titleW,
 	// and blank separator lines before each new root-level group.
 	type displayLine struct {
-		text       string
-		status     string // non-empty on ticket rows, enables column coloring
-		draft      bool   // ticket draft flag, for coloring the DRAFT column
-		ticketType string
-		isBlank    bool // blank separator row between root groups
+		text        string
+		status      string // non-empty on ticket rows, enables column coloring
+		draft       bool   // ticket draft flag, for coloring the DRAFT column
+		ticketType  string
+		isBlank     bool // blank separator row between root groups
+		isSeparator bool // horizontal rule between active and inactive tickets
 	}
 
 	display := make([]displayLine, 0, len(rawLines))
@@ -956,6 +973,9 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	for i, t := range tickets {
 		if i+1 >= len(rawLines) {
 			break
+		}
+		if i == separatorBefore {
+			display = append(display, displayLine{isSeparator: true})
 		}
 		display = append(display, displayLine{text: rawLines[i+1], status: t.Status, draft: t.Draft, ticketType: t.Type})
 		for _, chunk := range titleIndentedLines[i][1:] {
@@ -991,6 +1011,10 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		for _, l := range display {
 			if l.isBlank {
 				fmt.Println()
+				continue
+			}
+			if l.isSeparator {
+				fmt.Println(strings.Repeat("─", maxW))
 				continue
 			}
 			r := []rune(l.text)
@@ -1108,6 +1132,10 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	for _, l := range display {
 		if l.isBlank {
 			fmt.Printf("│ %s │\n", strings.Repeat(" ", maxW))
+			continue
+		}
+		if l.isSeparator {
+			fmt.Println("├" + strings.Repeat("─", maxW+2) + "┤")
 			continue
 		}
 		lineText := l.text
