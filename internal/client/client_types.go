@@ -96,6 +96,18 @@ type ProjectUpdateRequest struct {
 	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 }
 
+type PullRequestRequest struct {
+	TicketID     string `json:"ticket_id"`
+	Title        string `json:"title,omitempty"`
+	Description  string `json:"description,omitempty"`
+	Repository   string `json:"repository,omitempty"`
+	SourceBranch string `json:"source_branch,omitempty"`
+	TargetBranch string `json:"target_branch,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Provider     string `json:"provider,omitempty"`
+	URL          string `json:"url,omitempty"`
+}
+
 type RenameProjectPrefixResponse struct {
 	TicketsUpdated int           `json:"tickets_updated"`
 	Project        store.Project `json:"project"`

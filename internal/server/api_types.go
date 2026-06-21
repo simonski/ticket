@@ -78,6 +78,17 @@ type projectRequest struct {
 	AgentModelAPIKey   string            `json:"agent_model_api_key"`
 }
 
+type pullRequestRequest struct {
+	Title        string `json:"title"`
+	Description  string `json:"description"`
+	Repository   string `json:"repository"`
+	SourceBranch string `json:"source_branch"`
+	TargetBranch string `json:"target_branch"`
+	Status       string `json:"status"`
+	Provider     string `json:"provider"`
+	URL          string `json:"url"`
+}
+
 type renameProjectPrefixResponse struct {
 	TicketsUpdated int           `json:"tickets_updated"`
 	Project        store.Project `json:"project"`

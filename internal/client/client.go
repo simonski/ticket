@@ -1833,6 +1833,60 @@ func (c *Client) SetTicketParent(ctx context.Context, id, parentID, message stri
 	})
 }
 
+func (c *Client) CreatePullRequest(ctx context.Context, request PullRequestRequest) (store.PullRequest, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.PullRequest{}, err
+		}
+		createdBy := ""
+		if user, userErr := store.GetUserByUsername(ctx, db, localUsername()); userErr == nil {
+			createdBy = user.ID
+		}
+		return store.CreatePullRequest(ctx, db, store.PullRequestParams{
+			TicketID:     request.TicketID,
+			Title:        request.Title,
+			Description:  request.Description,
+			Repository:   request.Repository,
+			SourceBranch: request.SourceBranch,
+			TargetBranch: request.TargetBranch,
+			Status:       request.Status,
+			Provider:     request.Provider,
+			URL:          request.URL,
+			CreatedBy:    createdBy,
+		})
+	}
+	var pr store.PullRequest
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(strings.TrimSpace(request.TicketID))+"/pull-requests", request, &pr)
+	return pr, err
+}
+
+func (c *Client) GetPullRequest(ctx context.Context, id int64) (store.PullRequest, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.PullRequest{}, err
+		}
+		return store.GetPullRequest(ctx, db, id)
+	}
+	var pr store.PullRequest
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/pull-requests/%d", id), nil, &pr)
+	return pr, err
+}
+
+func (c *Client) ListPullRequestsByTicket(ctx context.Context, ticketID string) ([]store.PullRequest, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		return store.ListPullRequestsByTicket(ctx, db, ticketID)
+	}
+	var prs []store.PullRequest
+	err := c.doJSON(ctx, http.MethodGet, "/api/tickets/"+url.PathEscape(strings.TrimSpace(ticketID))+"/pull-requests", nil, &prs)
+	return prs, err
+}
+
 func (c *Client) UnsetTicketParent(ctx context.Context, id, message string) (store.Ticket, error) {
 	current, err := c.GetTicketByID(ctx, id)
 	if err != nil {

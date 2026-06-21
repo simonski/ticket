@@ -419,6 +419,18 @@ func (s *HTTPService) UnsetTicketParent(ctx context.Context, id, message string)
 	return s.client.UnsetTicketParent(ctx, id, message)
 }
 
+func (s *HTTPService) CreatePullRequest(ctx context.Context, request PullRequestRequest) (store.PullRequest, error) {
+	return s.client.CreatePullRequest(ctx, client.PullRequestRequest(request))
+}
+
+func (s *HTTPService) GetPullRequest(ctx context.Context, id int64) (store.PullRequest, error) {
+	return s.client.GetPullRequest(ctx, id)
+}
+
+func (s *HTTPService) ListPullRequestsByTicket(ctx context.Context, ticketID string) ([]store.PullRequest, error) {
+	return s.client.ListPullRequestsByTicket(ctx, ticketID)
+}
+
 func (s *HTTPService) GetTicketByID(ctx context.Context, id string) (store.Ticket, error) {
 	return s.client.GetTicketByID(ctx, id)
 }

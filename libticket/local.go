@@ -1290,6 +1290,45 @@ func (s *LocalService) SetTicketHealth(ctx context.Context, id string, score int
 	return store.SetTicketHealth(ctx, db, id, score)
 }
 
+func (s *LocalService) CreatePullRequest(ctx context.Context, request PullRequestRequest) (store.PullRequest, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.PullRequest{}, err
+	}
+	user, err := s.localUser(ctx, db)
+	if err != nil {
+		return store.PullRequest{}, err
+	}
+	return store.CreatePullRequest(ctx, db, store.PullRequestParams{
+		TicketID:     request.TicketID,
+		Title:        request.Title,
+		Description:  request.Description,
+		Repository:   request.Repository,
+		SourceBranch: request.SourceBranch,
+		TargetBranch: request.TargetBranch,
+		Status:       request.Status,
+		Provider:     request.Provider,
+		URL:          request.URL,
+		CreatedBy:    user.ID,
+	})
+}
+
+func (s *LocalService) GetPullRequest(ctx context.Context, id int64) (store.PullRequest, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.PullRequest{}, err
+	}
+	return store.GetPullRequest(ctx, db, id)
+}
+
+func (s *LocalService) ListPullRequestsByTicket(ctx context.Context, ticketID string) ([]store.PullRequest, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	return store.ListPullRequestsByTicket(ctx, db, ticketID)
+}
+
 func (s *LocalService) UnsetTicketParent(ctx context.Context, id, message string) (store.Ticket, error) {
 	current, err := s.GetTicketByID(ctx, id)
 	if err != nil {

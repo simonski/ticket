@@ -150,6 +150,21 @@ type TicketCreateRequest struct {
 	Message            string            `json:"message,omitempty"`
 }
 
+// PullRequestRequest creates a pull request for a ticket. Repository, branches,
+// provider, and url are optional; the CLI fills sensible defaults by inspecting
+// the project's repositories and the current git branch.
+type PullRequestRequest struct {
+	TicketID     string `json:"ticket_id"`
+	Title        string `json:"title,omitempty"`
+	Description  string `json:"description,omitempty"`
+	Repository   string `json:"repository,omitempty"`
+	SourceBranch string `json:"source_branch,omitempty"`
+	TargetBranch string `json:"target_branch,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Provider     string `json:"provider,omitempty"`
+	URL          string `json:"url,omitempty"`
+}
+
 type TicketUpdateRequest struct {
 	Title              string            `json:"title"`
 	Description        string            `json:"description"`

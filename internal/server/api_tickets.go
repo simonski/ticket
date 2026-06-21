@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/simonski/ticket/internal/store"
@@ -17,6 +18,43 @@ func (r *router) registerTicketHandlers() {
 	db := r.db
 	mux := r.mux
 	notify := r.notify
+
+	mux.HandleFunc("/api/pull-requests/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		user, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		idStr := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/pull-requests/"))
+		id, parseErr := strconv.ParseInt(idStr, 10, 64)
+		if parseErr != nil {
+			writeError(w, http.StatusBadRequest, "invalid pull request id")
+			return
+		}
+		pr, prErr := store.GetPullRequest(r.Context(), db, id)
+		if prErr != nil {
+			if errors.Is(prErr, store.ErrPullRequestNotFound) {
+				writeError(w, http.StatusNotFound, prErr.Error())
+				return
+			}
+			writeStoreError(w, prErr)
+			return
+		}
+		role, roleErr := projectRoleForUser(r.Context(), db, pr.ProjectID, user)
+		if roleErr != nil {
+			writeError(w, http.StatusInternalServerError, roleErr.Error())
+			return
+		}
+		if !canReadProject(role) {
+			writeAuthError(w, store.ErrForbidden)
+			return
+		}
+		writeJSON(w, http.StatusOK, pr)
+	})
 
 	mux.HandleFunc("/api/tickets/import-markdown", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -476,6 +514,55 @@ func (r *router) registerTicketHandlers() {
 				}
 				writeJSON(w, http.StatusOK, events)
 				return
+			}
+			if len(parts) == 2 && parts[1] == "pull-requests" {
+				switch r.Method {
+				case http.MethodGet:
+					if !canReadProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					prs, prErr := store.ListPullRequestsByTicket(r.Context(), db, id)
+					if prErr != nil {
+						writeStoreError(w, prErr)
+						return
+					}
+					writeJSON(w, http.StatusOK, prs)
+					return
+				case http.MethodPost:
+					if !canWriteProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					var payload pullRequestRequest
+					if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
+						writeError(w, http.StatusBadRequest, "invalid json body")
+						return
+					}
+					pr, prErr := store.CreatePullRequest(r.Context(), db, store.PullRequestParams{
+						ProjectID:    ticketRef.ProjectID,
+						TicketID:     id,
+						Title:        payload.Title,
+						Description:  payload.Description,
+						Repository:   payload.Repository,
+						SourceBranch: payload.SourceBranch,
+						TargetBranch: payload.TargetBranch,
+						Status:       payload.Status,
+						Provider:     payload.Provider,
+						URL:          payload.URL,
+						CreatedBy:    user.ID,
+					})
+					if prErr != nil {
+						writeStoreError(w, prErr)
+						return
+					}
+					notify("pull_request_created", ticketRef.ProjectID, id)
+					writeJSON(w, http.StatusCreated, pr)
+					return
+				default:
+					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+					return
+				}
 			}
 			if len(parts) == 2 && parts[1] == "phase-signoffs" && r.Method == http.MethodGet {
 				if !canReadProject(role) {
