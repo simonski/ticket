@@ -4678,6 +4678,41 @@ func TestRunUpdateRequiresID(t *testing.T) {
 	}
 }
 
+func TestRunPullRequestCreateListAndShownInGet(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "PR feature work"})
+
+	createOut := captureStdout(t, func() {
+		if err := run([]string{"pr", "create", taskID, "-repo", "github.com/acme/widget", "-from", "feature/x", "-to", "main", "-url", "https://github.com/acme/widget/pull/7"}); err != nil {
+			t.Fatalf("pr create error = %v", err)
+		}
+	})
+	if !strings.Contains(createOut, "provider   : github") {
+		t.Fatalf("pr create should infer github provider:\n%s", createOut)
+	}
+	if !strings.Contains(createOut, "feature/x") {
+		t.Fatalf("pr create output missing source branch:\n%s", createOut)
+	}
+
+	lsOut := captureStdout(t, func() {
+		if err := run([]string{"pr", "ls", taskID}); err != nil {
+			t.Fatalf("pr ls error = %v", err)
+		}
+	})
+	if !strings.Contains(lsOut, "github") || !strings.Contains(lsOut, "feature/x") {
+		t.Fatalf("pr ls output unexpected:\n%s", lsOut)
+	}
+
+	getOut := captureStdout(t, func() {
+		if err := run([]string{"get", taskID}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	if !strings.Contains(getOut, "pull requests") || !strings.Contains(getOut, "github.com/acme/widget/pull/7") {
+		t.Fatalf("tk get should show the linked PR:\n%s", getOut)
+	}
+}
+
 func TestRunGetAcceptsPositionalID(t *testing.T) {
 	setupLocalCLI(t)
 	taskID := createLocalTask(t, []string{"add", "Positional ID Get"})

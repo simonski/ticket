@@ -64,6 +64,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Server-side maintenance command. Upgrades a ticket database IN PLACE: it applies any pending additive schema migrations (missing tables and columns) and stamps the current schema version. Existing data is preserved.", "Use this to repair a database that is missing a column the running binary expects (for example a 500 with `no such column`).", "Resolves the database from `-f`, otherwise the configured/local database. A timestamped `.bak-<timestamp>` copy is written first unless `-no-backup` is given.", "The tk server performs this same upgrade automatically on startup, so usually you only need to deploy the new binary and restart."},
 		example: "tk admin upgrade-database -f /data/ticket.db",
 	},
+	"pr": {
+		usage:   "tk pr create [-id] <ticket-id> [-repo R] [-from B] [-to B] [-title T] [-url U] [-provider none|github]",
+		details: []string{"Manages pull requests, which live inside ticket and are linked to a ticket and project (VCS-host-agnostic).", "`create` opens a PR, inferring the repository (from the project's repos or the cwd git origin), source branch (current git branch), target branch (main), and provider (github when the repo host is github.com, otherwise none).", "`ls [-id] <ticket-id>` lists a ticket's PRs; `get <pr-id>` shows one. `tk get <ticket>` also shows linked PRs.", "Non-GitHub repositories get a native PR record inside ticket; opening a real GitHub PR via gh is handled separately."},
+		example: "tk pr create TK-42 -url https://github.com/acme/widget/pull/7",
+	},
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password> | -token <token> | --passkey] [-url <server-url>]",
 		details: []string{"Logs into the configured server and stores the session token in `~/.config/ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password`, `-token`, or `--passkey`, then prompts.", "`--passkey` starts a browser-assisted passkey flow for the resolved username. Enroll a passkey first with `tk user passkey enroll`."},
@@ -511,6 +516,7 @@ func renderRootUsage() string {
 		{"idea", "Capture and refine requirements (ls, new, get, shape, accept, reject)"},
 		{"project", "Manage projects (ls, new, get, use, rm, repo)"},
 		{"dep", "Manage dependency links (add, remove)"},
+		{"pr", "Manage pull requests (create, ls, get)"},
 		{"label", "Manage labels (ls, new, rm, add, remove, show)"},
 		{"time", "Log and view time entries (log, ls, total, rm)"},
 		{"story", "Manage stories (ls, new, get, update, rm)"},

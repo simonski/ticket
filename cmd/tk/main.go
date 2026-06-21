@@ -261,6 +261,8 @@ func run(args []string) error {
 		return runDoctor(trimmedArgs[1:])
 	case "comment":
 		return runComment(trimmedArgs[1:])
+	case "pr", "pull-request":
+		return runPullRequest(trimmedArgs[1:])
 	case "clone", "cp":
 		return runClone(trimmedArgs[1:])
 	case "merge":
