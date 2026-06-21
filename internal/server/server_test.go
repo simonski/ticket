@@ -147,7 +147,7 @@ func TestWriteThrottleMiddlewareUsesPerUserKeys(t *testing.T) {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "", "", false)
+	srv, err := New(":0", db, "1.2.3", false, nil, "", "", false, nil, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -311,7 +311,7 @@ func TestRecoverMiddlewareReturnsInternalServerError(t *testing.T) {
 
 	handler := recoverMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		panic("boom")
-	}))
+	}), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/healthz", nil)
 	rec := httptest.NewRecorder()
@@ -335,7 +335,7 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 	}
 	defer db.Close()
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "", "", false)
+	srv, err := New(":0", db, "1.2.3", false, nil, "", "", false, nil, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -400,7 +400,7 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 	}
 	defer db.Close()
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "", web.DefaultSite, false)
+	srv, err := New(":0", db, "1.2.3", false, nil, "", web.DefaultSite, false, nil, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -480,7 +480,7 @@ func TestServerVerboseLogging(t *testing.T) {
 	defer db.Close()
 
 	var logs strings.Builder
-	srv, err := New(":0", db, "1.2.3", true, &logs, "", "", false)
+	srv, err := New(":0", db, "1.2.3", true, &logs, "", "", false, nil, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -515,7 +515,7 @@ func TestLoggingHandlerRedactsSensitiveBodiesAndCapsPayloads(t *testing.T) {
 			t.Fatalf("io.ReadAll() error = %v", err)
 		}
 		_, _ = w.Write(body)
-	}), &logs)
+	}), &logs, nil, nil)
 
 	sensitiveReq := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"alice","password":"super-secret"}`))
 	sensitiveReq.Header.Set("Content-Type", "application/json")
@@ -545,6 +545,64 @@ func TestLoggingHandlerRedactsSensitiveBodiesAndCapsPayloads(t *testing.T) {
 	}
 	if strings.Contains(logOutput, largeBody) {
 		t.Fatalf("full large body should not be logged:\n%s", logOutput)
+	}
+}
+
+func TestLoggingHandlerRoutesAccessAndErrorLogs(t *testing.T) {
+	t.Parallel()
+	var access, errlog strings.Builder
+	// No stdout writer: simulates production (non-verbose) with log files only.
+	handler := loggingHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/boom" {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("kaboom"))
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	}), nil, &access, &errlog)
+
+	okReq := httptest.NewRequest(http.MethodGet, "/api/ping", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), okReq)
+
+	failReq := httptest.NewRequest(http.MethodGet, "/api/boom", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), failReq)
+
+	accessOut := access.String()
+	if !strings.Contains(accessOut, "path=/api/ping status=200") {
+		t.Fatalf("access log missing 200 line:\n%s", accessOut)
+	}
+	if !strings.Contains(accessOut, "path=/api/boom status=500") {
+		t.Fatalf("access log missing 500 line:\n%s", accessOut)
+	}
+
+	errOut := errlog.String()
+	if !strings.Contains(errOut, "ERROR GET path=/api/boom status=500") {
+		t.Fatalf("error log missing 500 line:\n%s", errOut)
+	}
+	if strings.Contains(errOut, "/api/ping") {
+		t.Fatalf("error log should not contain 200 requests:\n%s", errOut)
+	}
+}
+
+func TestRecoverMiddlewareWritesPanicToErrorLog(t *testing.T) {
+	t.Parallel()
+	var errlog strings.Builder
+	handler := recoverMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("kaboom")
+	}), &errlog)
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/explode", nil))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	out := errlog.String()
+	if !strings.Contains(out, "panic recovered") || !strings.Contains(out, "kaboom") {
+		t.Fatalf("error log missing panic details:\n%s", out)
+	}
+	if !strings.Contains(out, "path=/api/explode") {
+		t.Fatalf("error log missing request path:\n%s", out)
 	}
 }
 

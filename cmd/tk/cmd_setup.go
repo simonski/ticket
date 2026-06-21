@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -731,7 +732,28 @@ func runServer(args []string) error {
 		selectedSite = web.DefaultSite
 	}
 
-	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout, *staticPath, selectedSite, *enableOrchestrator)
+	// Write access.log and error.log alongside the database (the data path) so
+	// HTTP request failures (including 5xx) are diagnosable in deployments such
+	// as containers where stdout logs may be empty.
+	dataDir := filepath.Dir(resolvedDBPath)
+	accessLogPath := filepath.Join(dataDir, "access.log")
+	errorLogPath := filepath.Join(dataDir, "error.log")
+	accessLog, accessErr := openServerLogFile(accessLogPath)
+	if accessErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not open %s: %v\n", accessLogPath, accessErr)
+	}
+	if accessLog != nil {
+		defer accessLog.Close()
+	}
+	errorLog, errorErr := openServerLogFile(errorLogPath)
+	if errorErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not open %s: %v\n", errorLogPath, errorErr)
+	}
+	if errorLog != nil {
+		defer errorLog.Close()
+	}
+
+	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout, *staticPath, selectedSite, *enableOrchestrator, asLogWriter(accessLog), asLogWriter(errorLog))
 	if err != nil {
 		return err
 	}
@@ -739,8 +761,14 @@ func runServer(args []string) error {
 	fmt.Print(renderBanner())
 	fmt.Printf("VERSION    %s\n", strings.TrimSpace(embeddedVersion))
 	fmt.Printf("SITE       %s\n", selectedSite)
-	fmt.Printf("TICKETDB   %s\n\n", resolvedDBPath)
-	fmt.Printf("serving tk on http://localhost%s\n", listenAddr)
+	fmt.Printf("TICKETDB   %s\n", resolvedDBPath)
+	if accessLog != nil {
+		fmt.Printf("ACCESSLOG  %s\n", accessLogPath)
+	}
+	if errorLog != nil {
+		fmt.Printf("ERRORLOG   %s\n", errorLogPath)
+	}
+	fmt.Printf("\nserving tk on http://localhost%s\n", listenAddr)
 
 	// Run the server in a goroutine so we can listen for shutdown signals.
 	errCh := make(chan error, 1)
@@ -765,4 +793,19 @@ func runServer(args []string) error {
 		fmt.Println("server stopped")
 		return nil
 	}
+}
+
+// openServerLogFile opens (creating if needed) a server log file for appending.
+func openServerLogFile(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644) // #nosec G302,G304 -- server log file on the operator-controlled data path
+}
+
+// asLogWriter converts a possibly-nil *os.File into an io.Writer that is truly
+// nil when the file is nil, so downstream nil checks behave correctly (a typed
+// nil pointer stored in an interface is not == nil).
+func asLogWriter(f *os.File) io.Writer {
+	if f == nil {
+		return nil
+	}
+	return f
 }
