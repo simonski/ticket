@@ -4088,6 +4088,29 @@ func TestAutoProgressTicketLifecycleSkipsParents(t *testing.T) {
 	}
 }
 
+func TestAutoProgressTicketLifecycleIgnoresParentOnlyChange(t *testing.T) {
+	t.Parallel()
+	current := store.Ticket{
+		Stage:       store.StageDesign,
+		State:       store.StateIdle,
+		Title:       "Task",
+		Description: "Desc",
+	}
+	newParent := "TK-1"
+	payload := ticketRequest{
+		Title:       "Task",
+		Description: "Desc",
+		ParentID:    &newParent,
+	}
+	next := autoProgressTicketLifecycle(payload, current, "alice", false)
+	if next.Stage != "" || next.State != "" {
+		t.Fatalf("parent-only change must not advance lifecycle, got %s/%s", next.Stage, next.State)
+	}
+	if next.Assignee != "" {
+		t.Fatalf("parent-only change must not set an assignee, got %q", next.Assignee)
+	}
+}
+
 func TestProjectVisibilityAndRolePermissions(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)

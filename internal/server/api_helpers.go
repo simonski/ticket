@@ -151,12 +151,8 @@ func hasMeaningfulTicketContentChange(payload ticketRequest, current store.Ticke
 	if strings.TrimSpace(payload.Assignee) != strings.TrimSpace(current.Assignee) {
 		return true
 	}
-	if (payload.ParentID == nil) != (current.ParentID == nil) {
-		return true
-	}
-	if payload.ParentID != nil && current.ParentID != nil && *payload.ParentID != *current.ParentID {
-		return true
-	}
+	// Re-parenting is a hierarchy change, not work progress: setting parent_id
+	// alone must not auto-advance the lifecycle or assign the actor (TK-77).
 	return false
 }
 
