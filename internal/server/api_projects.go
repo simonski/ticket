@@ -1298,6 +1298,52 @@ func (r *router) registerProjectHandlers() {
 			}
 		}
 
+		if len(parts) == 2 && parts[1] == "rename-prefix" && r.Method == http.MethodPost {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			project, role, err := resolveProjectRefForUser(r.Context(), db, parts[0], user)
+			if err != nil {
+				if errors.Is(err, store.ErrProjectNotFound) {
+					writeError(w, http.StatusNotFound, "project not found")
+					return
+				}
+				writeAuthError(w, err)
+				return
+			}
+			// Re-prefixing is owner-only: it re-keys every ticket in the project.
+			if !canManageProjectUsers(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			var payload struct {
+				Prefix string `json:"prefix"`
+			}
+			if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			count, err := store.RenameProjectPrefix(r.Context(), db, project.ID, payload.Prefix)
+			if err != nil {
+				if errors.Is(err, store.ErrProjectNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeStoreError(w, err)
+				return
+			}
+			updated, err := store.GetProjectByID(r.Context(), db, project.ID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			notify("project_updated", project.ID, "")
+			writeJSON(w, http.StatusOK, renameProjectPrefixResponse{TicketsUpdated: count, Project: updated})
+			return
+		}
+
 		if len(parts) == 2 && r.Method == http.MethodPost {
 			user, err := requireUser(db, r)
 			if err != nil {

@@ -1111,6 +1111,19 @@ func (c *Client) SetProjectEnabled(ctx context.Context, id int64, enabled bool) 
 	return project, err
 }
 
+func (c *Client) RenameProjectPrefix(ctx context.Context, id int64, newPrefix string) (int, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return 0, err
+		}
+		return store.RenameProjectPrefix(ctx, db, id, newPrefix)
+	}
+	var response RenameProjectPrefixResponse
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%d/rename-prefix", id), map[string]string{"prefix": newPrefix}, &response)
+	return response.TicketsUpdated, err
+}
+
 func (c *Client) SetProjectDefaultDraft(ctx context.Context, projectID int64, draft bool) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

@@ -2473,6 +2473,59 @@ func TestRunStageStateCommandsUpdateLifecycle(t *testing.T) {
 	}
 }
 
+func TestLifecycleCommandsAcceptPositionalIDBeforeFlags(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	taskID := createLocalTask(t, []string{"add", "Positional lifecycle"})
+
+	// Claim is required before a ticket may go active.
+	if err := run([]string{"claim", taskID}); err != nil {
+		t.Fatalf("claim error = %v", err)
+	}
+
+	// Positional id FOLLOWED by a flag must work: tk active <id> -m "note".
+	// Go's flag parser stops at the first positional, so this used to fail.
+	if err := run([]string{"active", taskID, "-m", "starting the work"}); err != nil {
+		t.Fatalf("active <id> -m error = %v", err)
+	}
+
+	ticket, err := svc.GetTicket(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("GetTicket() error = %v", err)
+	}
+	if ticket.State != "active" {
+		t.Fatalf("ticket state = %q, want active", ticket.State)
+	}
+
+	// The trailing -m must have been parsed and attached as a comment.
+	comments, err := svc.ListComments(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("ListComments() error = %v", err)
+	}
+	found := false
+	for _, c := range comments {
+		if strings.Contains(c.Text, "starting the work") || strings.Contains(c.Comment, "starting the work") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected comment from -m flag, comments = %+v", comments)
+	}
+
+	// stage <id> <stage> -m "..." (positional id + state arg + trailing flag).
+	if err := run([]string{"stage", taskID, "develop", "-m", "into develop"}); err != nil {
+		t.Fatalf("stage <id> <stage> -m error = %v", err)
+	}
+	staged, err := svc.GetTicket(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("GetTicket() after stage error = %v", err)
+	}
+	if staged.Stage != "develop" {
+		t.Fatalf("ticket stage = %q, want develop", staged.Stage)
+	}
+}
+
 func TestRunWorkflowAssignsFirstStageRoleAndSupportsPrevious(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
@@ -2637,6 +2690,57 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 		t.Fatalf("project disable output = %q", disableOutput)
 	}
 
+}
+
+func TestRunProjectUpdateRePrefixesProject(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix: "PRE",
+		Title:  "Re-prefix Project",
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Some work",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if !strings.HasPrefix(ticket.ID, "PRE-") {
+		t.Fatalf("ticket key = %q, want PRE- prefix", ticket.ID)
+	}
+
+	updateOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "update", "-id", fmt.Sprintf("%d", project.ID), "-prefix", "ATOM"}); err != nil {
+			t.Fatalf("project update -prefix error = %v", err)
+		}
+	})
+	if !strings.Contains(updateOutput, "prefix: ATOM") {
+		t.Fatalf("project update output missing new prefix:\n%s", updateOutput)
+	}
+
+	updated, err := svc.GetProject(context.Background(), fmt.Sprintf("%d", project.ID))
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+	if updated.Prefix != "ATOM" {
+		t.Fatalf("project prefix = %q, want ATOM", updated.Prefix)
+	}
+
+	newKey := "ATOM-" + strings.TrimPrefix(ticket.ID, "PRE-")
+	rekeyed, err := svc.GetTicket(context.Background(), newKey)
+	if err != nil {
+		t.Fatalf("GetTicket(%q) after re-prefix error = %v", newKey, err)
+	}
+	if rekeyed.ID != newKey {
+		t.Fatalf("re-keyed ticket key = %q, want %q", rekeyed.ID, newKey)
+	}
 }
 
 func TestRunProjectListMarksRepoResolvedCurrentProject(t *testing.T) {
@@ -4382,6 +4486,16 @@ func TestRunGetAcceptsPositionalID(t *testing.T) {
 	// positional arg should work the same as -id
 	if err := run([]string{"get", taskID}); err != nil {
 		t.Fatalf("expected positional id to work, got %v", err)
+	}
+
+	// positional id followed by a flag should also work: tk get <id> -v
+	verboseOutput := captureStdout(t, func() {
+		if err := run([]string{"get", taskID, "-v"}); err != nil {
+			t.Fatalf("expected positional id with -v to work, got %v", err)
+		}
+	})
+	if !hasDetailLabel(verboseOutput, "History") {
+		t.Fatalf("positional get -v should include verbose history section:\n%s", verboseOutput)
 	}
 }
 

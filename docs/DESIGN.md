@@ -546,6 +546,7 @@ tk project ls
 export TICKET_PROJECT=CUS
 tk project get CUS
 tk project rename-prefix NEW
+tk project update -id 5 -prefix NEW   # owner-only re-prefix; re-keys every ticket
 ```
 
 `tk project ls` should show at least the project id, prefix, title, and status, and indicate which project is current in the local CLI context.

@@ -18,10 +18,11 @@ func runTicketStateAlias(args []string, state, command string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	message := fs.String("m", "", "comment to attach")
-	if err := fs.Parse(args); err != nil {
+	positional, err := parseFlagsWithPositionals(fs, args)
+	if err != nil {
 		return err
 	}
-	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	idVal, rest, err := resolveIDFlag(*id, positional)
 	if err != nil || len(rest) != 0 {
 		return fmt.Errorf("usage: tk %s [-id] <id> [-m comment]", command)
 	}
@@ -34,17 +35,18 @@ func runTicketState(args []string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	message := fs.String("m", "", "comment to attach")
-	if err := fs.Parse(args); err != nil {
+	positional, err := parseFlagsWithPositionals(fs, args)
+	if err != nil {
 		return err
 	}
 	idVal := strings.TrimSpace(*id)
 	var stateArg string
 	switch {
-	case idVal != "" && fs.NArg() == 1:
-		stateArg = fs.Args()[0]
-	case idVal == "" && fs.NArg() == 2:
-		idVal = fs.Args()[0]
-		stateArg = fs.Args()[1]
+	case idVal != "" && len(positional) == 1:
+		stateArg = positional[0]
+	case idVal == "" && len(positional) == 2:
+		idVal = positional[0]
+		stateArg = positional[1]
 	default:
 		return errors.New("usage: " + usage)
 	}
@@ -405,10 +407,11 @@ func runComplete(args []string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	message := fs.String("m", "", "comment to attach")
-	if err := fs.Parse(args); err != nil {
+	positional, err := parseFlagsWithPositionals(fs, args)
+	if err != nil {
 		return err
 	}
-	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	idVal, rest, err := resolveIDFlag(*id, positional)
 	if err != nil || len(rest) != 0 {
 		return errors.New("usage: tk complete [-id] <id> [-m comment]")
 	}
@@ -436,10 +439,11 @@ func runReopen(args []string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	message := fs.String("m", "", "comment to attach")
-	if err := fs.Parse(args); err != nil {
+	positional, err := parseFlagsWithPositionals(fs, args)
+	if err != nil {
 		return err
 	}
-	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	idVal, rest, err := resolveIDFlag(*id, positional)
 	if err != nil || len(rest) != 0 {
 		return errors.New("usage: tk reopen [-id] <id> [-m comment]")
 	}

@@ -5703,6 +5703,82 @@ func loginAdmin(t *testing.T, handler http.Handler) string {
 	return auth.Token
 }
 
+func TestProjectRenamePrefixAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":  "Re-prefix Project",
+		"prefix": "RPX",
+	}, token)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d, want %d body=%s", projectResp.Code, http.StatusCreated, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+
+	ticket, err := store.CreateTicket(context.Background(), db, store.TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Some work",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if !strings.HasPrefix(ticket.ID, "RPX-") {
+		t.Fatalf("ticket key = %q, want RPX- prefix", ticket.ID)
+	}
+
+	// A non-owner must not be able to re-prefix the project.
+	if registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "mallory",
+		"password": "password123",
+	}, ""); registerResp.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d", registerResp.Code, http.StatusCreated)
+	}
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "mallory",
+		"password": "password123",
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("mallory login status = %d, want %d", loginResp.Code, http.StatusOK)
+	}
+	var mallory struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &mallory)
+
+	forbidden := doJSONRequest(t, handler, http.MethodPost, "/api/projects/RPX/rename-prefix", map[string]string{
+		"prefix": "ATOM",
+	}, mallory.Token)
+	if forbidden.Code != http.StatusForbidden {
+		t.Fatalf("non-owner rename-prefix status = %d, want %d body=%s", forbidden.Code, http.StatusForbidden, forbidden.Body.String())
+	}
+
+	// The owner (admin) can re-prefix, and every ticket is re-keyed.
+	renameResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/RPX/rename-prefix", map[string]string{
+		"prefix": "ATOM",
+	}, token)
+	if renameResp.Code != http.StatusOK {
+		t.Fatalf("rename-prefix status = %d, want %d body=%s", renameResp.Code, http.StatusOK, renameResp.Body.String())
+	}
+	var renamed renameProjectPrefixResponse
+	decodeResponse(t, renameResp, &renamed)
+	if renamed.Project.Prefix != "ATOM" {
+		t.Fatalf("renamed project prefix = %q, want ATOM", renamed.Project.Prefix)
+	}
+	if renamed.TicketsUpdated < 1 {
+		t.Fatalf("tickets updated = %d, want >= 1", renamed.TicketsUpdated)
+	}
+
+	newKey := "ATOM-" + strings.TrimPrefix(ticket.ID, "RPX-")
+	if _, err := store.GetTicket(context.Background(), db, newKey); err != nil {
+		t.Fatalf("GetTicket(%q) after re-prefix error = %v", newKey, err)
+	}
+}
+
 func TestProjectRepositoryCRUDAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)

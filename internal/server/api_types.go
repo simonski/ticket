@@ -78,6 +78,11 @@ type projectRequest struct {
 	AgentModelAPIKey   string            `json:"agent_model_api_key"`
 }
 
+type renameProjectPrefixResponse struct {
+	TicketsUpdated int           `json:"tickets_updated"`
+	Project        store.Project `json:"project"`
+}
+
 type roleRequest struct {
 	ID                 *int64            `json:"id,omitempty"`
 	WorkflowID         *int64            `json:"workflow_id,omitempty"`
