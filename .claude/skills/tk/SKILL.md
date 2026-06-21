@@ -2,7 +2,7 @@
 name: tk
 description: Use this skill for ticket/project workflow operations in repositories using the `tk` CLI.
 metadata:
-  version: 0.0.4
+  version: 0.0.5
 ---
 
 # tk Skill
@@ -79,9 +79,11 @@ Push the branch, open a PR, then finish the ticket:
 
 ```bash
 git push -u origin feature/TK-N-short-slug
-gh pr create --title "TK-N: <title>" --body "...refs TK-N..."   # this repo merges via rebase
+gh pr create --title "TK-N: <title>" --body "...refs TK-N..."   # GitHub repos only; this repo merges via rebase
+# Record the PR on the ticket (host-agnostic; lives in ticket). Repo, branches,
+# and provider are inferred from the project repos + current branch.
+tk pr create N -url <pr-url>      # omit -url for a native (non-GitHub) PR record
 tk complete N -m "done: <summary>, tests + lint green, PR #NN"   # stage=done, complete=true
-tk comment N "PR: <url>"
 ```
 
 After the PR is merged, sync and delete the branch:

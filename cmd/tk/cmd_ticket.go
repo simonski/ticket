@@ -976,8 +976,10 @@ func runGet(args []string) error {
 	if outputJSON {
 		return printJSON(ticket)
 	}
+	pullRequests, _ := svc.ListPullRequestsByTicket(context.Background(), ticket.ID)
 	if !*verbose {
 		printTicketSummary(ticket)
+		printTicketPullRequests(pullRequests)
 		return nil
 	}
 	dependencies, _ := svc.ListDependencies(context.Background(), ticket.ID)
@@ -1019,6 +1021,7 @@ func runGet(args []string) error {
 	if len(children) > 0 {
 		printTicketChildren(children)
 	}
+	printTicketPullRequests(pullRequests)
 	return nil
 }
 
