@@ -168,6 +168,9 @@ type TicketService interface {
 	DeleteTicket(ctx context.Context, id string) error
 	SetTicketParent(ctx context.Context, id string, parentID string, message string) (store.Ticket, error)
 	UnsetTicketParent(ctx context.Context, id string, message string) (store.Ticket, error)
+	CreatePullRequest(ctx context.Context, request PullRequestRequest) (store.PullRequest, error)
+	GetPullRequest(ctx context.Context, id int64) (store.PullRequest, error)
+	ListPullRequestsByTicket(ctx context.Context, ticketID string) ([]store.PullRequest, error)
 	SetTicketHealth(ctx context.Context, id string, score int) (store.Ticket, error)
 	GetTicketByID(ctx context.Context, id string) (store.Ticket, error)
 	GetTicket(ctx context.Context, ref string) (store.Ticket, error)
