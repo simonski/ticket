@@ -27,7 +27,11 @@ Commands:
                                         current project's PRs (open by default; -closed
                                         or -all to widen). With a ticket, lists its PRs.
   get    <pr-id>                       Show a pull request
+  merge  <pr-id>                       Mark a pull request merged
+  close  <pr-id>                       Mark a pull request closed
+  reopen <pr-id>                       Reopen a closed pull request
 
+Add -gh to create to open a real GitHub PR via gh (github repos only).
 Shortcut: tk pr <ticket-id> lists that ticket's pull requests.`
 
 func runPullRequest(args []string) error {
@@ -41,6 +45,12 @@ func runPullRequest(args []string) error {
 		return runPullRequestList(args[1:])
 	case "get", "show":
 		return runPullRequestGet(args[1:])
+	case "merge":
+		return runPullRequestStatus(args[1:], store.PullRequestStatusMerged)
+	case "close":
+		return runPullRequestStatus(args[1:], store.PullRequestStatusClosed)
+	case "reopen":
+		return runPullRequestStatus(args[1:], store.PullRequestStatusOpen)
 	case "help", "-h", "--help":
 		fmt.Println(prUsage)
 		return nil
@@ -81,13 +91,14 @@ func runPullRequestCreate(args []string) error {
 	urlFlag := fs.String("url", "", "external PR url (e.g. GitHub)")
 	providerFlag := fs.String("provider", "", "provider: none|github (default: inferred from repo)")
 	desc := fs.String("m", "", "PR description")
+	ghFlag := fs.Bool("gh", false, "open a real GitHub PR via gh and store its url (github repos only)")
 	positional, err := parseFlagsWithPositionals(fs, args)
 	if err != nil {
 		return err
 	}
 	ticketArg, rest, err := resolveIDFlag(*idFlag, positional)
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: tk pr create [-id] <ticket-id> [-repo R] [-from B] [-to B] [-title T] [-url U] [-provider none|github] [-m desc]")
+		return errors.New("usage: tk pr create [-id] <ticket-id> [-repo R] [-from B] [-to B] [-title T] [-url U] [-provider none|github] [-m desc] [-gh]")
 	}
 
 	cfg, err := config.Load()
@@ -125,6 +136,22 @@ func runPullRequestCreate(args []string) error {
 		provider = detectPRProvider(repository)
 	}
 
+	prURL := strings.TrimSpace(*urlFlag)
+	if *ghFlag {
+		if provider != store.PullRequestProviderGitHub {
+			return fmt.Errorf("-gh requires a GitHub repository (provider is %q)", provider)
+		}
+		prTitle := strings.TrimSpace(*title)
+		if prTitle == "" {
+			prTitle = ticket.Title
+		}
+		openedURL, ghErr := ghCreatePullRequest(prTitle, strings.TrimSpace(*desc), source, target)
+		if ghErr != nil {
+			return ghErr
+		}
+		prURL = openedURL
+	}
+
 	pr, err := svc.CreatePullRequest(ctx, libticket.PullRequestRequest{
 		TicketID:     ticket.ID,
 		Title:        strings.TrimSpace(*title),
@@ -133,7 +160,7 @@ func runPullRequestCreate(args []string) error {
 		SourceBranch: source,
 		TargetBranch: target,
 		Provider:     provider,
-		URL:          strings.TrimSpace(*urlFlag),
+		URL:          prURL,
 	})
 	if err != nil {
 		return err
@@ -286,6 +313,83 @@ func runPullRequestGet(args []string) error {
 	}
 	printPullRequest(pr)
 	return nil
+}
+
+func runPullRequestStatus(args []string, status string) error {
+	fs := flag.NewFlagSet("pr "+status, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	idFlag := fs.Int64("id", 0, "pull request id")
+	positional, err := parseFlagsWithPositionals(fs, args)
+	if err != nil {
+		return err
+	}
+	prID := *idFlag
+	if prID == 0 {
+		if len(positional) != 1 {
+			return fmt.Errorf("usage: tk pr %s <pr-id>", statusVerb(status))
+		}
+		parsed, parseErr := strconv.ParseInt(strings.TrimSpace(positional[0]), 10, 64)
+		if parseErr != nil {
+			return fmt.Errorf("invalid pull request id %q", positional[0])
+		}
+		prID = parsed
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	pr, err := svc.SetPullRequestStatus(context.Background(), prID, status)
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(pr)
+	}
+	printPullRequest(pr)
+	return nil
+}
+
+// statusVerb maps a target status to the CLI verb used to reach it.
+func statusVerb(status string) string {
+	switch status {
+	case store.PullRequestStatusMerged:
+		return "merge"
+	case store.PullRequestStatusClosed:
+		return "close"
+	default:
+		return "reopen"
+	}
+}
+
+// ghCreatePullRequest opens a real GitHub PR via the gh CLI in the current
+// directory and returns its URL. It requires gh to be installed.
+func ghCreatePullRequest(title, body, head, base string) (string, error) {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return "", fmt.Errorf("gh CLI not found on PATH; install it or omit -gh")
+	}
+	out, err := exec.Command("gh", "pr", "create", "--head", head, "--base", base, "--title", title, "--body", body).CombinedOutput() // #nosec G204 -- args are ticket/branch metadata, not shell-interpreted
+	if err != nil {
+		return "", fmt.Errorf("gh pr create failed: %s", strings.TrimSpace(string(out)))
+	}
+	url := extractFirstURL(string(out))
+	if url == "" {
+		return "", fmt.Errorf("gh pr create succeeded but no PR url was found in its output")
+	}
+	return url, nil
+}
+
+// extractFirstURL returns the first https:// token found in s, or "".
+func extractFirstURL(s string) string {
+	for _, field := range strings.Fields(s) {
+		if strings.HasPrefix(field, "https://") || strings.HasPrefix(field, "http://") {
+			return strings.TrimRight(field, ".,)")
+		}
+	}
+	return ""
 }
 
 // printTicketPullRequests renders a compact PR section for tk get. It is a

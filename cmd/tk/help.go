@@ -65,8 +65,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk admin upgrade-database -f /data/ticket.db",
 	},
 	"pr": {
-		usage:   "tk pr create [-id] <ticket-id> [-repo R] [-from B] [-to B] [-title T] [-url U] [-provider none|github]",
-		details: []string{"Manages pull requests, which live inside ticket and are linked to a ticket and project (VCS-host-agnostic).", "`create` opens a PR, inferring the repository (from the project's repos or the cwd git origin), source branch (current git branch), target branch (main), and provider (github when the repo host is github.com, otherwise none).", "`ls [-id] <ticket-id>` lists a ticket's PRs; `get <pr-id>` shows one. `tk get <ticket>` also shows linked PRs.", "Non-GitHub repositories get a native PR record inside ticket; opening a real GitHub PR via gh is handled separately."},
+		usage:   "tk pr create [-id] <ticket-id> [-repo R] [-from B] [-to B] [-title T] [-url U] [-provider none|github] [-gh]",
+		details: []string{"Manages pull requests, which live inside ticket and are linked to a ticket and project (VCS-host-agnostic).", "`create` opens a PR, inferring the repository (from the project's repos or the cwd git origin), source branch (current git branch), target branch (main), and provider (github when the repo host is github.com, otherwise none). Add `-gh` to open a real GitHub PR via the gh CLI and store its url (github repos only).", "`ls [[-id] <ticket-id>] [-open|-closed|-all]` lists PRs (project-wide when no ticket); `get <pr-id>` shows one. `tk get <ticket>` also shows linked PRs.", "`merge`/`close`/`reopen <pr-id>` transition status. Non-GitHub repositories get a native PR record inside ticket."},
 		example: "tk pr create TK-42 -url https://github.com/acme/widget/pull/7",
 	},
 	"login": {
@@ -516,7 +516,7 @@ func renderRootUsage() string {
 		{"idea", "Capture and refine requirements (ls, new, get, shape, accept, reject)"},
 		{"project", "Manage projects (ls, new, get, use, rm, repo)"},
 		{"dep", "Manage dependency links (add, remove)"},
-		{"pr", "Manage pull requests (create, ls, get)"},
+		{"pr", "Manage pull requests (create, ls, get, merge, close)"},
 		{"label", "Manage labels (ls, new, rm, add, remove, show)"},
 		{"time", "Log and view time entries (log, ls, total, rm)"},
 		{"story", "Manage stories (ls, new, get, update, rm)"},

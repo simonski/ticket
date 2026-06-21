@@ -1341,6 +1341,14 @@ func (s *LocalService) ListPullRequestsByProject(ctx context.Context, projectRef
 	return store.ListPullRequestsByProject(ctx, db, project.ID)
 }
 
+func (s *LocalService) SetPullRequestStatus(ctx context.Context, id int64, status string) (store.PullRequest, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.PullRequest{}, err
+	}
+	return store.UpdatePullRequestStatus(ctx, db, id, status)
+}
+
 func (s *LocalService) UnsetTicketParent(ctx context.Context, id, message string) (store.Ticket, error) {
 	current, err := s.GetTicketByID(ctx, id)
 	if err != nil {

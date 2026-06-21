@@ -1904,6 +1904,19 @@ func (c *Client) ListPullRequestsByProject(ctx context.Context, projectRef strin
 	return prs, err
 }
 
+func (c *Client) SetPullRequestStatus(ctx context.Context, id int64, status string) (store.PullRequest, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.PullRequest{}, err
+		}
+		return store.UpdatePullRequestStatus(ctx, db, id, status)
+	}
+	var pr store.PullRequest
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/pull-requests/%d/status", id), map[string]string{"status": status}, &pr)
+	return pr, err
+}
+
 func (c *Client) UnsetTicketParent(ctx context.Context, id, message string) (store.Ticket, error) {
 	current, err := c.GetTicketByID(ctx, id)
 	if err != nil {
