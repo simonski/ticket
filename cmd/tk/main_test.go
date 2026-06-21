@@ -7205,33 +7205,28 @@ func TestRunStatusIgnoresLegacyLocalDatabaseLocation(t *testing.T) {
 	}
 }
 
-func TestRunUpgradeDatabasePortsLegacyDatabase(t *testing.T) {
+func TestRunUpgradeDatabaseUpgradesLegacyDatabaseInPlace(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	legacyPath, ticketID := createLegacyDatabaseForCLI(t)
 
-	targetPath := filepath.Join(t.TempDir(), "new_database", "ticket.db")
 	output := captureStdout(t, func() {
-		if err := run([]string{"-f", legacyPath, "upgrade-database", "-o", targetPath}); err != nil {
+		if err := run([]string{"upgrade-database", "-f", legacyPath}); err != nil {
 			t.Fatalf("upgrade-database error = %v", err)
 		}
 	})
-	if !strings.Contains(output, targetPath) {
-		t.Fatalf("upgrade-database output = %q, want target path", output)
+	if !strings.Contains(output, "upgraded") {
+		t.Fatalf("upgrade-database output = %q, want upgrade confirmation", output)
 	}
+	// The database is upgraded in place: the same path is now at the current version.
 	if got, err := store.DetectSchemaVersion(legacyPath); err != nil {
-		t.Fatalf("DetectSchemaVersion(source) error = %v", err)
-	} else if got != store.LegacySchemaVersion {
-		t.Fatalf("DetectSchemaVersion(source) = %d, want %d", got, store.LegacySchemaVersion)
-	}
-	if got, err := store.DetectSchemaVersion(targetPath); err != nil {
-		t.Fatalf("DetectSchemaVersion(target) error = %v", err)
+		t.Fatalf("DetectSchemaVersion(legacy) error = %v", err)
 	} else if got != store.CurrentSchemaVersion {
-		t.Fatalf("DetectSchemaVersion(target) = %d, want %d", got, store.CurrentSchemaVersion)
+		t.Fatalf("DetectSchemaVersion(legacy) = %d, want %d", got, store.CurrentSchemaVersion)
 	}
-	db, err := store.Open(targetPath)
+	db, err := store.Open(legacyPath)
 	if err != nil {
-		t.Fatalf("store.Open(target) error = %v", err)
+		t.Fatalf("store.Open(legacy) error = %v", err)
 	}
 	defer db.Close()
 	ticket, err := store.GetTicket(context.Background(), db, ticketID)
@@ -7257,7 +7252,7 @@ func TestRunListShowsSchemaUpgradeGuidanceForPreviousDatabase(t *testing.T) {
 		dbPath,
 		"schema version 5",
 		fmt.Sprintf("schema version %d", store.CurrentSchemaVersion),
-		"upgrade-database -o new_database/ticket.db",
+		"upgrade-database -f",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("run(ls) error missing %q:\n%v", want, err)

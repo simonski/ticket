@@ -1465,15 +1465,30 @@ CREATE TABLE user_notifications (
 			return err
 		}
 	}
-	if err := ensureDefaultPlans(ctx, db); err != nil {
-		return err
-	}
-	var bootstrapAdminID string
-	if err := db.QueryRowContext(ctx, `SELECT user_id FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1`).Scan(&bootstrapAdminID); err == nil {
-		if _, _, ensureErr := ensurePublicResources(ctx, db, bootstrapAdminID); ensureErr != nil {
-			return ensureErr
+	// Programmes table and projects.programme_id must exist before any code that
+	// reads projects runs (ensurePublicResources below queries p.programme_id via
+	// GetProjectByAlias). On databases that already have an admin user this path
+	// is reached during migration, so adding the column late caused
+	// "no such column: p.programme_id" upgrade failures.
+	if !tableExists(ctx, db, "programmes") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE programmes (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+			)
+		`); err != nil {
+			return err
 		}
 	}
+	if !columnExists(ctx, db, "projects", "programme_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN programme_id INTEGER REFERENCES programmes(id)`); err != nil {
+			return err
+		}
+	}
+
 	// Agent config key-value store
 	if !tableExists(ctx, db, "agent_config") {
 		if _, err := db.ExecContext(ctx, `
@@ -1639,28 +1654,6 @@ CREATE TABLE user_notifications (
 		}
 	}
 
-	// Add programmes table if it doesn't exist yet.
-	if !tableExists(ctx, db, "programmes") {
-		if _, err := db.ExecContext(ctx, `
-			CREATE TABLE programmes (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				name TEXT NOT NULL,
-				description TEXT NOT NULL DEFAULT '',
-				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-			)
-		`); err != nil {
-			return err
-		}
-	}
-
-	// Add programme_id column to projects if it doesn't exist yet.
-	if !columnExists(ctx, db, "projects", "programme_id") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN programme_id INTEGER REFERENCES programmes(id)`); err != nil {
-			return err
-		}
-	}
-
 	// Add recommended_ready to tickets (refiner agent signals readiness).
 	if !columnExists(ctx, db, "tickets", "recommended_ready") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN recommended_ready INTEGER NOT NULL DEFAULT 0`); err != nil {
@@ -1679,6 +1672,20 @@ CREATE TABLE user_notifications (
 	if !columnExists(ctx, db, "users", "agent_role") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN agent_role TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
+		}
+	}
+
+	// Data backfills that read whole rows must run only after every additive
+	// column above has been applied, otherwise shared SELECT column lists (for
+	// example users.agent_role, projects.programme_id) reference columns that do
+	// not exist yet and the migration aborts with "no such column".
+	if err := ensureDefaultPlans(ctx, db); err != nil {
+		return err
+	}
+	var bootstrapAdminID string
+	if err := db.QueryRowContext(ctx, `SELECT user_id FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1`).Scan(&bootstrapAdminID); err == nil {
+		if _, _, ensureErr := ensurePublicResources(ctx, db, bootstrapAdminID); ensureErr != nil {
+			return ensureErr
 		}
 	}
 

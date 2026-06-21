@@ -14,7 +14,7 @@ import (
 
 const (
 	LegacySchemaVersion  = 1
-	CurrentSchemaVersion = 7
+	CurrentSchemaVersion = 8
 	schemaMetaTable      = "schema_meta"
 	schemaVersionKey     = "schema_version"
 )
@@ -33,11 +33,11 @@ func (e *SchemaVersionError) Error() string {
 		displayPath = "database"
 	}
 	if e.UpgradeNeeded {
-		command := "tk upgrade-database -o new_database/ticket.db"
+		command := "tk upgrade-database"
 		if path != "" {
-			command = fmt.Sprintf("tk -f %s upgrade-database -o new_database/ticket.db", shellQuotePath(path))
+			command = fmt.Sprintf("tk upgrade-database -f %s", shellQuotePath(path))
 		}
-		return fmt.Sprintf("%s is schema version %d; this tk binary expects schema version %d; run `%s` to port it to a new database", displayPath, e.Found, e.Current, command)
+		return fmt.Sprintf("%s is schema version %d; this tk binary expects schema version %d; run `%s` to upgrade it (the server also upgrades automatically on startup)", displayPath, e.Found, e.Current, command)
 	}
 	return fmt.Sprintf("%s is schema version %d; this tk binary expects schema version %d; upgrade the tk binary before using this database", displayPath, e.Found, e.Current)
 }
@@ -227,6 +227,102 @@ func UpgradeDatabase(ctx context.Context, sourcePath, targetPath string) error {
 	}
 	defer targetDB.Close()
 	return ImportSnapshot(ctx, targetDB, snapshot)
+}
+
+// UpgradeInPlace upgrades the database at path so its schema matches the current
+// version, leaving the database at the same path. It returns the schema version
+// found before the upgrade.
+//
+//   - If the database is already at the current version, it re-applies the
+//     idempotent additive migrations in place (createSchema creates any missing
+//     tables and migrateSchema adds any missing columns). This repairs a database
+//     that is missing a column introduced without a schema-version bump.
+//   - If the database is at an older version, it rebuilds a fresh database from a
+//     snapshot of the upgraded data and atomically swaps it into place.
+//   - If the database is newer than this binary, it returns a SchemaVersionError.
+func UpgradeInPlace(ctx context.Context, path string) (int, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return 0, errors.New("database path is required")
+	}
+	found, err := DetectSchemaVersion(path)
+	if err != nil {
+		return 0, err
+	}
+	if found > CurrentSchemaVersion {
+		return found, &SchemaVersionError{Path: path, Found: found, Current: CurrentSchemaVersion, UpgradeNeeded: false}
+	}
+
+	if found == CurrentSchemaVersion {
+		db, openErr := openSQLite(path)
+		if openErr != nil {
+			return found, openErr
+		}
+		defer db.Close()
+		if schemaErr := createSchema(ctx, db); schemaErr != nil {
+			return found, schemaErr
+		}
+		return found, enableWAL(ctx, db)
+	}
+
+	// Older schema: rebuild into a fresh database (which brings the schema fully
+	// current and re-imports the data) and atomically swap it into place.
+	tmpDir, err := os.MkdirTemp(filepath.Dir(path), ".tk-upgrade-")
+	if err != nil {
+		return found, err
+	}
+	defer os.RemoveAll(tmpDir)
+	rebuilt := filepath.Join(tmpDir, "ticket.db")
+	if err := UpgradeDatabase(ctx, path, rebuilt); err != nil {
+		return found, err
+	}
+	if err := replaceSQLiteDatabase(rebuilt, path); err != nil {
+		return found, err
+	}
+	return found, nil
+}
+
+// replaceSQLiteDatabase atomically replaces the database at dst (and its WAL/SHM
+// sidecars) with the database at src. src and dst must be on the same filesystem.
+func replaceSQLiteDatabase(src, dst string) error {
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if err := os.Remove(dst + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		source := src + suffix
+		if _, err := os.Stat(source); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return err
+		}
+		if err := os.Rename(source, dst+suffix); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// BackupDatabase copies the SQLite database (and any -wal/-shm sidecar files) at
+// sourcePath to targetPath. It is intended for taking a safety snapshot before
+// an in-place upgrade.
+func BackupDatabase(sourcePath, targetPath string) error {
+	sourcePath = strings.TrimSpace(sourcePath)
+	targetPath = strings.TrimSpace(targetPath)
+	if sourcePath == "" || targetPath == "" {
+		return errors.New("source and target database paths are required")
+	}
+	if _, err := os.Stat(sourcePath); err != nil {
+		return err
+	}
+	if _, err := os.Stat(targetPath); err == nil {
+		return fmt.Errorf("backup target already exists at %s", targetPath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return copySQLiteDatabase(sourcePath, targetPath)
 }
 
 func copySQLiteDatabase(sourcePath, targetPath string) error {

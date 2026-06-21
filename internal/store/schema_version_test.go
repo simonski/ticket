@@ -134,11 +134,51 @@ func TestOpenRejectsPreviousSchemaVersionWithUpgradeGuidance(t *testing.T) {
 	for _, want := range []string{
 		"schema version 5",
 		fmt.Sprintf("schema version %d", CurrentSchemaVersion),
-		"upgrade-database -o new_database/ticket.db",
+		"upgrade-database -f",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("Open() error missing %q: %v", want, err)
 		}
+	}
+}
+
+func TestUpgradeInPlaceRepairsCurrentVersionMissingColumn(t *testing.T) {
+	t.Parallel()
+
+	// Simulate the production fault: a database at the current schema version that
+	// is missing a column the binary expects (a column added without a version
+	// bump). Open succeeds (version matches) but queries fail with "no such column".
+	path := filepath.Join(t.TempDir(), "ticket.db")
+	if err := Init(path, "admin", "secret12"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	if _, err := raw.Exec(`ALTER TABLE users DROP COLUMN agent_role`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("drop column error = %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("raw.Close() error = %v", err)
+	}
+
+	from, err := UpgradeInPlace(context.Background(), path)
+	if err != nil {
+		t.Fatalf("UpgradeInPlace() error = %v", err)
+	}
+	if from != CurrentSchemaVersion {
+		t.Fatalf("UpgradeInPlace() from = %d, want %d", from, CurrentSchemaVersion)
+	}
+
+	db, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open() after upgrade error = %v", err)
+	}
+	defer db.Close()
+	if !columnExists(context.Background(), db, "users", "agent_role") {
+		t.Fatal("agent_role column was not restored by UpgradeInPlace")
 	}
 }
 
