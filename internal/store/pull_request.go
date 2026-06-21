@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -186,4 +187,27 @@ func ListPullRequestsByProject(ctx context.Context, db *sql.DB, projectID int64)
 		return nil, err
 	}
 	return scanPullRequests(rows)
+}
+
+// UpdatePullRequestStatus transitions a pull request to a new status. Moving to
+// "merged" stamps merged_at; other transitions leave merged_at untouched.
+func UpdatePullRequestStatus(ctx context.Context, db *sql.DB, id int64, status string) (PullRequest, error) {
+	ns := NormalizePullRequestStatus(status)
+	if ns == "" {
+		return PullRequest{}, fmt.Errorf("invalid pull request status %q", status)
+	}
+	res, err := db.ExecContext(ctx, `
+		UPDATE pull_requests
+		SET status = ?,
+		    merged_at = CASE WHEN ? = 'merged' THEN CURRENT_TIMESTAMP ELSE merged_at END,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, ns, ns, id)
+	if err != nil {
+		return PullRequest{}, err
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return PullRequest{}, ErrPullRequestNotFound
+	}
+	return GetPullRequest(ctx, db, id)
 }

@@ -4713,6 +4713,43 @@ func TestRunPullRequestCreateListAndShownInGet(t *testing.T) {
 	}
 }
 
+func TestRunPullRequestMergeCloseLifecycle(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	ticketID := createLocalTask(t, []string{"add", "Lifecycle ticket"})
+	pr, err := svc.CreatePullRequest(context.Background(), libticket.PullRequestRequest{
+		TicketID: ticketID, Repository: "github.com/acme/w", SourceBranch: "f",
+	})
+	if err != nil {
+		t.Fatalf("CreatePullRequest() error = %v", err)
+	}
+	prArg := fmt.Sprintf("%d", pr.ID)
+
+	mergeOut := captureStdout(t, func() {
+		if err := run([]string{"pr", "merge", prArg}); err != nil {
+			t.Fatalf("pr merge error = %v", err)
+		}
+	})
+	if !strings.Contains(mergeOut, "status     : merged") {
+		t.Fatalf("pr merge output = %q", mergeOut)
+	}
+	if got, err := svc.GetPullRequest(context.Background(), pr.ID); err != nil {
+		t.Fatalf("GetPullRequest() error = %v", err)
+	} else if got.Status != "merged" {
+		t.Fatalf("status after merge = %q, want merged", got.Status)
+	}
+
+	if err := run([]string{"pr", "close", prArg}); err != nil {
+		t.Fatalf("pr close error = %v", err)
+	}
+	if got, err := svc.GetPullRequest(context.Background(), pr.ID); err != nil {
+		t.Fatalf("GetPullRequest() error = %v", err)
+	} else if got.Status != "closed" {
+		t.Fatalf("status after close = %q, want closed", got.Status)
+	}
+}
+
 func TestRunPullRequestListProjectWideWithStatusFilters(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)

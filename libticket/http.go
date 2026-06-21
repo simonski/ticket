@@ -435,6 +435,10 @@ func (s *HTTPService) ListPullRequestsByProject(ctx context.Context, projectRef 
 	return s.client.ListPullRequestsByProject(ctx, projectRef)
 }
 
+func (s *HTTPService) SetPullRequestStatus(ctx context.Context, id int64, status string) (store.PullRequest, error) {
+	return s.client.SetPullRequestStatus(ctx, id, status)
+}
+
 func (s *HTTPService) GetTicketByID(ctx context.Context, id string) (store.Ticket, error) {
 	return s.client.GetTicketByID(ctx, id)
 }

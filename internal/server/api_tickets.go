@@ -20,17 +20,14 @@ func (r *router) registerTicketHandlers() {
 	notify := r.notify
 
 	mux.HandleFunc("/api/pull-requests/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
 		user, err := requireUser(db, r)
 		if err != nil {
 			writeAuthError(w, err)
 			return
 		}
-		idStr := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/pull-requests/"))
-		id, parseErr := strconv.ParseInt(idStr, 10, 64)
+		trimmed := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/pull-requests/"))
+		parts := strings.Split(trimmed, "/")
+		id, parseErr := strconv.ParseInt(parts[0], 10, 64)
 		if parseErr != nil {
 			writeError(w, http.StatusBadRequest, "invalid pull request id")
 			return
@@ -49,11 +46,44 @@ func (r *router) registerTicketHandlers() {
 			writeError(w, http.StatusInternalServerError, roleErr.Error())
 			return
 		}
-		if !canReadProject(role) {
-			writeAuthError(w, store.ErrForbidden)
+
+		// POST /api/pull-requests/{id}/status — transition the PR status.
+		if len(parts) == 2 && parts[1] == "status" && r.Method == http.MethodPost {
+			if !canWriteProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			var payload struct {
+				Status string `json:"status"`
+			}
+			if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			updated, updErr := store.UpdatePullRequestStatus(r.Context(), db, id, payload.Status)
+			if updErr != nil {
+				if errors.Is(updErr, store.ErrPullRequestNotFound) {
+					writeError(w, http.StatusNotFound, updErr.Error())
+					return
+				}
+				writeStoreError(w, updErr)
+				return
+			}
+			notify("pull_request_updated", updated.ProjectID, updated.TicketID)
+			writeJSON(w, http.StatusOK, updated)
 			return
 		}
-		writeJSON(w, http.StatusOK, pr)
+
+		// GET /api/pull-requests/{id}
+		if len(parts) == 1 && r.Method == http.MethodGet {
+			if !canReadProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			writeJSON(w, http.StatusOK, pr)
+			return
+		}
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	})
 
 	mux.HandleFunc("/api/tickets/import-markdown", func(w http.ResponseWriter, r *http.Request) {

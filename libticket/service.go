@@ -172,6 +172,7 @@ type TicketService interface {
 	GetPullRequest(ctx context.Context, id int64) (store.PullRequest, error)
 	ListPullRequestsByTicket(ctx context.Context, ticketID string) ([]store.PullRequest, error)
 	ListPullRequestsByProject(ctx context.Context, projectRef string) ([]store.PullRequest, error)
+	SetPullRequestStatus(ctx context.Context, id int64, status string) (store.PullRequest, error)
 	SetTicketHealth(ctx context.Context, id string, score int) (store.Ticket, error)
 	GetTicketByID(ctx context.Context, id string) (store.Ticket, error)
 	GetTicket(ctx context.Context, ref string) (store.Ticket, error)
