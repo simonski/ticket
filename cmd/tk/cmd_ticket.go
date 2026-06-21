@@ -459,6 +459,27 @@ func buildTicketPrompt(files []string, outputFile string) (string, error) {
 // resolveIDFlag extracts a ticket ID from either an -id flag value or a
 // positional argument. It returns the resolved ID and remaining positional
 // args, or an error if neither form provides an ID.
+// parseFlagsWithPositionals parses fs while allowing flags to appear before or
+// after positional arguments. Go's flag package stops parsing at the first
+// non-flag token, so without this a flag that trails a positional id (for
+// example "tk active 42 -m note") is silently left unparsed and the command
+// fails. Positional arguments are returned in their original order.
+func parseFlagsWithPositionals(fs *flag.FlagSet, args []string) ([]string, error) {
+	var positionals []string
+	for len(args) > 0 {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		rest := fs.Args()
+		if len(rest) == 0 {
+			break
+		}
+		positionals = append(positionals, rest[0])
+		args = rest[1:]
+	}
+	return positionals, nil
+}
+
 func resolveIDFlag(flagVal string, positional []string) (id string, remaining []string, err error) {
 	idVal := strings.TrimSpace(flagVal)
 	if idVal != "" {
@@ -891,14 +912,17 @@ func runGet(args []string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	verbose := fs.Bool("v", false, "show full ticket detail")
-	if err := fs.Parse(args); err != nil {
+	rest, err := parseFlagsWithPositionals(fs, args)
+	if err != nil {
 		return err
 	}
-	// Allow positional: tk get FOO is the same as tk get -id FOO
-	if strings.TrimSpace(*id) == "" && fs.NArg() == 1 {
-		v := fs.Arg(0)
+	// Allow positional: tk get FOO is the same as tk get -id FOO.
+	if strings.TrimSpace(*id) == "" && len(rest) >= 1 {
+		v := rest[0]
 		id = &v
-	} else if fs.NArg() != 0 {
+		rest = rest[1:]
+	}
+	if len(rest) != 0 {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -1737,10 +1761,11 @@ func runUnclaim(args []string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	message := fs.String("m", "", "comment to attach")
-	if err := fs.Parse(args); err != nil {
+	positional, err := parseFlagsWithPositionals(fs, args)
+	if err != nil {
 		return err
 	}
-	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	idVal, rest, err := resolveIDFlag(*id, positional)
 	if err != nil || len(rest) != 0 {
 		return errors.New("usage: tk unclaim [-id] <id> [-m comment]")
 	}

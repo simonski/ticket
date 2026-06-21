@@ -285,8 +285,13 @@ func TestHTTPServiceCoversLifecycleAliasesWorkflowStagesAndAgentOps(t *testing.T
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	if _, err := svc.RenameProjectPrefix(ctx, project.ID, "ADV"); err == nil {
-		t.Fatal("RenameProjectPrefix() error = nil, want remote unsupported error")
+	if _, err := svc.RenameProjectPrefix(ctx, project.ID, "ADV"); err != nil {
+		t.Fatalf("RenameProjectPrefix() error = %v", err)
+	}
+	if renamed, err := svc.GetProject(ctx, strconv.FormatInt(project.ID, 10)); err != nil {
+		t.Fatalf("GetProject() after rename error = %v", err)
+	} else if renamed.Prefix != "ADV" {
+		t.Fatalf("project prefix after rename = %q, want ADV", renamed.Prefix)
 	}
 	if err := svc.SetProjectDefaultDraft(ctx, project.ID, true); err != nil {
 		t.Fatalf("SetProjectDefaultDraft() error = %v", err)

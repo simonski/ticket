@@ -639,6 +639,7 @@ var projectUsage = renderNamespaceUsage("PROJECT", "tk project <command> [flags]
 	{"approve-access-request", "Approve a project access request"},
 	{"reject-access-request", "Reject a project access request"},
 	{"rm [-id] <id> [-confirm tok]", "Delete a project (two-step)"},
+	{"update [-id <id>] -prefix <p>", "Re-prefix and re-key all tickets (owner only)"},
 	{"rename-prefix <new-prefix>", "Rename prefix and re-key all tickets"},
 	{"set-draft [-project_id <id>] <true|false>", "Set project default draft mode"},
 	{"workflow <id>", "Set workflow on current project (use 0 to clear)"},

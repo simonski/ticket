@@ -4985,6 +4985,53 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_id}/rename-prefix:
+    post:
+      tags: [Projects]
+      summary: Re-prefix a project and re-key all of its tickets (owner only)
+      operationId: renameProjectPrefix
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prefix]
+              properties:
+                prefix:
+                  type: string
+                  description: New project prefix (re-keys every ticket)
+      responses:
+        '200':
+          description: Project re-prefixed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tickets_updated:
+                    type: integer
+                  project:
+                    $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/enable:
     post:
       tags: [Projects]

@@ -96,6 +96,11 @@ type ProjectUpdateRequest struct {
 	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 }
 
+type RenameProjectPrefixResponse struct {
+	TicketsUpdated int           `json:"tickets_updated"`
+	Project        store.Project `json:"project"`
+}
+
 type ProjectMemberRequest struct {
 	UserID string `json:"user_id"`
 	Role   string `json:"role"`

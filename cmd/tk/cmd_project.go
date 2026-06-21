@@ -340,6 +340,7 @@ func runProject(args []string) error {
 			idFlag := fs.Int64("id", 0, "")
 			// Absorb all other flags so Parse doesn't fail on them
 			fs.String("title", "", "")
+			fs.String("prefix", "", "")
 			fs.String("description", "", "")
 			fs.String("ac", "", "")
 			fs.String("git-repository", "", "")
@@ -680,6 +681,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		fs.SetOutput(os.Stderr)
 		idFlag := fs.Int64("id", 0, "project ID (overrides positional ID)")
 		title := fs.String("title", "", "project title")
+		prefix := fs.String("prefix", "", "project prefix (re-keys every ticket in the project)")
 		description := fs.String("description", "", "project description")
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
 		wow := fs.String("wow", "", "ways of working")
@@ -704,6 +706,24 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		current, err := svc.GetProject(context.Background(), strconv.FormatInt(projectID, 10))
 		if err != nil {
 			return err
+		}
+		if containsFlag(args[1:], "-prefix") {
+			newPrefix := strings.ToUpper(strings.TrimSpace(*prefix))
+			if newPrefix == "" {
+				return errors.New("project prefix cannot be empty")
+			}
+			if newPrefix != current.Prefix {
+				count, renameErr := svc.RenameProjectPrefix(context.Background(), projectID, newPrefix)
+				if renameErr != nil {
+					return renameErr
+				}
+				fmt.Printf("renamed %s → %s (%d tickets updated)\n", current.Prefix, newPrefix, count)
+				// Reload so subsequent updates and output reflect the new prefix.
+				current, err = svc.GetProject(context.Background(), strconv.FormatInt(projectID, 10))
+				if err != nil {
+					return err
+				}
+			}
 		}
 		nextDescription := current.Description
 		nextAC := current.AcceptanceCriteria

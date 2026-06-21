@@ -4,7 +4,6 @@ package libticket
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/simonski/ticket/internal/client"
 	"github.com/simonski/ticket/internal/config"
@@ -265,7 +264,7 @@ func (s *HTTPService) DeleteProject(ctx context.Context, id int64) error {
 }
 
 func (s *HTTPService) RenameProjectPrefix(ctx context.Context, id int64, newPrefix string) (int, error) {
-	return 0, fmt.Errorf("rename-prefix is not supported in remote mode")
+	return s.client.RenameProjectPrefix(ctx, id, newPrefix)
 }
 
 func (s *HTTPService) SetProjectEnabled(ctx context.Context, id int64, enabled bool) (store.Project, error) {
