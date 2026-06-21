@@ -214,11 +214,8 @@ func runSetTicketClosed(args []string, closed bool) error {
 	if outputJSON {
 		return printJSON(updated)
 	}
-	if closed {
-		fmt.Printf("%s closed\n", updated.ID)
-	} else {
-		fmt.Printf("%s opened\n", updated.ID)
-	}
+	// Keep the confirmation terse (see TK-43): a bare "OK" is enough.
+	fmt.Println("OK")
 	return nil
 }
 

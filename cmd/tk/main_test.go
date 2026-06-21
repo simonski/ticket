@@ -9808,8 +9808,8 @@ func TestRunTicketCloseAndOpen(t *testing.T) {
 			t.Fatalf("close error = %v", err)
 		}
 	})
-	if !strings.Contains(closeOut, "closed") {
-		t.Fatalf("close output should contain 'closed', got:\n%s", closeOut)
+	if strings.TrimSpace(closeOut) != "OK" {
+		t.Fatalf("close output should be the terse 'OK', got:\n%s", closeOut)
 	}
 
 	// Verify it is closed (get should show closed)
@@ -9828,8 +9828,8 @@ func TestRunTicketCloseAndOpen(t *testing.T) {
 			t.Fatalf("open error = %v", err)
 		}
 	})
-	if !strings.Contains(openOut, "opened") {
-		t.Fatalf("open output should contain 'opened', got:\n%s", openOut)
+	if strings.TrimSpace(openOut) != "OK" {
+		t.Fatalf("open output should be the terse 'OK', got:\n%s", openOut)
 	}
 
 	getOut2 := captureStdout(t, func() {
