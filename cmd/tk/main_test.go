@@ -4713,6 +4713,53 @@ func TestRunPullRequestCreateListAndShownInGet(t *testing.T) {
 	}
 }
 
+func TestRunPullRequestListProjectWideWithStatusFilters(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	openTicket := createLocalTask(t, []string{"add", "Open PR ticket"})
+	mergedTicket := createLocalTask(t, []string{"add", "Merged PR ticket"})
+
+	if _, err := svc.CreatePullRequest(context.Background(), libticket.PullRequestRequest{
+		TicketID: openTicket, Repository: "github.com/acme/w", SourceBranch: "f-open",
+	}); err != nil {
+		t.Fatalf("CreatePullRequest(open) error = %v", err)
+	}
+	if _, err := svc.CreatePullRequest(context.Background(), libticket.PullRequestRequest{
+		TicketID: mergedTicket, Repository: "github.com/acme/w", SourceBranch: "f-merged", Status: "merged",
+	}); err != nil {
+		t.Fatalf("CreatePullRequest(merged) error = %v", err)
+	}
+
+	// Project-wide default: open only.
+	defaultOut := captureStdout(t, func() {
+		if err := run([]string{"pr", "ls"}); err != nil {
+			t.Fatalf("pr ls error = %v", err)
+		}
+	})
+	if !strings.Contains(defaultOut, openTicket) || strings.Contains(defaultOut, mergedTicket) {
+		t.Fatalf("pr ls (default) should show only open PRs:\n%s", defaultOut)
+	}
+
+	closedOut := captureStdout(t, func() {
+		if err := run([]string{"pr", "ls", "-closed"}); err != nil {
+			t.Fatalf("pr ls -closed error = %v", err)
+		}
+	})
+	if !strings.Contains(closedOut, mergedTicket) || strings.Contains(closedOut, openTicket) {
+		t.Fatalf("pr ls -closed should show only merged/closed PRs:\n%s", closedOut)
+	}
+
+	allOut := captureStdout(t, func() {
+		if err := run([]string{"pr", "ls", "-all"}); err != nil {
+			t.Fatalf("pr ls -all error = %v", err)
+		}
+	})
+	if !strings.Contains(allOut, openTicket) || !strings.Contains(allOut, mergedTicket) {
+		t.Fatalf("pr ls -all should show every PR:\n%s", allOut)
+	}
+}
+
 func TestRunGetAcceptsPositionalID(t *testing.T) {
 	setupLocalCLI(t)
 	taskID := createLocalTask(t, []string{"add", "Positional ID Get"})

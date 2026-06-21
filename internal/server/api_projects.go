@@ -395,6 +395,38 @@ func (r *router) registerProjectHandlers() {
 			writeJSON(w, http.StatusOK, tasks)
 			return
 		}
+		if len(parts) == 2 && parts[1] == "pull-requests" && r.Method == http.MethodGet {
+			project, err := store.GetProject(r.Context(), db, parts[0])
+			if err != nil {
+				if errors.Is(err, store.ErrProjectNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canReadProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			prs, prErr := store.ListPullRequestsByProject(r.Context(), db, project.ID)
+			if prErr != nil {
+				writeStoreError(w, prErr)
+				return
+			}
+			writeJSON(w, http.StatusOK, prs)
+			return
+		}
 		if len(parts) == 2 && parts[1] == "interventions" && r.Method == http.MethodGet {
 			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
