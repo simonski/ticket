@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -36,8 +37,8 @@ type Server struct {
 	stopOrchestrator chan struct{}
 }
 
-func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string, enableOrchestrator bool) (*Server, error) {
-	handler, err := Handler(db, version, verbose, output, staticPath, siteName)
+func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string, enableOrchestrator bool, accessLog, errorLog io.Writer) (*Server, error) {
+	handler, err := handlerWithPasskeyFactory(db, version, verbose, output, staticPath, siteName, accessLog, errorLog, defaultPasskeyServiceFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -209,10 +210,10 @@ func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
 }
 
 func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string) (http.Handler, error) {
-	return handlerWithPasskeyFactory(db, version, verbose, output, staticPath, siteName, defaultPasskeyServiceFactory)
+	return handlerWithPasskeyFactory(db, version, verbose, output, staticPath, siteName, nil, nil, defaultPasskeyServiceFactory)
 }
 
-func handlerWithPasskeyFactory(db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string, passkeys passkeyServiceFactory) (http.Handler, error) {
+func handlerWithPasskeyFactory(db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string, accessLog, errorLog io.Writer, passkeys passkeyServiceFactory) (http.Handler, error) {
 	var staticFS fs.FS
 	if staticPath != "" {
 		staticFS = os.DirFS(staticPath)
@@ -235,15 +236,21 @@ func handlerWithPasskeyFactory(db *sql.DB, version string, verbose bool, output 
 	handler = csrfMiddleware(handler)
 	handler = writeThrottleMiddleware(handler, db, newRateLimiter(writeRateLimitFromEnv(), time.Minute))
 	handler = requestTimeoutMiddleware(handler, requestTimeoutFromEnv())
-	handler = recoverMiddleware(handler)
+	handler = recoverMiddleware(handler, errorLog)
 	handler = bodySizeLimitHandler(handler)
 	handler = securityHeadersHandler(handler)
-	if verbose {
-		logOutput := output
-		if logOutput == nil {
-			logOutput = os.Stderr
+	// Install request logging when verbose is requested (-> stdout) or when
+	// persistent log files are configured (access.log / error.log on the data
+	// path). This is how 5xx failures become diagnosable in production.
+	if verbose || accessLog != nil || errorLog != nil {
+		stdoutLog := io.Writer(nil)
+		if verbose {
+			stdoutLog = output
+			if stdoutLog == nil {
+				stdoutLog = os.Stderr
+			}
 		}
-		handler = loggingHandler(handler, logOutput)
+		handler = loggingHandler(handler, stdoutLog, accessLog, errorLog)
 	}
 	handler = compressionMiddleware(handler)
 	return handler, nil
@@ -329,11 +336,15 @@ func requestTimeoutMiddleware(next http.Handler, timeout time.Duration) http.Han
 	})
 }
 
-func recoverMiddleware(next http.Handler) http.Handler {
+func recoverMiddleware(next http.Handler, errorLog io.Writer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
 				slog.Error("panic recovered", "error", err)
+				if errorLog != nil {
+					_, _ = fmt.Fprintf(errorLog, "%s ERROR panic recovered %s path=%s error=%v\n%s\n",
+						time.Now().Format(time.RFC3339Nano), r.Method, r.URL.Path, err, debug.Stack())
+				}
 				http.Error(w, "internal server error", http.StatusInternalServerError)
 			}
 		}()
@@ -646,7 +657,11 @@ func compactLogLine(ts time.Time, level, method, path string, status int, durati
 	return b.String()
 }
 
-func loggingHandler(next http.Handler, output io.Writer) http.Handler {
+// loggingHandler logs each /api/ request. stdoutLog (when non-nil) receives
+// every line for verbose console output; accessLog (when non-nil) receives
+// every line persistently; errorLog (when non-nil) additionally receives the
+// lines for 5xx responses so server faults can be diagnosed from the data path.
+func loggingHandler(next http.Handler, stdoutLog, accessLog, errorLog io.Writer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r)
@@ -694,19 +709,26 @@ func loggingHandler(next http.Handler, output io.Writer) http.Handler {
 		if lw.body.Len() > 0 && !sensitiveEndpoint {
 			responseBodyString = loggedBodyString(&lw.body, lw.bodyTruncated)
 		}
-		if output != nil {
-			_, _ = io.WriteString(output, compactLogLine(
-				time.Now(),
-				level,
-				r.Method,
-				r.URL.Path,
-				lw.status,
-				time.Since(start).Milliseconds(),
-				requestID,
-				query,
-				requestBodyString,
-				responseBodyString,
-			))
+		line := compactLogLine(
+			time.Now(),
+			level,
+			r.Method,
+			r.URL.Path,
+			lw.status,
+			time.Since(start).Milliseconds(),
+			requestID,
+			query,
+			requestBodyString,
+			responseBodyString,
+		)
+		if stdoutLog != nil {
+			_, _ = io.WriteString(stdoutLog, line)
+		}
+		if accessLog != nil {
+			_, _ = io.WriteString(accessLog, line)
+		}
+		if errorLog != nil && lw.status >= 500 {
+			_, _ = io.WriteString(errorLog, line)
 		}
 	})
 }

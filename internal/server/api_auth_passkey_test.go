@@ -60,7 +60,7 @@ func testHandlerWithPasskeys(t *testing.T, svc passkey.Service) (http.Handler, *
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
-	handler, err := handlerWithPasskeyFactory(db, "1.2.3", false, nil, "", "", func(*http.Request) (passkey.Service, error) {
+	handler, err := handlerWithPasskeyFactory(db, "1.2.3", false, nil, "", "", nil, nil, func(*http.Request) (passkey.Service, error) {
 		return svc, nil
 	})
 	if err != nil {
