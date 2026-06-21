@@ -1779,8 +1779,7 @@ func (r *router) registerTicketHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				currentTicket, err := store.GetTicket(r.Context(), db, id)
-				if err != nil {
+				if _, err := store.GetTicket(r.Context(), db, id); err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
 						writeError(w, http.StatusNotFound, err.Error())
 						return
@@ -1788,12 +1787,9 @@ func (r *router) registerTicketHandlers() {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
 				}
-				hasChildren, err := ticketHasChildrenForAPI(r.Context(), db, id)
-				if err != nil {
-					writeError(w, http.StatusInternalServerError, err.Error())
-					return
-				}
-				ticketPayload = autoProgressTicketLifecycle(ticketPayload, currentTicket, user.Username, hasChildren)
+				// Content-only updates must not touch lifecycle or ownership (TK-48):
+				// stage/state/assignee change only when explicitly provided, so the
+				// lifecycle is resolved straight from the (explicit) payload fields.
 				stage, state, err := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
 				if err != nil {
 					writeStoreError(w, err)
