@@ -117,6 +117,21 @@ func runLogin(args []string) error {
 			cfg.Token = strings.TrimSpace(remoteCreds.Token)
 		}
 	}
+	// Already-logged-in short-circuit, applied consistently to all three login
+	// modes (password, --passkey, --token): if a valid session token already
+	// exists for this server, report it and exit without re-authenticating.
+	if strings.TrimSpace(cfg.Token) != "" {
+		checkSvc := libticket.NewHTTP(config.Config{Location: serverURL, Token: cfg.Token})
+		if status, statusErr := checkSvc.Status(context.Background()); statusErr == nil && status.Authenticated && status.User != nil {
+			cfg.Username = status.User.Username
+			if outputJSON {
+				return printJSON(status)
+			}
+			fmt.Printf("logged in as %s\n", status.User.Username)
+			return nil
+		}
+	}
+
 	if *passkeyFlag {
 		return runPasskeyLogin(cfg, serverURL, *usernameFlag)
 	}
@@ -132,18 +147,6 @@ func runLogin(args []string) error {
 			return errors.New("invalid token")
 		}
 		return finishLogin(cfg, *status.User, token)
-	}
-
-	if cfg.Token != "" {
-		status, statusErr := svc.Status(context.Background())
-		if statusErr == nil && status.Authenticated && status.User != nil {
-			cfg.Username = status.User.Username
-			if outputJSON {
-				return printJSON(status)
-			}
-			fmt.Printf("logged in as %s\n", status.User.Username)
-			return nil
-		}
 	}
 
 	username := resolveLoginUsername(cfg.Username, *usernameFlag)

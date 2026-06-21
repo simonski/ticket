@@ -1877,6 +1877,88 @@ func TestRunLoginWithPasskey(t *testing.T) {
 	}
 }
 
+func TestRunLoginPasskeyShortCircuitsWhenAlreadyLoggedIn(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	var passkeyStartCalls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/status":
+			if r.Header.Get("Authorization") != "Bearer stored-token" {
+				t.Fatalf("status auth header = %q", r.Header.Get("Authorization"))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"user":{"username":"alice","role":"user"}}`))
+		case "/api/auth/passkey/login/start":
+			atomic.AddInt32(&passkeyStartCalls, 1)
+			t.Fatal("passkey flow must not start when a valid session already exists")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	if err := config.SaveRemoteCredentials(server.URL, "alice", "stored-token"); err != nil {
+		t.Fatalf("SaveRemoteCredentials() error = %v", err)
+	}
+	setTestLocation(t, server.URL)
+	t.Setenv("TICKET_URL", server.URL)
+
+	oldOpener := passkeyBrowserOpener
+	passkeyBrowserOpener = func(string) error {
+		t.Fatal("browser must not open when already logged in")
+		return nil
+	}
+	t.Cleanup(func() { passkeyBrowserOpener = oldOpener })
+
+	output := captureStdout(t, func() {
+		if err := runLogin([]string{"--passkey"}); err != nil {
+			t.Fatalf("runLogin(--passkey) error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "logged in as alice") {
+		t.Fatalf("runLogin(--passkey) output = %q", output)
+	}
+	if atomic.LoadInt32(&passkeyStartCalls) != 0 {
+		t.Fatalf("passkey start called %d times, want 0", passkeyStartCalls)
+	}
+}
+
+func TestRunLoginTokenShortCircuitsWhenAlreadyLoggedIn(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/status":
+			// The already-logged-in check must use the STORED token; the supplied
+			// -token value must never reach the server.
+			if r.Header.Get("Authorization") != "Bearer stored-token" {
+				t.Fatalf("status auth header = %q, want stored token", r.Header.Get("Authorization"))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"user":{"username":"alice","role":"user"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	if err := config.SaveRemoteCredentials(server.URL, "alice", "stored-token"); err != nil {
+		t.Fatalf("SaveRemoteCredentials() error = %v", err)
+	}
+	setTestLocation(t, server.URL)
+	t.Setenv("TICKET_URL", server.URL)
+
+	output := captureStdout(t, func() {
+		if err := runLogin([]string{"-token", "some-other-token"}); err != nil {
+			t.Fatalf("runLogin(-token) error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "logged in as alice") {
+		t.Fatalf("runLogin(-token) output = %q", output)
+	}
+}
+
 func TestRunUserPasskeyEnroll(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
