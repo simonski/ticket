@@ -2,7 +2,7 @@
 name: tk
 description: Use this skill for ticket/project workflow operations in repositories using the `tk` CLI.
 metadata:
-  version: 0.0.3
+  version: 0.0.4
 ---
 
 # tk Skill
@@ -35,26 +35,30 @@ tk prompt N                       # load the full SDLC / project execution conte
 tk claim N                        # self-assign
 tk ready N                        # publish if it is still a draft
 tk active N -m "starting: <one-line plan>"   # mark active AND record your plan
+
+# Branch per ticket — NEVER commit to main.
+git checkout main
+git pull --rebase
+git checkout -b feature/TK-N-short-slug       # ticket id in the branch name
 ```
 
 If `tk get N` shows the ticket is already done, blocked on an unmet dependency, or otherwise not ready, stop: `tk comment N "..."` with what blocks it and ask for human input.
 
-Use the ticket to decide which git branch to work in. If it does not say, follow the SDLC rules and include the ticket ID in the branch name, e.g. `feature/TK-42`.
-
-Work on a branch `feature/TICKET` where TICKET is the id, e.g. TK-42
-
-Feel free to commit and push on this branch but NOT on main.
+If the ticket names a specific branch, use that; otherwise use `feature/TK-N-...` with the ticket id in the name.
 
 ### 2. Working — while you implement
 
-Pair each meaningful change with a ticket update. After a notable commit, decision, or sub-task:
+Pair each meaningful change with a ticket update and a git commit on the branch:
 
 ```bash
 tk stage N develop -m "implementation underway: <what you are building>"
+# ... write and test the code (red → green) ...
+git add -A
+git commit -m "TK-N: <what changed>"
 tk comment N "<what you just did, decided, or discovered>"
 ```
 
-Comment again whenever you change direction, hit a surprise, or finish a sub-part. Several small comments during the work are expected and correct.
+Comment again whenever you change direction, hit a surprise, or finish a sub-part. Several small commits and comments during the work are expected and correct.
 
 ### 3. Testing — while you verify
 
@@ -71,12 +75,23 @@ tk fail N    -m "blocked: <reason>"                  # you cannot make it pass
 
 ### 4. Complete — when the work is truly done
 
+Push the branch, open a PR, then finish the ticket:
+
 ```bash
-tk complete N -m "done: <summary of change>, tests + lint green"   # stage=done, complete=true
-tk close N                                                          # close when fully wrapped up
+git push -u origin feature/TK-N-short-slug
+gh pr create --title "TK-N: <title>" --body "...refs TK-N..."   # this repo merges via rebase
+tk complete N -m "done: <summary>, tests + lint green, PR #NN"   # stage=done, complete=true
+tk comment N "PR: <url>"
 ```
 
-`tk complete` finishes the ticket (sets stage `done`, `complete=true`) in one step. Do not leave finished work sitting in `active`.
+After the PR is merged, sync and delete the branch:
+
+```bash
+git checkout main && git pull --rebase
+git branch -d feature/TK-N-short-slug
+```
+
+`tk complete` finishes the ticket (stage `done`, `complete=true`) in one step. Do not leave finished work sitting in `active`, and never commit directly to `main` — every change lands via its per-ticket branch and PR.
 
 ## Lifecycle command reference
 
