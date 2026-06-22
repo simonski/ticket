@@ -2535,6 +2535,8 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 		{label: "Priority", value: "1"},
 		{label: "Created", value: "2026-03-01 12:00:00"},
 		{label: "LastModified", value: "2026-03-02 09:30:00"},
+		{label: "Branch from", value: "main"},
+		{label: "Branch to", value: "feature/TK-42"},
 	} {
 		if !hasDetailField(output, tc.label, tc.value) {
 			t.Fatalf("printTicketDetails() missing %s field:\n%s", tc.label, output)
@@ -3351,6 +3353,12 @@ func TestRunPromptBuildsPlaintextSections(t *testing.T) {
 		"STAGE",
 		"Definition of Ready: Stage acceptance criteria",
 		"Acceptance Criteria: Stage acceptance criteria",
+		"VCS",
+		"Branch to take from (base): main",
+		"Branch to commit to (work): feature/" + taskID,
+		"EXECUTION STEPS",
+		"Run the tests",
+		"push feature/" + taskID,
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("prompt output missing %q:\n%s", want, output)

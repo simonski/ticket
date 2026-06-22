@@ -460,6 +460,15 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 		ticketField{label: "LastModified", value: ticket.UpdatedAt},
 		ticketField{label: "Acceptance Criteria", value: ticket.AcceptanceCriteria},
 	)
+	// VCS context so the ticket reads as an executable prompt (TK-65).
+	repo, baseBranch, workBranch := resolveTicketVCS(ticket, "")
+	if strings.TrimSpace(ticket.GitRepository) != "" {
+		fields = append(fields, ticketField{label: "Repository", value: repo})
+	}
+	fields = append(fields,
+		ticketField{label: "Branch from", value: baseBranch},
+		ticketField{label: "Branch to", value: workBranch},
+	)
 	maxLabelWidth := 0
 	for _, field := range fields {
 		if len(field.label) > maxLabelWidth {
