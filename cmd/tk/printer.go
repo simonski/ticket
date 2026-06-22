@@ -863,6 +863,24 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 
 	showOpen := includeArchived   // only show OPEN column when mixed open/closed
 	showPR := len(prByTicket) > 0 // only show PR column when some ticket has a PR
+	// Show an "ACTIVE" (in-progress-for) column when any listed ticket is active
+	// with a recorded start time (TK-89, reads started_at from TK-88).
+	showActive := false
+	for _, t := range tickets {
+		if strings.EqualFold(strings.TrimSpace(t.State), store.StateActive) && strings.TrimSpace(t.StartedAt) != "" {
+			showActive = true
+			break
+		}
+	}
+	activeFor := func(t store.Ticket) string {
+		if !strings.EqualFold(strings.TrimSpace(t.State), store.StateActive) {
+			return "-"
+		}
+		if elapsed := humanizeSince(t.StartedAt); elapsed != "" {
+			return elapsed
+		}
+		return "-"
+	}
 
 	makeHeader := func() string {
 		cols := "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tDRAFT"
@@ -870,6 +888,9 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 			cols += "\tCOMPLETE"
 		}
 		cols += "\tASSIGNEE"
+		if showActive {
+			cols += "\tACTIVE"
+		}
 		if showPR {
 			cols += "\tPR"
 		}
@@ -911,6 +932,9 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 			row += "\t" + ticketCompleteLabel(t)
 		}
 		row += "\t" + assignee
+		if showActive {
+			row += "\t" + activeFor(t)
+		}
 		if showPR {
 			pr := "-"
 			if v := strings.TrimSpace(prByTicket[t.ID]); v != "" {

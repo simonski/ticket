@@ -2287,6 +2287,30 @@ func TestRunListShowsPullRequestColumn(t *testing.T) {
 	}
 }
 
+func TestRunListShowsActiveForColumn(t *testing.T) {
+	setupLocalCLI(t)
+
+	id := createLocalTask(t, []string{"add", "Work in progress"})
+	if err := run([]string{"claim", "-id", id}); err != nil {
+		t.Fatalf("claim error = %v", err)
+	}
+	if err := run([]string{"active", "-id", id}); err != nil {
+		t.Fatalf("active error = %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := run([]string{"ls", "-nocolor"}); err != nil {
+			t.Fatalf("ls error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "ACTIVE") {
+		t.Fatalf("ls output missing ACTIVE column header:\n%s", out)
+	}
+	if !strings.Contains(out, "just now") {
+		t.Fatalf("ls output missing elapsed time for active ticket:\n%s", out)
+	}
+}
+
 func TestRunListShowsActiveTicketsFirstWithSeparator(t *testing.T) {
 	setupLocalCLI(t)
 
