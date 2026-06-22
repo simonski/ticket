@@ -1146,7 +1146,7 @@ Outcomes:
 ## Schema evolution (extensible attributes)
 
 Schema change in `tk` is governed by a three-tier model (epic TK-105): typed
-first-class columns for queried/constrained data, a per-entity `attrs` JSONB
+first-class columns for queried/constrained data, a per-entity `attrs` JSON (TEXT)
 attribute bag as the default home for new optional/sparse/per-type fields (added
 in Go with no migration), and promotion of bag fields to expression indexes when
 they need to be queried. Migrations take a WAL-checkpointed, integrity-verified

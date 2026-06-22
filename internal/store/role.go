@@ -19,6 +19,7 @@ type Role struct {
 	ACMap              GuidanceMap `json:"ac_map,omitempty"`
 	CreatedAt          string      `json:"created_at"`
 	UpdatedAt          string      `json:"updated_at"`
+	Attrs              Attrs       `json:"attrs,omitempty"`
 }
 
 type RoleCreateParams struct {
@@ -30,6 +31,7 @@ type RoleCreateParams struct {
 	DORMap             GuidanceMap
 	DODMap             GuidanceMap
 	ACMap              GuidanceMap
+	Attrs              Attrs
 }
 
 type RoleUpdateParams struct {
@@ -39,6 +41,7 @@ type RoleUpdateParams struct {
 	DORMap             GuidanceMap
 	DODMap             GuidanceMap
 	ACMap              GuidanceMap
+	Attrs              Attrs // nil = preserve existing attrs; non-nil = replace the bag
 }
 
 func (r Role) ResolveGuidance(stage string) ResolvedGuidance {
@@ -80,15 +83,19 @@ func CreateRoleWithParams(ctx context.Context, db *sql.DB, params RoleCreatePara
 	if acceptanceCriteria == "" && acMap != nil {
 		acceptanceCriteria = acMap[DefaultGuidanceStageKey]
 	}
+	attrsJSON, err := marshalAttrs(params.Attrs)
+	if err != nil {
+		return Role{}, err
+	}
 	query := `
-		INSERT INTO roles (workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO roles (workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, attrs, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`
-	args := []any{nullableInt64(params.WorkflowID), title, strings.TrimSpace(params.Description), acceptanceCriteria, dorJSON, dodJSON, acJSON}
+	args := []any{nullableInt64(params.WorkflowID), title, strings.TrimSpace(params.Description), acceptanceCriteria, dorJSON, dodJSON, acJSON, attrsJSON}
 	if hasExplicitID {
 		query = `
-			INSERT INTO roles (role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			INSERT INTO roles (role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, attrs, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		`
 		args = append([]any{explicitID}, args...)
 	}
@@ -110,10 +117,15 @@ func scanRoleValues(scan func(dest ...any) error) (Role, error) {
 	var role Role
 	var workflowID sql.NullInt64
 	var dorJSON, dodJSON, acJSON string
-	if err := scan(&role.ID, &workflowID, &role.Title, &role.Description, &role.AcceptanceCriteria, &dorJSON, &dodJSON, &acJSON, &role.CreatedAt, &role.UpdatedAt); err != nil {
+	var attrsJSON sql.NullString
+	if err := scan(&role.ID, &workflowID, &role.Title, &role.Description, &role.AcceptanceCriteria, &dorJSON, &dodJSON, &acJSON, &role.CreatedAt, &role.UpdatedAt, &attrsJSON); err != nil {
 		return Role{}, err
 	}
 	var err error
+	role.Attrs, err = parseAttrs(attrsJSON.String)
+	if err != nil {
+		return Role{}, err
+	}
 	role.DORMap, err = parseGuidanceMap(dorJSON)
 	if err != nil {
 		return Role{}, err
@@ -186,11 +198,19 @@ func UpdateRoleWithParams(ctx context.Context, db *sql.DB, id int64, params Role
 	if err != nil {
 		return Role{}, err
 	}
+	attrsToWrite := current.Attrs
+	if params.Attrs != nil {
+		attrsToWrite = params.Attrs
+	}
+	attrsJSON, err := marshalAttrs(attrsToWrite)
+	if err != nil {
+		return Role{}, err
+	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE roles
-		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, attrs = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE role_id = ?
-	`, title, description, acceptanceCriteria, dorJSON, dodJSON, acJSON, id)
+	`, title, description, acceptanceCriteria, dorJSON, dodJSON, acJSON, attrsJSON, id)
 	if err != nil {
 		return Role{}, err
 	}
@@ -209,7 +229,7 @@ func ListRoles(ctx context.Context, db *sql.DB, limit int) ([]Role, error) {
 		limit = 1000
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, created_at, updated_at
+		SELECT role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, created_at, updated_at, attrs
 		FROM roles
 		ORDER BY title
 		LIMIT ?
@@ -223,7 +243,7 @@ func ListRoles(ctx context.Context, db *sql.DB, limit int) ([]Role, error) {
 
 func ListRolesByWorkflow(ctx context.Context, db *sql.DB, workflowID int64) ([]Role, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, created_at, updated_at
+		SELECT role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, created_at, updated_at, attrs
 		FROM roles
 		WHERE workflow_id = ?
 		ORDER BY title
@@ -249,7 +269,7 @@ func scanRoles(rows *sql.Rows) ([]Role, error) {
 
 func GetRoleByID(ctx context.Context, db *sql.DB, id int64) (Role, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, created_at, updated_at
+		SELECT role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, created_at, updated_at, attrs
 		FROM roles
 		WHERE role_id = ?
 	`, id)
@@ -258,7 +278,7 @@ func GetRoleByID(ctx context.Context, db *sql.DB, id int64) (Role, error) {
 
 func GetRoleByTitle(ctx context.Context, db *sql.DB, title string) (Role, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, created_at, updated_at
+		SELECT role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, created_at, updated_at, attrs
 		FROM roles
 		WHERE title = ?
 	`, strings.TrimSpace(title))
@@ -267,7 +287,7 @@ func GetRoleByTitle(ctx context.Context, db *sql.DB, title string) (Role, error)
 
 func getRoleByTitleTx(ctx context.Context, tx *sql.Tx, title string) (Role, error) {
 	row := tx.QueryRowContext(ctx, `
-		SELECT role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, created_at, updated_at
+		SELECT role_id, workflow_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, created_at, updated_at, attrs
 		FROM roles
 		WHERE title = ?
 	`, strings.TrimSpace(title))
@@ -336,7 +356,7 @@ func ReorderWorkflowStageRoles(ctx context.Context, db *sql.DB, workflowID, stag
 
 func ListWorkflowStageRoles(ctx context.Context, db *sql.DB, workflowID, stageID int64) ([]Role, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT r.role_id, r.workflow_id, r.title, r.description, r.acceptance_criteria, r.dor_map, r.dod_map, r.ac_map, r.created_at, r.updated_at
+		SELECT r.role_id, r.workflow_id, r.title, r.description, r.acceptance_criteria, r.dor_map, r.dod_map, r.ac_map, r.created_at, r.updated_at, r.attrs
 		FROM workflow_stage_roles sr
 		JOIN roles r ON r.role_id = sr.role_id
 		WHERE sr.workflow_id = ? AND sr.stage_id = ?

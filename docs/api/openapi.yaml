@@ -252,6 +252,12 @@ components:
         updated_at:
           type: string
           format: date-time
+        attrs:
+          type: object
+          additionalProperties: true
+          description: >-
+            Extensible attribute bag (epic TK-105). Optional/sparse fields stored
+            without a schema migration. Omitting attrs on update preserves it.
 
     PullRequest:
       type: object
@@ -493,6 +499,13 @@ components:
         started_at:
           type: string
           description: When the ticket last entered the active state (in-progress since).
+        attrs:
+          type: object
+          additionalProperties: true
+          description: >-
+            Extensible attribute bag (epic TK-105). Home for optional, sparse,
+            display-only and per-type fields; new fields are added without a schema
+            migration. On update, omitting attrs preserves the existing bag.
 
     ResolvedGuidance:
       type: object
@@ -697,6 +710,12 @@ components:
         updated_at:
           type: string
           format: date-time
+        attrs:
+          type: object
+          additionalProperties: true
+          description: >-
+            Extensible attribute bag (epic TK-105). Set via the stage attrs setter;
+            preserved across normal stage updates.
 
     InterventionState:
       type: object
@@ -948,6 +967,12 @@ components:
         updated_at:
           type: string
           format: date-time
+        attrs:
+          type: object
+          additionalProperties: true
+          description: >-
+            Extensible attribute bag (epic TK-105). Optional/sparse fields stored
+            without a schema migration. Omitting attrs on update preserves it.
 
     Label:
       type: object

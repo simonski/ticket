@@ -1125,7 +1125,7 @@ This example is intentionally small, but it shows the principle:
 > decision record: `docs/adr/0001-json-attribute-bags.md`.
 
 To lower the likelihood and blast radius of schema change, the high-churn
-entities (TICKET, PROJECT, ROLE, STAGE) each carry an `attrs` **JSONB** column —
+entities (TICKET, PROJECT, ROLE, STAGE) each carry an `attrs` **JSON (TEXT)** column —
 a governed attribute bag. Fields are classified into three tiers:
 
 1. **Tier 1 — first-class columns.** Anything needing a foreign key, `NOT NULL`,

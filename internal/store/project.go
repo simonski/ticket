@@ -44,6 +44,7 @@ type Project struct {
 	AgentModelURL      string      `json:"agent_model_url"`
 	AgentModelAPIKey   string      `json:"agent_model_api_key"`
 	ProgrammeID        *int64      `json:"programme_id"`
+	Attrs              Attrs       `json:"attrs,omitempty"`
 }
 
 func (p Project) ResolveGuidance(stage string) ResolvedGuidance {
@@ -69,6 +70,7 @@ type ProjectCreateParams struct {
 	AgentModelName     string
 	AgentModelURL      string
 	AgentModelAPIKey   string
+	Attrs              Attrs
 }
 
 type ProjectUpdateParams struct {
@@ -88,6 +90,7 @@ type ProjectUpdateParams struct {
 	AgentModelName     string
 	AgentModelURL      string
 	AgentModelAPIKey   string
+	Attrs              Attrs // nil = preserve existing attrs; non-nil = replace the bag
 }
 
 func CreateProject(ctx context.Context, db *sql.DB, title, description, acceptanceCriteria, createdBy string) (Project, error) {
@@ -152,19 +155,24 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 	if acceptanceCriteria == "" && acMap != nil {
 		acceptanceCriteria = acMap[DefaultGuidanceStageKey]
 	}
+	attrsJSON, err := marshalAttrs(params.Attrs)
+	if err != nil {
+		return Project{}, err
+	}
 	query := `
-		INSERT INTO projects (prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, created_by, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO projects (prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, created_by, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, attrs)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	args := []any{
 		uniquePrefix, title, strings.TrimSpace(params.Description), acceptanceCriteria, dorJSON, dodJSON, acJSON,
 		strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.Notes), visibility, nullableUserID(params.CreatedBy), workflowID,
 		strings.TrimSpace(params.AgentModelProvider), strings.TrimSpace(params.AgentModelName), strings.TrimSpace(params.AgentModelURL), strings.TrimSpace(params.AgentModelAPIKey),
+		attrsJSON,
 	}
 	if hasExplicitID {
 		query = `
-			INSERT INTO projects (project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, created_by, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO projects (project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, created_by, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, attrs)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)
 		`
 		args = append([]any{explicitID}, args...)
 	}
@@ -200,16 +208,21 @@ func scanProject(s scanner) (Project, error) {
 	var workflowID sql.NullInt64
 	var programmeID sql.NullInt64
 	var dorJSON, dodJSON, acJSON string
+	var attrsJSON sql.NullString
 	if err := s.Scan(
 		&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria,
 		&dorJSON, &dodJSON, &acJSON, &project.GitRepository, &project.Notes, &project.Status, &project.Visibility,
 		&project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &workflowID,
 		&project.AgentModelProvider, &project.AgentModelName, &project.AgentModelURL, &project.AgentModelAPIKey,
-		&programmeID,
+		&programmeID, &attrsJSON,
 	); err != nil {
 		return Project{}, err
 	}
 	var err error
+	project.Attrs, err = parseAttrs(attrsJSON.String)
+	if err != nil {
+		return Project{}, err
+	}
 	project.DORMap, err = parseGuidanceMap(dorJSON)
 	if err != nil {
 		return Project{}, err
@@ -240,7 +253,7 @@ func ListProjects(ctx context.Context, db *sql.DB, limit int) ([]Project, error)
 		limit = 1000
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id, attrs
 		FROM projects
 		ORDER BY created_at, project_id
 		LIMIT ?
@@ -289,7 +302,7 @@ func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Pr
 			FROM teams parent
 			JOIN team_scope ts ON ts.parent_team_id = parent.team_id
 		)
-		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.agent_model_provider, p.agent_model_name, p.agent_model_url, p.agent_model_api_key, p.programme_id
+		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.agent_model_provider, p.agent_model_name, p.agent_model_url, p.agent_model_api_key, p.programme_id, p.attrs
 		FROM projects p
 		LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = ?
 		LEFT JOIN project_teams pt ON pt.project_id = p.project_id
@@ -335,7 +348,7 @@ func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) 
 		return GetProjectByID(ctx, db, id)
 	}
 	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id, attrs
 		FROM projects
 		WHERE prefix = ?
 	`, strings.ToUpper(rawID))
@@ -358,7 +371,7 @@ func GetProjectByID(ctx context.Context, db *sql.DB, id int64) (Project, error) 
 		return Project{}, err
 	}
 	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id, attrs
 		FROM projects
 		WHERE project_id = ?
 	`, id)
@@ -388,7 +401,7 @@ func GetProjectByGitRepository(ctx context.Context, db *sql.DB, gitRepository st
 		return Project{}, err
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.agent_model_provider, p.agent_model_name, p.agent_model_url, p.agent_model_api_key, p.programme_id,
+		SELECT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.agent_model_provider, p.agent_model_name, p.agent_model_url, p.agent_model_api_key, p.programme_id, p.attrs,
 		       r.repository
 		FROM projects p
 		JOIN project_git_repositories r ON r.project_id = p.project_id
@@ -449,17 +462,22 @@ func scanProjectWithWorkflowIDAndRepository(s scanner) (projectWithRepository, e
 	var workflowID sql.NullInt64
 	var programmeID sql.NullInt64
 	var dorJSON, dodJSON, acJSON string
+	var attrsJSON sql.NullString
 	if err := s.Scan(
 		&result.project.ID, &result.project.Prefix, &result.project.Title, &result.project.Description, &result.project.AcceptanceCriteria,
 		&dorJSON, &dodJSON, &acJSON, &result.project.GitRepository, &result.project.Notes, &result.project.Status, &result.project.Visibility,
 		&result.project.DefaultDraft, &result.project.CreatedBy, &result.project.CreatedAt, &result.project.UpdatedAt, &workflowID,
 		&result.project.AgentModelProvider, &result.project.AgentModelName, &result.project.AgentModelURL, &result.project.AgentModelAPIKey,
-		&programmeID,
+		&programmeID, &attrsJSON,
 		&result.repository,
 	); err != nil {
 		return projectWithRepository{}, err
 	}
 	var err error
+	result.project.Attrs, err = parseAttrs(attrsJSON.String)
+	if err != nil {
+		return projectWithRepository{}, err
+	}
 	result.project.DORMap, err = parseGuidanceMap(dorJSON)
 	if err != nil {
 		return projectWithRepository{}, err
@@ -578,11 +596,19 @@ func UpdateProjectWithParams(ctx context.Context, db *sql.DB, id int64, params P
 	if err != nil {
 		return Project{}, err
 	}
+	attrsToWrite := current.Attrs
+	if params.Attrs != nil {
+		attrsToWrite = params.Attrs
+	}
+	attrsJSON, err := marshalAttrs(attrsToWrite)
+	if err != nil {
+		return Project{}, err
+	}
 	_, err = db.ExecContext(ctx, `
 		UPDATE projects
-		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, notes = ?, status = ?, visibility = ?, workflow_id = ?, agent_model_provider = ?, agent_model_name = ?, agent_model_url = ?, agent_model_api_key = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, notes = ?, status = ?, visibility = ?, workflow_id = ?, agent_model_provider = ?, agent_model_name = ?, agent_model_url = ?, agent_model_api_key = ?, attrs = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE project_id = ?
-	`, nextTitle, nextDescription, nextAC, dorJSON, dodJSON, acJSON, nextRepo, nextNotes, nextStatus, nextVisibility, nextWorkflowID, nextAgentModelProvider, nextAgentModelName, nextAgentModelURL, nextAgentModelAPIKey, id)
+	`, nextTitle, nextDescription, nextAC, dorJSON, dodJSON, acJSON, nextRepo, nextNotes, nextStatus, nextVisibility, nextWorkflowID, nextAgentModelProvider, nextAgentModelName, nextAgentModelURL, nextAgentModelAPIKey, attrsJSON, id)
 	if err != nil {
 		return Project{}, err
 	}
@@ -612,7 +638,7 @@ func validProjectVisibility(visibility string) bool {
 
 func getProjectByTitle(ctx context.Context, db *sql.DB, title string) (Project, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key, programme_id, attrs
 		FROM projects
 		WHERE LOWER(title) = LOWER(?)
 		ORDER BY project_id

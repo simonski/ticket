@@ -76,6 +76,7 @@ type projectRequest struct {
 	AgentModelName     string            `json:"agent_model_name"`
 	AgentModelURL      string            `json:"agent_model_url"`
 	AgentModelAPIKey   string            `json:"agent_model_api_key"`
+	Attrs              store.Attrs       `json:"attrs,omitempty"`
 }
 
 type pullRequestRequest struct {
@@ -103,6 +104,7 @@ type roleRequest struct {
 	DORMap             store.GuidanceMap `json:"dor_map,omitempty"`
 	DODMap             store.GuidanceMap `json:"dod_map,omitempty"`
 	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
+	Attrs              store.Attrs       `json:"attrs,omitempty"`
 }
 
 type agentModelConfigRequest struct {
@@ -196,6 +198,7 @@ type ticketRequest struct {
 	EstimateEffort     int               `json:"estimate_effort"`
 	EstimateComplete   string            `json:"estimate_complete,omitempty"`
 	Assignee           string            `json:"assignee"`
+	Attrs              store.Attrs       `json:"attrs,omitempty"`
 	Message            string            `json:"message,omitempty"`
 }
 
