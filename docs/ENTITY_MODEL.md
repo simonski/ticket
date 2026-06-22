@@ -1116,3 +1116,27 @@ This example is intentionally small, but it shows the principle:
 
 > `tk prompt <id>` is where the entity model becomes operational by turning
 > project + lineage + workflow + guidance into one coherent work brief.
+
+---
+
+## Extensible attributes (`attrs` JSON bag)
+
+> Added by epic TK-105. Full design: `docs/design/extensible-schema.md`;
+> decision record: `docs/adr/0001-json-attribute-bags.md`.
+
+To lower the likelihood and blast radius of schema change, the high-churn
+entities (TICKET, PROJECT, ROLE, STAGE) each carry an `attrs` **JSONB** column —
+a governed attribute bag. Fields are classified into three tiers:
+
+1. **Tier 1 — first-class columns.** Anything needing a foreign key, `NOT NULL`,
+   a hot-path `WHERE`/`ORDER BY`, or aggregation. Unchanged.
+2. **Tier 2 — the `attrs` bag.** The default home for optional, sparse,
+   display-only, and per-type fields. Adding a Tier-2 field is a pure-Go change
+   to a typed accessor struct — **no SQL migration, no schema-version bump**.
+3. **Tier 3 — promotion.** A bag field that needs to be queried is promoted via
+   an idempotent expression index (`json_extract(attrs,'$.field')`) or, rarely, a
+   generated column.
+
+This means the *default* way to add a field no longer changes the schema. See the
+design document for the per-column classification of which existing fields are
+kept as columns, folded into the bag, or moved.

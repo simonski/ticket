@@ -1495,3 +1495,11 @@ Tests must cover:
 - Export/import round-trip fidelity
 - Context graph: edge CRUD, node validation, graph assembly, and text search
 - Decomposition reordering: permutation validation and persisted child order
+
+## Extensible attributes (`attrs`)
+
+High-churn entities (tickets, projects, roles, workflow_stages) carry an `attrs`
+JSONB column — a governed attribute bag for optional, sparse, display-only and
+per-type fields. New Tier-2 fields are added without a schema migration or
+version bump; fields are promoted to expression indexes (`json_extract`) when
+they must be queried. Authoritative design: `docs/design/extensible-schema.md`.
