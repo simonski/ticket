@@ -57,7 +57,7 @@ func runUpgradeDatabase(args []string) error {
 	fs := flag.NewFlagSet("upgrade-database", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	dbPath := fs.String("f", "", "SQLite database file (default: resolved/local database)")
-	noBackup := fs.Bool("no-backup", false, "skip the safety backup taken before upgrading")
+	noBackup := fs.Bool("no-backup", false, "do not retain the verified pre-upgrade backup on success (a backup is always taken and used for rollback)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -85,22 +85,28 @@ func runUpgradeDatabase(args []string) error {
 		return fmt.Errorf("database not found at %s: %w", path, err)
 	}
 
-	if !*noBackup {
-		backup := fmt.Sprintf("%s.bak-%s", path, time.Now().Format("20060102-150405"))
-		if err := store.BackupDatabase(path, backup); err != nil {
-			return fmt.Errorf("backup failed: %w", err)
-		}
-		fmt.Printf("backup written: %s\n", backup)
-	}
-
-	from, err := store.UpgradeInPlace(context.Background(), path)
+	// The upgrade always takes a WAL-checkpointed, integrity-verified backup
+	// internally and rolls back from it if the migration fails, so a safety
+	// backup can no longer be skipped. The -no-backup flag is retained for
+	// compatibility and now only suppresses retention of that backup on success.
+	res, err := store.UpgradeInPlaceWithBackup(context.Background(), path)
 	if err != nil {
 		return err
 	}
-	if from == store.CurrentSchemaVersion {
+	if res.BackupPath != "" {
+		if *noBackup {
+			_ = os.Remove(res.BackupPath)
+			for _, suffix := range []string{"-wal", "-shm"} {
+				_ = os.Remove(res.BackupPath + suffix)
+			}
+		} else {
+			fmt.Printf("backup written: %s\n", res.BackupPath)
+		}
+	}
+	if res.From == store.CurrentSchemaVersion {
 		fmt.Printf("upgraded %s in place (schema version %d; re-applied pending column migrations)\n", path, store.CurrentSchemaVersion)
 	} else {
-		fmt.Printf("upgraded %s in place (schema version %d -> %d)\n", path, from, store.CurrentSchemaVersion)
+		fmt.Printf("upgraded %s in place (schema version %d -> %d)\n", path, res.From, res.To)
 	}
 	fmt.Println("restart the tk server to pick up the upgraded database")
 	return nil

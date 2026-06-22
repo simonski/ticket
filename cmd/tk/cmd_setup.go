@@ -821,15 +821,13 @@ func autoUpgradeDatabase(dbPath string) error {
 	if version >= store.CurrentSchemaVersion {
 		return nil
 	}
-	backup := fmt.Sprintf("%s.bak-%s", dbPath, time.Now().Format("20060102-150405"))
-	if backupErr := store.BackupDatabase(dbPath, backup); backupErr != nil {
-		return fmt.Errorf("pre-upgrade backup failed: %w", backupErr)
-	}
-	from, upErr := store.UpgradeInPlace(context.Background(), dbPath)
+	// UpgradeInPlaceWithBackup takes a WAL-checkpointed, integrity-verified backup
+	// before mutating the database and rolls back automatically on failure.
+	res, upErr := store.UpgradeInPlaceWithBackup(context.Background(), dbPath)
 	if upErr != nil {
 		return fmt.Errorf("database upgrade failed: %w", upErr)
 	}
-	fmt.Printf("auto-upgraded database %s (schema version %d -> %d); backup: %s\n", dbPath, from, store.CurrentSchemaVersion, backup)
+	fmt.Printf("auto-upgraded database %s (schema version %d -> %d); backup: %s\n", dbPath, res.From, res.To, res.BackupPath)
 	return nil
 }
 
