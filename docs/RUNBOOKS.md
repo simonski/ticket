@@ -193,6 +193,39 @@ tk project ls
 > **Note:** `tk import` replaces the local database contents with the snapshot
 > in the file you pass via `-i`.
 
+### Pre-upgrade backups and automatic rollback
+
+Schema upgrades (`tk admin upgrade-database` and the automatic upgrade the server
+performs on startup) are self-protecting:
+
+1. The write-ahead log is checkpointed and the database file (plus `-wal`/`-shm`
+   sidecars) is copied to a timestamped backup next to it:
+   `ticket.db.bak-YYYYMMDD-HHMMSS.nnnnnnnnn`.
+2. That backup is verified (`PRAGMA integrity_check` + schema-version read)
+   **before** the live database is touched. If verification fails, the upgrade
+   aborts without modifying the database.
+3. If the migration fails partway, the database is automatically restored from the
+   verified backup and a clear error is returned — the original database is left
+   intact.
+4. On success, backups older than the most recent `5` (`DefaultBackupRetention`)
+   are pruned.
+
+To restore manually from a pre-upgrade backup (e.g. if both migration and the
+automatic rollback failed, which the error message will tell you):
+
+```bash
+# Stop the server first, then for database ticket.db and backup suffix <STAMP>:
+rm -f ticket.db ticket.db-wal ticket.db-shm
+cp ticket.db.bak-<STAMP> ticket.db
+# copy sidecars too if present
+[ -f ticket.db.bak-<STAMP>-wal ] && cp ticket.db.bak-<STAMP>-wal ticket.db-wal
+[ -f ticket.db.bak-<STAMP>-shm ] && cp ticket.db.bak-<STAMP>-shm ticket.db-shm
+```
+
+`tk admin upgrade-database -no-backup` does not skip this safety backup (it is
+always taken and used for rollback); it only declines to *retain* the backup
+after a successful upgrade.
+
 ### Client/server restore checklist
 
 1. Stop any running `tk server` process pointed at the same local database.

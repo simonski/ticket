@@ -8,8 +8,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -17,6 +19,9 @@ const (
 	CurrentSchemaVersion = 10
 	schemaMetaTable      = "schema_meta"
 	schemaVersionKey     = "schema_version"
+	// DefaultBackupRetention is the number of timestamped pre-upgrade backups
+	// kept alongside a database; older ones are pruned after a successful upgrade.
+	DefaultBackupRetention = 5
 )
 
 type SchemaVersionError struct {
@@ -229,9 +234,58 @@ func UpgradeDatabase(ctx context.Context, sourcePath, targetPath string) error {
 	return ImportSnapshot(ctx, targetDB, snapshot)
 }
 
+// UpgradeResult describes the outcome of an in-place upgrade.
+type UpgradeResult struct {
+	From       int    // schema version found before the upgrade
+	To         int    // schema version after the upgrade (CurrentSchemaVersion)
+	BackupPath string // path to the verified pre-upgrade backup that was taken
+}
+
+// runSchemaUpgrade performs the actual schema migration for a database whose
+// detected version is found (<= CurrentSchemaVersion). It is held in a package
+// variable so tests can inject a failing migration to exercise rollback; production
+// always uses runSchemaUpgradeDefault.
+var runSchemaUpgrade = runSchemaUpgradeDefault
+
+func runSchemaUpgradeDefault(ctx context.Context, path string, found int) error {
+	if found == CurrentSchemaVersion {
+		db, openErr := openSQLite(path)
+		if openErr != nil {
+			return openErr
+		}
+		defer db.Close()
+		if schemaErr := createSchema(ctx, db); schemaErr != nil {
+			return schemaErr
+		}
+		return enableWAL(ctx, db)
+	}
+
+	// Older schema: rebuild into a fresh database (which brings the schema fully
+	// current and re-imports the data) and atomically swap it into place.
+	tmpDir, err := os.MkdirTemp(filepath.Dir(path), ".tk-upgrade-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+	rebuilt := filepath.Join(tmpDir, "ticket.db")
+	if err := UpgradeDatabase(ctx, path, rebuilt); err != nil {
+		return err
+	}
+	return replaceSQLiteDatabase(rebuilt, path)
+}
+
 // UpgradeInPlace upgrades the database at path so its schema matches the current
 // version, leaving the database at the same path. It returns the schema version
-// found before the upgrade.
+// found before the upgrade. See UpgradeInPlaceWithBackup for the backup details.
+func UpgradeInPlace(ctx context.Context, path string) (int, error) {
+	res, err := UpgradeInPlaceWithBackup(ctx, path)
+	return res.From, err
+}
+
+// UpgradeInPlaceWithBackup upgrades the database at path in place, taking a
+// WAL-checkpointed, integrity-verified backup BEFORE any mutation and rolling the
+// database back from that backup if the migration fails. Every migration path is
+// protected, not just server startup.
 //
 //   - If the database is already at the current version, it re-applies the
 //     idempotent additive migrations in place (createSchema creates any missing
@@ -240,46 +294,148 @@ func UpgradeDatabase(ctx context.Context, sourcePath, targetPath string) error {
 //   - If the database is at an older version, it rebuilds a fresh database from a
 //     snapshot of the upgraded data and atomically swaps it into place.
 //   - If the database is newer than this binary, it returns a SchemaVersionError.
-func UpgradeInPlace(ctx context.Context, path string) (int, error) {
+//
+// On success, backups older than DefaultBackupRetention are pruned.
+func UpgradeInPlaceWithBackup(ctx context.Context, path string) (UpgradeResult, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return 0, errors.New("database path is required")
+		return UpgradeResult{}, errors.New("database path is required")
 	}
 	found, err := DetectSchemaVersion(path)
 	if err != nil {
-		return 0, err
+		return UpgradeResult{}, err
 	}
+	res := UpgradeResult{From: found, To: CurrentSchemaVersion}
 	if found > CurrentSchemaVersion {
-		return found, &SchemaVersionError{Path: path, Found: found, Current: CurrentSchemaVersion, UpgradeNeeded: false}
+		return res, &SchemaVersionError{Path: path, Found: found, Current: CurrentSchemaVersion, UpgradeNeeded: false}
 	}
 
-	if found == CurrentSchemaVersion {
-		db, openErr := openSQLite(path)
-		if openErr != nil {
-			return found, openErr
-		}
-		defer db.Close()
-		if schemaErr := createSchema(ctx, db); schemaErr != nil {
-			return found, schemaErr
-		}
-		return found, enableWAL(ctx, db)
-	}
-
-	// Older schema: rebuild into a fresh database (which brings the schema fully
-	// current and re-imports the data) and atomically swap it into place.
-	tmpDir, err := os.MkdirTemp(filepath.Dir(path), ".tk-upgrade-")
+	// Take a checkpointed, integrity-verified backup before mutating the live DB.
+	backupPath, err := takeVerifiedBackup(ctx, path, found)
 	if err != nil {
-		return found, err
+		return res, fmt.Errorf("pre-upgrade backup failed: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
-	rebuilt := filepath.Join(tmpDir, "ticket.db")
-	if err := UpgradeDatabase(ctx, path, rebuilt); err != nil {
-		return found, err
+	res.BackupPath = backupPath
+
+	if migErr := runSchemaUpgrade(ctx, path, found); migErr != nil {
+		if restoreErr := restoreFromBackup(backupPath, path); restoreErr != nil {
+			return res, fmt.Errorf("migration failed (%v) AND automatic rollback failed (%v); restore manually from %s", migErr, restoreErr, backupPath)
+		}
+		return res, fmt.Errorf("migration failed and was rolled back from backup %s: %w", backupPath, migErr)
 	}
-	if err := replaceSQLiteDatabase(rebuilt, path); err != nil {
-		return found, err
+
+	if pruneErr := pruneOldBackups(path, DefaultBackupRetention); pruneErr != nil {
+		// Pruning is best-effort housekeeping; do not fail a successful upgrade.
+		return res, nil //nolint:nilerr // intentional: prune failures must not fail the upgrade
 	}
-	return found, nil
+	return res, nil
+}
+
+// backupPathFor returns a unique timestamped backup path for a database. The
+// nanosecond suffix keeps backups taken in quick succession distinct and sortable.
+func backupPathFor(path string) string {
+	return fmt.Sprintf("%s.bak-%s", path, time.Now().Format("20060102-150405.000000000"))
+}
+
+// takeVerifiedBackup checkpoints the WAL of the live database, copies it (and its
+// sidecars) to a timestamped backup, and verifies that backup with an integrity
+// check and a schema-version read before returning. The live database is not
+// modified.
+func takeVerifiedBackup(ctx context.Context, path string, expectedVersion int) (string, error) {
+	if err := checkpointWAL(ctx, path); err != nil {
+		return "", fmt.Errorf("wal checkpoint failed: %w", err)
+	}
+	backupPath := backupPathFor(path)
+	if err := copySQLiteDatabase(path, backupPath); err != nil {
+		return "", err
+	}
+	if err := verifyDatabaseBackup(ctx, backupPath, expectedVersion); err != nil {
+		return "", fmt.Errorf("backup verification failed: %w", err)
+	}
+	return backupPath, nil
+}
+
+// checkpointWAL flushes the write-ahead log into the main database file so a file
+// copy of the main file is a self-contained, consistent backup. It is harmless on
+// a database that is not in WAL mode.
+func checkpointWAL(ctx context.Context, path string) error {
+	db, err := openSQLite(path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE);`)
+	return err
+}
+
+// verifyDatabaseBackup opens a backup database, runs PRAGMA integrity_check, and
+// confirms it reports the expected schema version. It returns an error if the
+// backup is unreadable, corrupt, or at an unexpected version.
+func verifyDatabaseBackup(ctx context.Context, path string, expectedVersion int) error {
+	db, err := openSQLite(path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var result string
+	if scanErr := db.QueryRowContext(ctx, `PRAGMA integrity_check;`).Scan(&result); scanErr != nil {
+		return scanErr
+	}
+	if !strings.EqualFold(strings.TrimSpace(result), "ok") {
+		return fmt.Errorf("integrity_check returned %q", result)
+	}
+	got, err := readSchemaVersion(ctx, db)
+	if err != nil {
+		return err
+	}
+	if got != expectedVersion {
+		return fmt.Errorf("backup schema version is %d, expected %d", got, expectedVersion)
+	}
+	return nil
+}
+
+// restoreFromBackup restores the live database (and its sidecars) from a backup,
+// used to roll back a failed migration. Stale live sidecars are removed first so
+// the restored main file is authoritative.
+func restoreFromBackup(backupPath, livePath string) error {
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if err := os.Remove(livePath + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return copySQLiteDatabase(backupPath, livePath)
+}
+
+// pruneOldBackups removes all but the newest keep timestamped backups (and their
+// sidecars) for a database. Backups sort chronologically by their zero-padded
+// timestamp suffix.
+func pruneOldBackups(path string, keep int) error {
+	if keep <= 0 {
+		return nil
+	}
+	matches, err := filepath.Glob(path + ".bak-*")
+	if err != nil {
+		return err
+	}
+	backups := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if strings.HasSuffix(m, "-wal") || strings.HasSuffix(m, "-shm") {
+			continue
+		}
+		backups = append(backups, m)
+	}
+	if len(backups) <= keep {
+		return nil
+	}
+	sort.Strings(backups)
+	for _, b := range backups[:len(backups)-keep] {
+		for _, suffix := range []string{"", "-wal", "-shm"} {
+			if err := os.Remove(b + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // replaceSQLiteDatabase atomically replaces the database at dst (and its WAL/SHM
