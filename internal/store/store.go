@@ -1726,6 +1726,13 @@ CREATE TABLE user_notifications (
 		}
 	}
 
+	// Add started_at to tickets: when a ticket enters the active state (TK-88).
+	if !columnExists(ctx, db, "tickets", "started_at") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN started_at TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+
 	// Add agent_role to users (refiner, developer, tester etc.).
 	if !columnExists(ctx, db, "users", "agent_role") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN agent_role TEXT NOT NULL DEFAULT ''`); err != nil {

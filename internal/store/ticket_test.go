@@ -574,6 +574,56 @@ func TestCreateAndUpdateTicketAllowLineageIndependentOfType(t *testing.T) {
 	}
 }
 
+func TestUpdateTicketStartedAtLifecycle(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := context.Background()
+
+	project, err := CreateProject(ctx, db, "Started Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	ticket, err := CreateTicket(ctx, db, TicketCreateParams{ProjectID: project.ID, Type: "task", Title: "Work"})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if strings.TrimSpace(ticket.StartedAt) != "" {
+		t.Fatalf("new ticket should have empty started_at, got %q", ticket.StartedAt)
+	}
+
+	params := func(state, title string) TicketUpdateParams {
+		return TicketUpdateParams{Title: title, State: state, Assignee: "admin", ActorUsername: "admin", ActorRole: "admin"}
+	}
+
+	// Entering active stamps started_at.
+	active, err := UpdateTicket(ctx, db, ticket.ID, params(StateActive, "Work"))
+	if err != nil {
+		t.Fatalf("UpdateTicket(active) error = %v", err)
+	}
+	if strings.TrimSpace(active.StartedAt) == "" {
+		t.Fatal("started_at should be stamped on the active transition")
+	}
+	started := active.StartedAt
+
+	// A content edit while active preserves started_at.
+	edited, err := UpdateTicket(ctx, db, ticket.ID, params(StateActive, "Renamed"))
+	if err != nil {
+		t.Fatalf("UpdateTicket(content) error = %v", err)
+	}
+	if edited.StartedAt != started {
+		t.Fatalf("started_at must be preserved on content edit: %q -> %q", started, edited.StartedAt)
+	}
+
+	// Leaving active preserves the (historical) started_at value.
+	idle, err := UpdateTicket(ctx, db, ticket.ID, params(StateIdle, "Renamed"))
+	if err != nil {
+		t.Fatalf("UpdateTicket(idle) error = %v", err)
+	}
+	if idle.StartedAt != started {
+		t.Fatalf("started_at should be preserved when leaving active: %q -> %q", started, idle.StartedAt)
+	}
+}
+
 func TestCreateTicketAcceptsCanonicalTypes(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)

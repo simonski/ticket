@@ -523,7 +523,13 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 	// already-loaded history so there is no extra query.
 	if strings.EqualFold(strings.TrimSpace(ticket.State), store.StateActive) {
 		val := "active"
-		if since := activeSinceFromHistory(history); since != "" {
+		// Prefer the persistent started_at column (TK-88); fall back to the
+		// history-derived start for tickets that went active before the column.
+		since := strings.TrimSpace(ticket.StartedAt)
+		if since == "" {
+			since = activeSinceFromHistory(history)
+		}
+		if since != "" {
 			val = "active since " + since
 			if elapsed := humanizeSince(since); elapsed != "" {
 				val += " (" + elapsed + ")"
