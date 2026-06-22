@@ -2492,6 +2492,34 @@ func TestRunListIndentsTitlesByTreeDepth(t *testing.T) {
 	}
 }
 
+func TestPrintTicketDetailsShowsInProgressWithStartTime(t *testing.T) {
+	output := captureStdout(t, func() {
+		printTicketDetails(store.Ticket{
+			ID: "TK-9", Title: "Active work", Type: "task",
+			Status: "develop/active", Stage: "develop", State: "active", Assignee: "admin",
+		}, nil, []store.HistoryEvent{
+			{EventType: "ticket_created", CreatedAt: "2026-03-01 12:00:00", Payload: `{"status":"design/idle"}`},
+			{EventType: "ticket_updated", CreatedAt: "2026-03-02 09:00:00", Payload: `{"status":"develop/active"}`},
+		}, nil, nil, 0, "", "", 0, 0, 0)
+	})
+	if !hasDetailLabel(output, "In Progress") {
+		t.Fatalf("expected In Progress field:\n%s", output)
+	}
+	if !strings.Contains(output, "active since 2026-03-02 09:00:00") {
+		t.Fatalf("expected active-since timestamp:\n%s", output)
+	}
+
+	// An idle ticket has no In Progress line.
+	idleOut := captureStdout(t, func() {
+		printTicketDetails(store.Ticket{
+			ID: "TK-10", Title: "Idle", Type: "task", Status: "design/idle", Stage: "design", State: "idle",
+		}, nil, nil, nil, nil, 0, "", "", 0, 0, 0)
+	})
+	if hasDetailLabel(idleOut, "In Progress") {
+		t.Fatalf("idle ticket should not show In Progress:\n%s", idleOut)
+	}
+}
+
 func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 	output := captureStdout(t, func() {
 		printTicketDetails(store.Ticket{

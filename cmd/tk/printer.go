@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 	"unicode/utf8"
 
 	"golang.org/x/term"
@@ -417,6 +418,64 @@ func printRequestContext(resp libticket.TicketRequestResponse) {
 	}
 }
 
+// stateFromHistoryPayload extracts the lifecycle state recorded in a history
+// event payload (e.g. {"status":"develop/active"}), if present.
+func stateFromHistoryPayload(payload string) (string, bool) {
+	var p struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(payload), &p); err != nil || strings.TrimSpace(p.Status) == "" {
+		return "", false
+	}
+	_, state, err := store.ParseLifecycleStatus(p.Status)
+	if err != nil {
+		return "", false
+	}
+	return state, true
+}
+
+// activeSinceFromHistory returns the timestamp at which the ticket entered its
+// current active streak (oldest-first history), or "" if it is not active or no
+// transition is recorded. Events without a status are ignored.
+func activeSinceFromHistory(history []store.HistoryEvent) string {
+	activeSince := ""
+	prevActive := false
+	for _, e := range history {
+		state, ok := stateFromHistoryPayload(e.Payload)
+		if !ok {
+			continue
+		}
+		isActive := state == store.StateActive
+		switch {
+		case isActive && !prevActive:
+			activeSince = e.CreatedAt
+		case !isActive:
+			activeSince = ""
+		}
+		prevActive = isActive
+	}
+	return activeSince
+}
+
+// humanizeSince renders a coarse elapsed time since a stored UTC timestamp.
+func humanizeSince(ts string) string {
+	t, err := time.Parse("2006-01-02 15:04:05", strings.TrimSpace(ts))
+	if err != nil {
+		return ""
+	}
+	d := time.Since(t.UTC())
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
+}
+
 func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, workflowStages []store.WorkflowStage, labels []store.Label, totalMinutes int, parentKey, cloneKey string, childTotal, childOpen, childClosed int) {
 	dependsOn := formatDependsOn(dependencies)
 
@@ -460,6 +519,21 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 		ticketField{label: "LastModified", value: ticket.UpdatedAt},
 		ticketField{label: "Acceptance Criteria", value: ticket.AcceptanceCriteria},
 	)
+	// In-progress indicator with start time + elapsed (TK-57). Derived from the
+	// already-loaded history so there is no extra query.
+	if strings.EqualFold(strings.TrimSpace(ticket.State), store.StateActive) {
+		val := "active"
+		if since := activeSinceFromHistory(history); since != "" {
+			val = "active since " + since
+			if elapsed := humanizeSince(since); elapsed != "" {
+				val += " (" + elapsed + ")"
+			}
+		}
+		if owner := strings.TrimSpace(ticket.Assignee); owner != "" {
+			val += " — " + owner
+		}
+		fields = append(fields, ticketField{label: "In Progress", value: val})
+	}
 	// VCS context so the ticket reads as an executable prompt (TK-65).
 	repo, baseBranch, workBranch := resolveTicketVCS(ticket, "")
 	if strings.TrimSpace(ticket.GitRepository) != "" {
