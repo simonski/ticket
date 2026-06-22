@@ -1125,6 +1125,19 @@
                 .replace(/'/g, "&#39;");
         }
 
+        // humanizeSince renders a coarse elapsed time since a stored UTC timestamp
+        // ("2026-06-22 18:08:52"), mirroring the CLI/TUI helper (TK-90).
+        function humanizeSince(ts) {
+            if (!ts) return "";
+            const then = new Date(String(ts).trim().replace(" ", "T") + "Z");
+            if (isNaN(then.getTime())) return "";
+            const ms = Date.now() - then.getTime();
+            if (ms < 60000) return "just now";
+            if (ms < 3600000) return Math.floor(ms / 60000) + "m";
+            if (ms < 86400000) return Math.floor(ms / 3600000) + "h";
+            return Math.floor(ms / 86400000) + "d";
+        }
+
         function closeDialog(result) {
             if (els.dialogOverlay) {
                 els.dialogOverlay.classList.add("hidden");
@@ -7157,6 +7170,21 @@
                     rrBanner.classList.remove("hidden");
                 } else {
                     rrBanner.classList.add("hidden");
+                }
+            }
+            // In-progress badge: show how long an active ticket has been worked (TK-90).
+            const inProgressEl = document.getElementById("ticket-in-progress");
+            if (inProgressEl) {
+                if (ticket.state === "active") {
+                    let label = "In progress";
+                    if (ticket.started_at) {
+                        const elapsed = humanizeSince(ticket.started_at);
+                        label += " · active since " + ticket.started_at + (elapsed ? " (" + elapsed + ")" : "");
+                    }
+                    inProgressEl.textContent = label;
+                    inProgressEl.classList.remove("hidden");
+                } else {
+                    inProgressEl.classList.add("hidden");
                 }
             }
             // PR URL display

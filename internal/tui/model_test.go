@@ -140,6 +140,32 @@ func TestViewDetailShowsPullRequests(t *testing.T) {
 	}
 }
 
+func TestViewDetailShowsInProgress(t *testing.T) {
+	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
+	m.width = 100
+	m.height = 30
+	m.project = store.Project{ID: 1, Prefix: "PRJ", Title: "Alpha", Status: "open"}
+	selected := store.Ticket{
+		ID: "PRJ-3", Type: "task", Title: "Work", Stage: store.StageDevelop,
+		State: store.StateActive, Status: "develop/active", StartedAt: "2026-03-02 09:00:00",
+	}
+	m.selected = &selected
+
+	out := strings.Join(m.viewDetail(), "\n")
+	for _, needle := range []string{"in progress", "active since 2026-03-02 09:00:00"} {
+		if !strings.Contains(out, needle) {
+			t.Fatalf("detail view missing %q:\n%s", needle, out)
+		}
+	}
+
+	// An idle ticket shows no in-progress line.
+	idle := store.Ticket{ID: "PRJ-4", Type: "task", Title: "Idle", Stage: store.StageDesign, State: store.StateIdle, Status: "design/idle"}
+	m.selected = &idle
+	if strings.Contains(strings.Join(m.viewDetail(), "\n"), "in progress") {
+		t.Fatal("idle ticket should not show an in-progress line")
+	}
+}
+
 func TestProjectEditAndNewTicketViewsShowLifecycleFields(t *testing.T) {
 	projectWorkflowID := int64(3)
 	ticketWorkflowID := int64(5)

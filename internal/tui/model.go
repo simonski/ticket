@@ -1365,6 +1365,16 @@ func (m Model) viewDetail() []string {
 		add("role", m.roleName(*t.RoleID))
 	}
 	add("assignee", t.Assignee)
+	if strings.EqualFold(strings.TrimSpace(t.State), store.StateActive) {
+		val := "active"
+		if s := strings.TrimSpace(t.StartedAt); s != "" {
+			val = "active since " + s
+			if e := humanizeSince(s); e != "" {
+				val += " (" + e + ")"
+			}
+		}
+		add("in progress", val)
+	}
 	add("parent", optionalStringValue(t.ParentID))
 	add("clone of", optionalStringValue(t.CloneOf))
 	add("git repo", t.GitRepository)
@@ -1516,6 +1526,25 @@ func optionalStringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+// humanizeSince renders a coarse elapsed time since a stored UTC timestamp.
+func humanizeSince(ts string) string {
+	t, err := time.Parse("2006-01-02 15:04:05", strings.TrimSpace(ts))
+	if err != nil {
+		return ""
+	}
+	d := time.Since(t.UTC())
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
 }
 
 func formatResolvedGuidance(guidance store.ResolvedGuidance) string {
