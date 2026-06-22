@@ -92,25 +92,31 @@ flowchart TD
   E -- Yes, needs column surface --> G[Tier 3: generated column]
 ```
 
-## 4. Storage format: JSONB
+## 4. Storage format: TEXT JSON (not binary JSONB)
 
 SQLite has no `JSONB` *column type* (unlike Postgres). "JSONB" in SQLite is the
 binary on-disk encoding introduced in **SQLite 3.45** (Jan 2024), produced by
 `jsonb()` / `jsonb_extract()` and stored in a `BLOB`. Our driver
 `modernc.org/sqlite v1.48.0` embeds a SQLite new enough to support it.
 
-Decision: **store `attrs` as JSONB (BLOB)**, written via `jsonb(?)` and read via
-`json(attrs)` (which renders JSONB back to text for Go's `encoding/json`), with
-`json_extract(attrs,'$.path')` for queries. Rationale: more compact and faster to
-parse than TEXT JSON; `json_extract` works transparently on either encoding so
-expression indexes are unaffected.
+The original design (S1) proposed binary JSONB for compactness. During
+implementation (S4) we found a blocking problem: **binary JSONB does not survive
+the snapshot export/import** used by both the backup/restore feature
+(`tk export`/`tk import`) and the migration rebuild path (`UpgradeDatabase`). The
+snapshot serializes every column generically via `[]byte → string → JSON`, and
+binary JSONB bytes are not valid UTF-8, so a round-tripped value comes back as
+"malformed JSON". Data integrity of backups and migrations outranks the marginal
+size/speed win of binary encoding.
 
-The column is declared `attrs BLOB NOT NULL DEFAULT (jsonb('{}'))` so existing
-rows and inserts that omit it get a valid empty object.
+Decision (revised): **store `attrs` as `TEXT NOT NULL DEFAULT '{}'`**, written as
+plain JSON text (`attrs = ?`) and read as text. `json_extract(attrs,'$.path')`
+and expression indexes work identically on TEXT, so Tier-3 promotion (§3) is
+unchanged. The constant `'{}'` default is also permitted on
+`ALTER TABLE ADD COLUMN`, so the migration needs no backfill.
 
 > Coexistence: the existing `dor_map` / `dod_map` / `ac_map` TEXT-JSON columns
-> keep working unchanged until S6 folds them into `attrs`. Both encodings are
-> readable by the same `json_*` functions during the transition.
+> keep working unchanged until S6 folds them into `attrs`. All are TEXT JSON and
+> readable by the same `json_*` functions.
 
 ## 5. Typed accessor layer
 

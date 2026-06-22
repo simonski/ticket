@@ -64,6 +64,7 @@ func (r *router) registerProjectHandlers() {
 				AgentModelName:     projectPayload.AgentModelName,
 				AgentModelURL:      projectPayload.AgentModelURL,
 				AgentModelAPIKey:   projectPayload.AgentModelAPIKey,
+				Attrs:              projectPayload.Attrs,
 			})
 			if err != nil {
 				writeStoreError(w, err)
@@ -1481,6 +1482,7 @@ func (r *router) registerProjectHandlers() {
 				AgentModelName:     projectPayload.AgentModelName,
 				AgentModelURL:      projectPayload.AgentModelURL,
 				AgentModelAPIKey:   projectPayload.AgentModelAPIKey,
+				Attrs:              projectPayload.Attrs,
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {

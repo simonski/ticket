@@ -209,6 +209,7 @@ func (r *router) registerTicketHandlers() {
 			State:              state,
 			Author:             user.Username,
 			CreatedBy:          user.ID,
+			Attrs:              ticketPayload.Attrs,
 		})
 		if err != nil {
 			writeStoreError(w, err)
@@ -1813,6 +1814,7 @@ func (r *router) registerTicketHandlers() {
 					EstimateEffort:     ticketPayload.EstimateEffort,
 					EstimateComplete:   ticketPayload.EstimateComplete,
 					Type:               ticketPayload.Type,
+					Attrs:              ticketPayload.Attrs,
 					UpdatedBy:          user.ID,
 					ActorUsername:      user.Username,
 					ActorRole:          user.Role,

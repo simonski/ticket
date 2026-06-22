@@ -281,6 +281,7 @@ CREATE TABLE IF NOT EXISTS roles (
 	dor_map TEXT NOT NULL DEFAULT '{}',
 	dod_map TEXT NOT NULL DEFAULT '{}',
 	ac_map TEXT NOT NULL DEFAULT '{}',
+	attrs TEXT NOT NULL DEFAULT '{}',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id),
@@ -310,6 +311,7 @@ CREATE TABLE IF NOT EXISTS projects (
 	agent_model_name TEXT NOT NULL DEFAULT '',
 	agent_model_url TEXT NOT NULL DEFAULT '',
 	agent_model_api_key TEXT NOT NULL DEFAULT '',
+	attrs TEXT NOT NULL DEFAULT '{}',
 	FOREIGN KEY(created_by) REFERENCES users(user_id),
 	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id)
 );
@@ -385,6 +387,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	attrs TEXT NOT NULL DEFAULT '{}',
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
 	FOREIGN KEY(parent_id) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(clone_of) REFERENCES tickets(ticket_id),
@@ -606,6 +609,7 @@ CREATE TABLE IF NOT EXISTS workflow_stages (
 	is_backlog_stage INTEGER NOT NULL DEFAULT 0,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	attrs TEXT NOT NULL DEFAULT '{}',
 	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id),
 	UNIQUE(workflow_id, stage_name)
 );
@@ -1737,6 +1741,19 @@ CREATE TABLE user_notifications (
 	if !columnExists(ctx, db, "users", "agent_role") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN agent_role TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
+		}
+	}
+
+	// Add the extensible JSON attribute bag (TK-109) to the high-churn entities.
+	// Stored as TEXT JSON (not binary JSONB) so it survives the generic snapshot
+	// export/import used by backups and the migration rebuild path; json_extract
+	// queries and expression indexes work identically on TEXT. A constant '{}'
+	// default is permitted on ADD COLUMN, so no backfill is required.
+	for _, table := range []string{"tickets", "projects", "roles", "workflow_stages"} {
+		if !columnExists(ctx, db, table, "attrs") {
+			if _, err := db.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN attrs TEXT NOT NULL DEFAULT '{}'`); err != nil {
+				return err
+			}
 		}
 	}
 

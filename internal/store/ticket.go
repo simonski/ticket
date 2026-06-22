@@ -58,6 +58,7 @@ type Ticket struct {
 	CreatedBy               string      `json:"created_by"`
 	CreatedAt               string      `json:"created_at"`
 	UpdatedAt               string      `json:"updated_at"`
+	Attrs                   Attrs       `json:"attrs,omitempty"`
 }
 
 func (t Ticket) ResolveGuidance(stage string) ResolvedGuidance {
@@ -86,6 +87,7 @@ type TicketCreateParams struct {
 	Author             string
 	State              string
 	CreatedBy          string
+	Attrs              Attrs
 }
 
 type TicketUpdateParams struct {
@@ -111,6 +113,7 @@ type TicketUpdateParams struct {
 	Type               string // if non-empty, update the ticket type
 	ReleaseID          *int   // nil = don't change, use SetReleaseID flag to clear
 	SetReleaseID       bool   // true = apply ReleaseID (even if nil, meaning clear it)
+	Attrs              Attrs  // nil = preserve existing attrs; non-nil = replace the bag
 }
 
 type TicketListParams struct {
@@ -282,10 +285,14 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	if err != nil {
 		return Ticket{}, err
 	}
+	attrsJSON, err := marshalAttrs(params.Attrs)
+	if err != nil {
+		return Ticket{}, err
+	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, author, draft, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), nullableInt64(ticketWorkflowID), nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), 0, strings.TrimSpace(params.Assignee), strings.TrimSpace(params.Author), 1, nullableUserID(params.CreatedBy))
+		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, author, draft, created_by, attrs)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), nullableInt64(ticketWorkflowID), nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), 0, strings.TrimSpace(params.Assignee), strings.TrimSpace(params.Author), 1, nullableUserID(params.CreatedBy), attrsJSON)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -554,14 +561,23 @@ writeTicket:
 	if !reopened && current.Complete {
 		completeVal = 1
 	}
+	// attrs: preserve the existing bag unless the caller supplies a replacement.
+	attrsToWrite := current.Attrs
+	if params.Attrs != nil {
+		attrsToWrite = params.Attrs
+	}
+	attrsJSON, err := marshalAttrs(attrsToWrite)
+	if err != nil {
+		return Ticket{}, err
+	}
 	// started_at records when work began: stamp it on the transition INTO the
 	// active state; otherwise preserve the existing value (TK-88).
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, role_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, complete = ?, type = ?, updated_at = CURRENT_TIMESTAMP,
+		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, role_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, complete = ?, type = ?, attrs = ?, updated_at = CURRENT_TIMESTAMP,
 			started_at = CASE WHEN ? = 'active' AND ? != 'active' THEN CURRENT_TIMESTAMP ELSE ? END
 		WHERE ticket_id = ?
-	`, title, params.Description, nextAcceptanceCriteria, dorJSON, dodJSON, acJSON, nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), completeVal, nextType, state, current.State, current.StartedAt, id)
+	`, title, params.Description, nextAcceptanceCriteria, dorJSON, dodJSON, acJSON, nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), completeVal, nextType, attrsJSON, state, current.State, current.StartedAt, id)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -1474,7 +1490,7 @@ var ticketColumnNames = []string{
 	"estimate_complete", "health_score", "assignee", "author", "draft", "complete",
 	"archived", "deleted", "previous_workflow_stage_id", "previous_role_id",
 	"release_id", "created_by", "created_at", "updated_at", "recommended_ready",
-	"pr_url", "started_at",
+	"pr_url", "started_at", "attrs",
 }
 
 // ticketColumnCoalesce maps nullable columns to the SQL literal substituted via
@@ -1533,6 +1549,7 @@ func scanTicket(s scanner) (Ticket, error) {
 	var prevRoleID sql.NullInt64
 	var releaseID sql.NullInt64
 	var recommendedReady int
+	var attrsJSON sql.NullString
 	if err := s.Scan(
 		&ticket.ID,
 		&ticket.ProjectID,
@@ -1573,9 +1590,15 @@ func scanTicket(s scanner) (Ticket, error) {
 		&recommendedReady,
 		&ticket.PrURL,
 		&ticket.StartedAt,
+		&attrsJSON,
 	); err != nil {
 		return Ticket{}, err
 	}
+	attrs, err := parseAttrs(attrsJSON.String)
+	if err != nil {
+		return Ticket{}, err
+	}
+	ticket.Attrs = attrs
 	if parentID.Valid {
 		ticket.ParentID = &parentID.String
 	}
