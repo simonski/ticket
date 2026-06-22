@@ -155,9 +155,46 @@ func buildPromptForTicket(ctx context.Context, svc promptService, ticketRef stri
 	b.WriteString("Name: " + stageName + "\n")
 	b.WriteString("Definition of Ready: " + stageDOR + "\n")
 	b.WriteString("Definition of Done: " + stageDOD + "\n")
-	b.WriteString("Acceptance Criteria: " + stageAC + "\n")
+	b.WriteString("Acceptance Criteria: " + stageAC + "\n\n")
+
+	repo, baseBranch, workBranch := resolveTicketVCS(ticket, project.GitRepository)
+	b.WriteString("VCS\n")
+	b.WriteString("Ticket: " + promptValue(ticket.ID) + "\n")
+	b.WriteString("Repository: " + repo + "\n")
+	b.WriteString("Branch to take from (base): " + baseBranch + "\n")
+	b.WriteString("Branch to commit to (work): " + workBranch + "\n\n")
+
+	b.WriteString("EXECUTION STEPS\n")
+	b.WriteString("1. Set up the agent: load its skills, sub-agents, and this codebase.\n")
+	b.WriteString("2. Build the project first to confirm a green baseline before changing anything.\n")
+	b.WriteString("3. Set up the environment (dependencies, config, env vars).\n")
+	b.WriteString("4. Clone the repository " + repo + " (skip if already present).\n")
+	b.WriteString("5. Create and check out the work branch " + workBranch + " from " + baseBranch + ".\n")
+	b.WriteString("6. Do the work for " + promptValue(ticket.ID) + " to satisfy the acceptance criteria above.\n")
+	b.WriteString("7. Run the tests (and linters); fix until green.\n")
+	b.WriteString("8. Commit and push " + workBranch + ", then stop for review.\n")
 
 	return b.String(), nil
+}
+
+// resolveTicketVCS derives the repository and the base/work branches for a
+// ticket's work. The repository falls back from the ticket to the project; the
+// work branch defaults to feature/<ticket-id> when the ticket has no branch set;
+// the base branch defaults to main.
+func resolveTicketVCS(ticket store.Ticket, projectRepo string) (repo, baseBranch, workBranch string) {
+	repo = strings.TrimSpace(ticket.GitRepository)
+	if repo == "" {
+		repo = strings.TrimSpace(projectRepo)
+	}
+	if repo == "" {
+		repo = "N/A"
+	}
+	baseBranch = "main"
+	workBranch = strings.TrimSpace(ticket.GitBranch)
+	if workBranch == "" {
+		workBranch = "feature/" + ticket.ID
+	}
+	return repo, baseBranch, workBranch
 }
 
 type promptService interface {
