@@ -92,7 +92,7 @@ func ReorderChildTickets(ctx context.Context, db *sql.DB, parentID string, order
 // explicit sort_order (creation order as tie-break).
 func ListChildTicketsByOrder(ctx context.Context, db *sql.DB, parentID string) ([]Ticket, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, '')
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, ''), COALESCE(started_at, '')
 		FROM tickets
 		WHERE parent_id = ? AND deleted = 0
 		ORDER BY sort_order, created_at, ticket_id

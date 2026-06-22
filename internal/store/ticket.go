@@ -54,6 +54,7 @@ type Ticket struct {
 	ReleaseID               *int        `json:"release_id,omitempty"`
 	RecommendedReady        bool        `json:"recommended_ready"`
 	PrURL                   string      `json:"pr_url,omitempty"`
+	StartedAt               string      `json:"started_at,omitempty"`
 	CreatedBy               string      `json:"created_by"`
 	CreatedAt               string      `json:"created_at"`
 	UpdatedAt               string      `json:"updated_at"`
@@ -553,11 +554,14 @@ writeTicket:
 	if !reopened && current.Complete {
 		completeVal = 1
 	}
+	// started_at records when work began: stamp it on the transition INTO the
+	// active state; otherwise preserve the existing value (TK-88).
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, role_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, complete = ?, type = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, role_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, complete = ?, type = ?, updated_at = CURRENT_TIMESTAMP,
+			started_at = CASE WHEN ? = 'active' AND ? != 'active' THEN CURRENT_TIMESTAMP ELSE ? END
 		WHERE ticket_id = ?
-	`, title, params.Description, nextAcceptanceCriteria, dorJSON, dodJSON, acJSON, nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), completeVal, nextType, id)
+	`, title, params.Description, nextAcceptanceCriteria, dorJSON, dodJSON, acJSON, nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), completeVal, nextType, state, current.State, current.StartedAt, id)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -1207,7 +1211,7 @@ func ListTickets(ctx context.Context, db *sql.DB, params TicketListParams) ([]Ti
 	}
 
 	query := `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, '')
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, ''), COALESCE(started_at, '')
 		FROM tickets
 		WHERE project_id = ?
 	`
@@ -1293,7 +1297,7 @@ func SearchTickets(ctx context.Context, db *sql.DB, projectID int64, query strin
 
 func GetTicketByProject(ctx context.Context, db *sql.DB, projectID int64, id string) (Ticket, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, '')
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, ''), COALESCE(started_at, '')
 		FROM tickets
 		WHERE project_id = ? AND ticket_id = ? AND deleted = 0
 	`, projectID, id)
@@ -1309,7 +1313,7 @@ func GetTicketByProject(ctx context.Context, db *sql.DB, projectID int64, id str
 
 func GetTicket(ctx context.Context, db *sql.DB, id string) (Ticket, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, '')
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, ''), COALESCE(started_at, '')
 		FROM tickets
 		WHERE ticket_id = ? AND deleted = 0
 	`, id)
@@ -1413,19 +1417,19 @@ func ListTicketParents(ctx context.Context, db *sql.DB, id string) ([]Ticket, er
 		  description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch,
 		  workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order,
 		  estimate_effort, estimate_complete, health_score, assignee, author,
-		  draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, created_by, created_at, updated_at, recommended_ready, pr_url) AS (
+		  draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, created_by, created_at, updated_at, recommended_ready, pr_url, started_at) AS (
 			SELECT ticket_id, project_id, parent_id, clone_of, type, title,
 			  description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch,
 			  workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order,
 			  estimate_effort, estimate_complete, health_score, assignee, COALESCE(author,''),
-			  draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by,''), created_at, updated_at, COALESCE(recommended_ready,0), COALESCE(pr_url,'')
+			  draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by,''), created_at, updated_at, COALESCE(recommended_ready,0), COALESCE(pr_url,''), COALESCE(started_at,'')
 			FROM tickets WHERE ticket_id = ? AND deleted = 0
 			UNION ALL
 			SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title,
 			  t.description, t.acceptance_criteria, t.dor_map, t.dod_map, t.ac_map, t.git_repository, t.git_branch,
 			  t.workflow_id, t.workflow_stage_id, t.role_id, t.stage, t.state, t.status, t.priority, t.sort_order,
 			  t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author,''),
-			  t.draft, t.complete, t.archived, t.deleted, t.previous_workflow_stage_id, t.previous_role_id, t.release_id, COALESCE(t.created_by,''), t.created_at, t.updated_at, COALESCE(t.recommended_ready,0), COALESCE(t.pr_url,'')
+			  t.draft, t.complete, t.archived, t.deleted, t.previous_workflow_stage_id, t.previous_role_id, t.release_id, COALESCE(t.created_by,''), t.created_at, t.updated_at, COALESCE(t.recommended_ready,0), COALESCE(t.pr_url,''), COALESCE(t.started_at,'')
 			FROM tickets t
 			JOIN ancestors a ON t.ticket_id = a.parent_id
 		)
@@ -1433,7 +1437,7 @@ func ListTicketParents(ctx context.Context, db *sql.DB, id string) ([]Ticket, er
 		  description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch,
 		  workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order,
 		  estimate_effort, estimate_complete, health_score, assignee, author,
-		  draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, created_by, created_at, updated_at, recommended_ready, pr_url
+		  draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, created_by, created_at, updated_at, recommended_ready, pr_url, started_at
 		FROM ancestors
 		WHERE ticket_id != ?
 	`, id, id)
@@ -1532,6 +1536,7 @@ func scanTicket(s scanner) (Ticket, error) {
 		&ticket.UpdatedAt,
 		&recommendedReady,
 		&ticket.PrURL,
+		&ticket.StartedAt,
 	); err != nil {
 		return Ticket{}, err
 	}
@@ -1830,7 +1835,7 @@ func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id, actorID str
 
 func listStoredChildTickets(ctx context.Context, db *sql.DB, parentID string) ([]Ticket, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, '')
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, ''), COALESCE(started_at, '')
 		FROM tickets
 		WHERE parent_id = ? AND deleted = 0
 		ORDER BY created_at, ticket_id
@@ -1853,7 +1858,7 @@ func listStoredChildTickets(ctx context.Context, db *sql.DB, parentID string) ([
 
 func getStoredTicket(ctx context.Context, db *sql.DB, id string) (Ticket, error) {
 	ticket, err := scanTicket(db.QueryRowContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, '')
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, ''), COALESCE(started_at, '')
 		FROM tickets
 		WHERE ticket_id = ?
 	`, id))
@@ -2095,7 +2100,7 @@ func ticketClaimable(ctx context.Context, db *sql.DB, ticket Ticket, projectID i
 
 func findAssignedTicketForUser(ctx context.Context, db *sql.DB, projectID int64, username, state string) (Ticket, bool, error) {
 	query := `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, '')
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_workflow_stage_id, previous_role_id, release_id, COALESCE(created_by, ''), created_at, updated_at, COALESCE(recommended_ready, 0), COALESCE(pr_url, ''), COALESCE(started_at, '')
 		FROM tickets
 		WHERE assignee = ? AND complete = 0 AND archived = 0 AND deleted = 0 AND state = ?
 	`
@@ -2128,7 +2133,7 @@ func findClaimCandidate(ctx context.Context, db *sql.DB, projectID int64, roleNa
 	if projectID == 0 {
 		return Ticket{}, false, errors.New("project is required")
 	}
-	query := `SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.dor_map, t.dod_map, t.ac_map, t.git_repository, t.git_branch, t.workflow_id, t.workflow_stage_id, t.role_id, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author, ''), t.draft, t.complete, t.archived, t.deleted, t.previous_workflow_stage_id, t.previous_role_id, t.release_id, COALESCE(t.created_by, ''), t.created_at, t.updated_at, COALESCE(t.recommended_ready, 0), COALESCE(t.pr_url, '')
+	query := `SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.dor_map, t.dod_map, t.ac_map, t.git_repository, t.git_branch, t.workflow_id, t.workflow_stage_id, t.role_id, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author, ''), t.draft, t.complete, t.archived, t.deleted, t.previous_workflow_stage_id, t.previous_role_id, t.release_id, COALESCE(t.created_by, ''), t.created_at, t.updated_at, COALESCE(t.recommended_ready, 0), COALESCE(t.pr_url, ''), COALESCE(t.started_at, '')
 		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
 		LEFT JOIN roles r ON r.role_id = t.role_id
