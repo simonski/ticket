@@ -1142,3 +1142,13 @@ Outcomes:
 - **same version** — `You are on the latest version (VERSION)`
 - **newer available** — `A newer version of ticket is available, upgrade using: go install github.com/simonski/ticket@latest`
 - **local is newer** — `Your local copy is newer than the repo`
+
+## Schema evolution (extensible attributes)
+
+Schema change in `tk` is governed by a three-tier model (epic TK-105): typed
+first-class columns for queried/constrained data, a per-entity `attrs` JSONB
+attribute bag as the default home for new optional/sparse/per-type fields (added
+in Go with no migration), and promotion of bag fields to expression indexes when
+they need to be queried. Migrations take a WAL-checkpointed, integrity-verified
+backup and auto-rollback on failure. See `docs/design/extensible-schema.md` and
+`docs/adr/0001-json-attribute-bags.md`.
