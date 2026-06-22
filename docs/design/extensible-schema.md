@@ -92,6 +92,22 @@ flowchart TD
   E -- Yes, needs column surface --> G[Tier 3: generated column]
 ```
 
+### Querying the bag in practice (Tier-3 API)
+
+The promotion mechanism is implemented in `internal/store/attrs_query.go`:
+
+- `ValidAttrsKey(key)` — restricts attrs keys to `[A-Za-z0-9_]+` so a json path can
+  never inject SQL. All query/index helpers validate the key before it reaches SQL.
+- `EnsureAttrIndex(ctx, db, table, key)` — the promotion action. Idempotently
+  creates `idx_<table>_attrs_<key> ON <table>(json_extract(attrs,'$.<key>'))`. No
+  table rewrite, no schema-version bump; safe to call repeatedly.
+- `ListTicketsByAttr(ctx, db, projectID, key, value)` — a worked example that
+  filters and orders tickets on a bag field via `json_extract`; the expression
+  index above serves it (verified with `EXPLAIN QUERY PLAN` in the tests).
+
+A consolidation story (S6) that moves a queried column into the bag calls
+`EnsureAttrIndex` for that field so existing filters/sorts keep their index.
+
 ## 4. Storage format: TEXT JSON (not binary JSONB)
 
 SQLite has no `JSONB` *column type* (unlike Postgres). "JSONB" in SQLite is the
