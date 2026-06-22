@@ -47,6 +47,7 @@ func (r *router) registerRoleHandlers() {
 				DORMap:             payload.DORMap,
 				DODMap:             payload.DODMap,
 				ACMap:              payload.ACMap,
+				Attrs:              payload.Attrs,
 			})
 			if err != nil {
 				writeStoreError(w, err)
@@ -83,6 +84,7 @@ func (r *router) registerRoleHandlers() {
 				DORMap:             payload.DORMap,
 				DODMap:             payload.DODMap,
 				ACMap:              payload.ACMap,
+				Attrs:              payload.Attrs,
 			})
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {

@@ -39,6 +39,7 @@ type WorkflowStage struct {
 	NextStageIDs       []int64 `json:"next_stage_ids,omitempty"`
 	CreatedAt          string  `json:"created_at"`
 	UpdatedAt          string  `json:"updated_at"`
+	Attrs              Attrs   `json:"attrs,omitempty"`
 }
 
 type WorkflowWithStages struct {
@@ -246,8 +247,8 @@ func AddWorkflowStageWithDefinitions(ctx context.Context, db *sql.DB, workflowID
 		return WorkflowStage{}, errors.New("stage name is required")
 	}
 	result, err := db.ExecContext(ctx, `
-		INSERT INTO workflow_stages (workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO workflow_stages (workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, attrs, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, '{}', CURRENT_TIMESTAMP)
 	`, workflowID, stageName, strings.TrimSpace(wow), strings.TrimSpace(dor), strings.TrimSpace(dor), strings.TrimSpace(dod), sortOrder)
 	if err != nil {
 		return WorkflowStage{}, err
@@ -268,6 +269,31 @@ func SetWorkflowStageBacklog(ctx context.Context, db *sql.DB, stageID int64, isB
 		WHERE workflow_stage_id = ?
 	`, isBacklogStage, stageID)
 	return err
+}
+
+// SetWorkflowStageAttrs replaces the extensible attribute bag for a stage. Normal
+// stage updates do not touch attrs, so the bag is preserved across them; this is
+// the explicit way to write it.
+func SetWorkflowStageAttrs(ctx context.Context, db *sql.DB, stageID int64, attrs Attrs) (WorkflowStage, error) {
+	attrsJSON, err := marshalAttrs(attrs)
+	if err != nil {
+		return WorkflowStage{}, err
+	}
+	result, err := db.ExecContext(ctx, `
+		UPDATE workflow_stages SET attrs = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE workflow_stage_id = ?
+	`, attrsJSON, stageID)
+	if err != nil {
+		return WorkflowStage{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return WorkflowStage{}, err
+	}
+	if affected == 0 {
+		return WorkflowStage{}, sql.ErrNoRows
+	}
+	return getWorkflowStageRow(ctx, db, stageID)
 }
 
 func UpdateWorkflowStage(ctx context.Context, db *sql.DB, stageID int64, name, description, acceptanceCriteria string) (WorkflowStage, error) {
@@ -871,15 +897,21 @@ func getWorkflowRow(ctx context.Context, db *sql.DB, id int64) (Workflow, error)
 
 func getWorkflowStageRow(ctx context.Context, db *sql.DB, id int64) (WorkflowStage, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT workflow_stage_id, workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, COALESCE(is_backlog_stage, 0), created_at, updated_at
+		SELECT workflow_stage_id, workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, COALESCE(is_backlog_stage, 0), created_at, updated_at, attrs
 		FROM workflow_stages
 		WHERE workflow_stage_id = ?
 	`, id)
 	var s WorkflowStage
+	var attrsJSON sql.NullString
 	if err := row.Scan(&s.ID, &s.WorkflowID, &s.StageName, &s.Description,
-		&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.IsBacklogStage, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.IsBacklogStage, &s.CreatedAt, &s.UpdatedAt, &attrsJSON); err != nil {
 		return WorkflowStage{}, err
 	}
+	attrs, err := parseAttrs(attrsJSON.String)
+	if err != nil {
+		return WorkflowStage{}, err
+	}
+	s.Attrs = attrs
 	roles, err := ListWorkflowStageRoles(ctx, db, s.WorkflowID, s.ID)
 	if err != nil {
 		return WorkflowStage{}, err
@@ -896,7 +928,7 @@ func getWorkflowStageRow(ctx context.Context, db *sql.DB, id int64) (WorkflowSta
 
 func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]WorkflowStage, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT workflow_stage_id, workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, COALESCE(is_backlog_stage, 0), created_at, updated_at
+		SELECT workflow_stage_id, workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, COALESCE(is_backlog_stage, 0), created_at, updated_at, attrs
 		FROM workflow_stages
 		WHERE workflow_id = ?
 		ORDER BY sort_order, workflow_stage_id
@@ -908,10 +940,16 @@ func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]Wo
 	stages := make([]WorkflowStage, 0)
 	for rows.Next() {
 		var s WorkflowStage
+		var attrsJSON sql.NullString
 		if scanErr := rows.Scan(&s.ID, &s.WorkflowID, &s.StageName, &s.Description,
-			&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.IsBacklogStage, &s.CreatedAt, &s.UpdatedAt); scanErr != nil {
+			&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.IsBacklogStage, &s.CreatedAt, &s.UpdatedAt, &attrsJSON); scanErr != nil {
 			return nil, scanErr
 		}
+		attrs, parseErr := parseAttrs(attrsJSON.String)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		s.Attrs = attrs
 		stages = append(stages, s)
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {
@@ -942,7 +980,7 @@ func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]Wo
 // given workflowID in a single query and returns them grouped by stage_id.
 func listWorkflowStageRolesBatch(ctx context.Context, db *sql.DB, workflowID int64) (map[int64][]Role, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT sr.stage_id, r.role_id, r.workflow_id, r.title, r.description, r.acceptance_criteria, r.dor_map, r.dod_map, r.ac_map, r.created_at, r.updated_at
+		SELECT sr.stage_id, r.role_id, r.workflow_id, r.title, r.description, r.acceptance_criteria, r.dor_map, r.dod_map, r.ac_map, r.created_at, r.updated_at, r.attrs
 		FROM workflow_stage_roles sr
 		JOIN roles r ON r.role_id = sr.role_id
 		WHERE sr.workflow_id = ?

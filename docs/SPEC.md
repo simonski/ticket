@@ -1499,7 +1499,7 @@ Tests must cover:
 ## Extensible attributes (`attrs`)
 
 High-churn entities (tickets, projects, roles, workflow_stages) carry an `attrs`
-JSONB column — a governed attribute bag for optional, sparse, display-only and
+JSON (TEXT) column — a governed attribute bag for optional, sparse, display-only and
 per-type fields. New Tier-2 fields are added without a schema migration or
 version bump; fields are promoted to expression indexes (`json_extract`) when
 they must be queried. Authoritative design: `docs/design/extensible-schema.md`.
