@@ -289,9 +289,6 @@ CREATE TABLE IF NOT EXISTS projects (
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
-	dor_map TEXT NOT NULL DEFAULT '{}',
-	dod_map TEXT NOT NULL DEFAULT '{}',
-	ac_map TEXT NOT NULL DEFAULT '{}',
 	git_repository TEXT NOT NULL DEFAULT '',
 	notes TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'open',
@@ -352,9 +349,6 @@ CREATE TABLE IF NOT EXISTS tickets (
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
-	dor_map TEXT NOT NULL DEFAULT '{}',
-	dod_map TEXT NOT NULL DEFAULT '{}',
-	ac_map TEXT NOT NULL DEFAULT '{}',
 	workflow_stage_id INTEGER,
 	role_id INTEGER,
 	stage TEXT NOT NULL DEFAULT 'develop',
@@ -921,21 +915,9 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
-	if !columnExists(ctx, db, "projects", "dor_map") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN dor_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "projects", "dod_map") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN dod_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "projects", "ac_map") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN ac_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
-			return err
-		}
-	}
+	// projects dor_map/dod_map/ac_map are folded into the attrs bag (TK-115); their
+	// legacy ADD COLUMN migrations were removed and the columns are migrated and
+	// dropped by the attrs-consolidation step below.
 	if columnExists(ctx, db, "projects", "git_branch") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE projects DROP COLUMN git_branch`); err != nil {
 			return err
@@ -1044,21 +1026,9 @@ CREATE TABLE user_notifications (
 	// estimate_complete and git_repository moved into the attrs bag (TK-111); their
 	// legacy ADD COLUMN migrations were removed and the columns are dropped by the
 	// attrs-consolidation step below.
-	if !columnExists(ctx, db, "tickets", "dor_map") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN dor_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "tickets", "dod_map") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN dod_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "tickets", "ac_map") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN ac_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
-			return err
-		}
-	}
+	// tickets dor_map/dod_map/ac_map are folded into the attrs bag (TK-115); their
+	// legacy ADD COLUMN migrations were removed and the columns are migrated and
+	// dropped by the attrs-consolidation step below.
 	// git_branch and health_score moved into the attrs bag (TK-111); the legacy
 	// `open` column is dropped entirely. See the attrs-consolidation step below.
 	if !columnExists(ctx, db, "tickets", "deleted") {
@@ -1721,6 +1691,21 @@ CREATE TABLE user_notifications (
 			return err
 		}
 	}
+	// Fold tickets guidance maps into the attrs bag and drop them (TK-115); embedded
+	// as nested JSON objects via json(col). Non-clobbering and idempotent.
+	for _, col := range []string{"dor_map", "dod_map", "ac_map"} {
+		if columnExists(ctx, db, "tickets", col) {
+			if _, err := db.ExecContext(ctx, fmt.Sprintf(
+				`UPDATE tickets SET attrs = json_set(attrs, '$.%s', json(%s)) `+
+					`WHERE json_extract(attrs, '$.%s') IS NULL AND TRIM(COALESCE(%s, '')) NOT IN ('', '{}')`,
+				col, col, col, col)); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, `ALTER TABLE tickets DROP COLUMN `+col); err != nil {
+				return err
+			}
+		}
+	}
 
 	// Consolidate projects agent-model config columns into the attrs bag and drop
 	// them (TK-112). Same idempotent, non-clobbering pattern as tickets above.
@@ -1729,6 +1714,20 @@ CREATE TABLE user_notifications (
 			if _, err := db.ExecContext(ctx, fmt.Sprintf(
 				`UPDATE projects SET attrs = json_set(attrs, '$.%s', %s) `+
 					`WHERE json_extract(attrs, '$.%s') IS NULL AND TRIM(COALESCE(%s, '')) <> ''`,
+				col, col, col, col)); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, `ALTER TABLE projects DROP COLUMN `+col); err != nil {
+				return err
+			}
+		}
+	}
+	// Fold projects guidance maps into the attrs bag and drop them (TK-115).
+	for _, col := range []string{"dor_map", "dod_map", "ac_map"} {
+		if columnExists(ctx, db, "projects", col) {
+			if _, err := db.ExecContext(ctx, fmt.Sprintf(
+				`UPDATE projects SET attrs = json_set(attrs, '$.%s', json(%s)) `+
+					`WHERE json_extract(attrs, '$.%s') IS NULL AND TRIM(COALESCE(%s, '')) NOT IN ('', '{}')`,
 				col, col, col, col)); err != nil {
 				return err
 			}

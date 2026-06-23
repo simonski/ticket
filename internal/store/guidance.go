@@ -1,7 +1,6 @@
 package store
 
 import (
-	"encoding/json"
 	"strings"
 )
 
@@ -57,30 +56,6 @@ func withLegacyAcceptanceCriteria(acceptanceCriteria string, acMap GuidanceMap) 
 		normalized[DefaultGuidanceStageKey] = legacy
 	}
 	return normalized
-}
-
-func guidanceMapJSON(m GuidanceMap) (string, error) {
-	normalized := normalizeGuidanceMap(m)
-	if len(normalized) == 0 {
-		return "{}", nil
-	}
-	data, err := json.Marshal(normalized)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-func parseGuidanceMap(raw string) (GuidanceMap, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, nil
-	}
-	var parsed map[string]string
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return nil, err
-	}
-	return normalizeGuidanceMap(GuidanceMap(parsed)), nil
 }
 
 func (m GuidanceMap) Resolve(stage string) (string, bool) {

@@ -341,5 +341,6 @@ PRs into `main` only once all stories land.
 | roles | description, acceptance_criteria, dor_map, dod_map, ac_map | TK-113 |
 | workflow_stages | description, acceptance_criteria, definition_of_ready, definition_of_done | TK-114 |
 
-Remaining deferred: the `dor_map`/`dod_map`/`ac_map` fold for **tickets** and
-**projects** (TK-115). `projects.git_repository`/`notes` reclassified Keep.
+All `dor_map`/`dod_map`/`ac_map` folds are complete across tickets, projects,
+roles and workflow_stages (tickets+projects via TK-115; roles+stages via
+TK-113/TK-114). `projects.git_repository`/`notes` reclassified Keep.

@@ -105,11 +105,12 @@ func CreateRoleWithParams(ctx context.Context, db *sql.DB, params RoleCreatePara
 // setGuidanceAttr stores a guidance map as a nested object in the bag, or removes
 // the key when the map is empty (keeping the stored bag sparse).
 func setGuidanceAttr(a Attrs, key string, m GuidanceMap) {
-	if len(m) == 0 {
+	n := normalizeGuidanceMap(m)
+	if len(n) == 0 {
 		delete(a, key)
 		return
 	}
-	a[key] = map[string]string(m)
+	a[key] = map[string]string(n)
 }
 
 // hydrateRoleAttrs copies the bag-backed guidance fields into typed Role fields and
