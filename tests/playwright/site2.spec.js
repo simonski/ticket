@@ -195,7 +195,7 @@ function installSite2Mock(page, seed = {}) {
       defaultPlanSlug: String(mockSeed.defaultPlanSlug || "starter"),
       rooms: [{ room_id: 1, slug: "general", name: "General", topic: "Everything", visibility: "public", project_id: null, ticket_id: "", archived: 0, created_by: "admin" }],
       roomMembers: [{ room_id: 1, member_id: "admin", role: "owner", joined_at: "now", last_read_at: "" }],
-      roomMessages: [{ message_id: 1, room_id: 1, sender_id: "admin", kind: "text", body: "welcome to the room", created_at: "now" }],
+      roomMessages: [{ message_id: 1, room_id: 1, sender_id: "u-9f3a", sender_name: "admin", kind: "text", body: "welcome to the room", created_at: "now" }],
       nextRoomID: 2,
       nextRoomMessageID: 2,
       agents: [{ user_id: "agent-1", enabled: true }],
@@ -773,6 +773,9 @@ function installSite2Mock(page, seed = {}) {
         return json(stage);
       }
       if (path === "/api/roles" && method === "GET") {
+        if (mockSeed.nonAdmin) {
+          return json({ error: "user is not an admin" }, 403);
+        }
         return json(db.roles);
       }
       if (path === "/api/agents" && method === "GET") {
@@ -1057,7 +1060,7 @@ function installSite2Mock(page, seed = {}) {
             return json(db.roomMessages.filter((m) => m.room_id === roomID));
           }
           if (sub === "messages" && method === "POST") {
-            const msg = { message_id: db.nextRoomMessageID++, room_id: roomID, sender_id: "admin", kind: body.kind || "text", body: body.body || "", created_at: "now" };
+            const msg = { message_id: db.nextRoomMessageID++, room_id: roomID, sender_id: "u-9f3a", sender_name: "admin", kind: body.kind || "text", body: body.body || "", created_at: "now" };
             db.roomMessages.push(msg);
             return json(msg, 201);
           }
@@ -2098,6 +2101,9 @@ test("chat: rooms list, messages, send, and create a room", async ({ page }) => 
   await page.locator('.chat-room-item[data-room-id="1"]').click();
   await expect(page.locator("#chat-room-title")).toHaveText("General");
   await expect(page.locator("#chat-messages")).toContainText("welcome to the room");
+  // Shows the username, not the raw user id.
+  await expect(page.locator("#chat-messages")).toContainText("admin");
+  await expect(page.locator("#chat-messages")).not.toContainText("u-9f3a");
 
   // Send a message.
   await page.locator("#chat-composer-input").fill("hello there");
@@ -2120,4 +2126,21 @@ test("chat: breakout room from a ticket", async ({ page }) => {
   await expect(page.locator('#main-nav button[data-view="chat"]')).toHaveClass(/active/);
   await expect(page.locator("#chat-room-title")).toContainText("Breakout");
   await expect(page.locator("#chat-rooms-list")).toContainText("Breakout");
+});
+
+test("login boots even when an admin-only load (roles) returns 403", async ({ page }) => {
+  // Regression: loadRoles hit /api/roles (admin-only) unconditionally; a 403
+  // aborted the whole boot for non-admins ("user is not an admin").
+  await installSite2Mock(page, { nonAdmin: true });
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+  await expect(page.locator("#app-shell")).not.toHaveClass(/hidden/);
 });

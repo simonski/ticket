@@ -2,7 +2,9 @@ package server
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/simonski/ticket/internal/store"
@@ -267,4 +269,72 @@ func TestRoomMessageStoresMentions(t *testing.T) {
 	if !ok || len(mentions) != 1 || mentions[0] != "agent-1" {
 		t.Fatalf("message mentions = %v (ok=%v)", msg.Attrs["mentions"], ok)
 	}
+}
+
+func TestRoomChatCommands(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	admin := roomLoginToken(t, handler, "admin", "password")
+	registerUser(t, handler, "bob", "password123")
+
+	var room store.Room
+	decodeResponse(t, doJSONRequest(t, handler, http.MethodPost, "/api/rooms", map[string]any{"name": "Ops"}, admin), &room)
+	msgPath := "/api/rooms/" + itoa(room.ID) + "/messages"
+	send := func(body string) *httptest.ResponseRecorder {
+		return doJSONRequest(t, handler, http.MethodPost, msgPath, map[string]string{"body": body}, admin)
+	}
+
+	// /new creates a room.
+	if r := send("/new Engineering"); r.Code != http.StatusCreated {
+		t.Fatalf("/new status=%d body=%s", r.Code, r.Body.String())
+	}
+	var rooms []store.Room
+	decodeResponse(t, doJSONRequest(t, handler, http.MethodGet, "/api/rooms", nil, admin), &rooms)
+	if !roomNamed(rooms, "Engineering") {
+		t.Fatalf("/new did not create Engineering: %+v", rooms)
+	}
+
+	// /invite then /kick adjust membership.
+	send("/invite bob")
+	var members []store.RoomMember
+	decodeResponse(t, doJSONRequest(t, handler, http.MethodGet, "/api/rooms/"+itoa(room.ID)+"/members", nil, admin), &members)
+	if len(members) != 2 {
+		t.Fatalf("after /invite members=%d, want 2", len(members))
+	}
+	send("/kick bob")
+	decodeResponse(t, doJSONRequest(t, handler, http.MethodGet, "/api/rooms/"+itoa(room.ID)+"/members", nil, admin), &members)
+	if len(members) != 1 {
+		t.Fatalf("after /kick members=%d, want 1", len(members))
+	}
+
+	// /list returns a system message.
+	var listMsg store.RoomMessage
+	decodeResponse(t, send("/list"), &listMsg)
+	if listMsg.Kind != "system" || !strings.Contains(listMsg.Body, "Rooms:") {
+		t.Fatalf("/list message = %+v", listMsg)
+	}
+
+	// /msg routes to a DM room (different from the current room).
+	var dm store.RoomMessage
+	decodeResponse(t, send("/msg @bob hello in private"), &dm)
+	if dm.RoomID == room.ID || dm.Body != "hello in private" {
+		t.Fatalf("/msg routed wrong: %+v", dm)
+	}
+
+	// Bare "@bob ..." is also a DM shortcut to the same room.
+	var dm2 store.RoomMessage
+	decodeResponse(t, send("@bob and again"), &dm2)
+	if dm2.RoomID != dm.RoomID {
+		t.Fatalf("bare @ shortcut room=%d, want DM room %d", dm2.RoomID, dm.RoomID)
+	}
+}
+
+func roomNamed(rooms []store.Room, name string) bool {
+	for _, r := range rooms {
+		if r.Name == name {
+			return true
+		}
+	}
+	return false
 }

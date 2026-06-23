@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -24,6 +25,9 @@ type Room struct {
 	Attrs      Attrs  `json:"attrs,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
+	// Transient, populated per-request by the API layer.
+	MemberCount int  `json:"member_count"`
+	Unread      bool `json:"unread"`
 }
 
 // Scope returns "global", "project", or "breakout".
@@ -48,13 +52,14 @@ type RoomMember struct {
 
 // RoomMessage is a single message in a room.
 type RoomMessage struct {
-	ID        int64  `json:"message_id"`
-	RoomID    int64  `json:"room_id"`
-	SenderID  string `json:"sender_id"`
-	Kind      string `json:"kind"` // text | system | task | agent_event
-	Body      string `json:"body"`
-	Attrs     Attrs  `json:"attrs,omitempty"`
-	CreatedAt string `json:"created_at"`
+	ID         int64  `json:"message_id"`
+	RoomID     int64  `json:"room_id"`
+	SenderID   string `json:"sender_id"`
+	SenderName string `json:"sender_name"`
+	Kind       string `json:"kind"` // text | system | task | agent_event
+	Body       string `json:"body"`
+	Attrs      Attrs  `json:"attrs,omitempty"`
+	CreatedAt  string `json:"created_at"`
 }
 
 // RoomFilter narrows ListRooms. A zero filter lists all non-archived rooms.
@@ -289,7 +294,7 @@ func PostRoomMessage(ctx context.Context, db *sql.DB, msg RoomMessage) (RoomMess
 
 // GetRoomMessage returns a single message by id.
 func GetRoomMessage(ctx context.Context, db *sql.DB, id int64) (RoomMessage, error) {
-	row := db.QueryRowContext(ctx, `SELECT message_id, room_id, sender_id, kind, body, attrs, created_at FROM room_messages WHERE message_id = ?`, id)
+	row := db.QueryRowContext(ctx, `SELECT m.message_id, m.room_id, m.sender_id, COALESCE(u.username, m.sender_id), m.kind, m.body, m.attrs, m.created_at FROM room_messages m LEFT JOIN users u ON u.user_id = m.sender_id WHERE m.message_id = ?`, id)
 	return scanRoomMessage(row)
 }
 
@@ -298,7 +303,7 @@ func scanRoomMessage(s interface{ Scan(...any) error }) (RoomMessage, error) {
 		m         RoomMessage
 		attrsJSON string
 	)
-	if err := s.Scan(&m.ID, &m.RoomID, &m.SenderID, &m.Kind, &m.Body, &attrsJSON, &m.CreatedAt); err != nil {
+	if err := s.Scan(&m.ID, &m.RoomID, &m.SenderID, &m.SenderName, &m.Kind, &m.Body, &attrsJSON, &m.CreatedAt); err != nil {
 		return RoomMessage{}, err
 	}
 	attrs, err := parseAttrs(attrsJSON)
@@ -324,7 +329,7 @@ func ListRoomMessages(ctx context.Context, db *sql.DB, roomID int64, limit int, 
 	}
 	args = append(args, limit)
 	// Fetch newest-first with the limit, then reverse to chronological order.
-	rows, err := db.QueryContext(ctx, `SELECT message_id, room_id, sender_id, kind, body, attrs, created_at FROM room_messages WHERE `+where+` ORDER BY message_id DESC LIMIT ?`, args...)
+	rows, err := db.QueryContext(ctx, `SELECT m.message_id, m.room_id, m.sender_id, COALESCE(u.username, m.sender_id), m.kind, m.body, m.attrs, m.created_at FROM room_messages m LEFT JOIN users u ON u.user_id = m.sender_id WHERE `+strings.ReplaceAll(where, "room_id", "m.room_id")+` ORDER BY m.message_id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -344,4 +349,106 @@ func ListRoomMessages(ctx context.Context, db *sql.DB, roomID int64, limit int, 
 		msgs[i], msgs[j] = msgs[j], msgs[i]
 	}
 	return msgs, nil
+}
+
+// MarkRoomRead advances a member's read marker to now.
+func MarkRoomRead(ctx context.Context, db *sql.DB, roomID int64, memberID string) error {
+	_, err := db.ExecContext(ctx, `UPDATE room_members SET last_read_at = CURRENT_TIMESTAMP WHERE room_id = ? AND member_id = ?`, roomID, strings.TrimSpace(memberID))
+	return err
+}
+
+// UnreadRoomIDs returns the set of rooms the member belongs to that have
+// messages newer than the member's read marker.
+func UnreadRoomIDs(ctx context.Context, db *sql.DB, memberID string) (map[int64]bool, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT rm.room_id
+		FROM room_members rm
+		JOIN (SELECT room_id, MAX(created_at) AS last_at FROM room_messages GROUP BY room_id) lm ON lm.room_id = rm.room_id
+		WHERE rm.member_id = ? AND (rm.last_read_at = '' OR lm.last_at > rm.last_read_at)`, strings.TrimSpace(memberID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]bool{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
+// RoomMemberCounts returns member counts keyed by room id.
+func RoomMemberCounts(ctx context.Context, db *sql.DB) (map[int64]int, error) {
+	rows, err := db.QueryContext(ctx, `SELECT room_id, COUNT(*) FROM room_members GROUP BY room_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
+// FindOrCreateDMRoom returns the private 1:1 room between two users, creating it
+// (with both as members) if it does not exist.
+func FindOrCreateDMRoom(ctx context.Context, db *sql.DB, a, b User) (Room, error) {
+	ids := []string{a.ID, b.ID}
+	sort.Strings(ids)
+	slug := "dm-" + ids[0] + "-" + ids[1]
+	row := db.QueryRowContext(ctx, `SELECT `+roomColumns+` FROM rooms WHERE slug = ? AND archived = 0`, slug)
+	if room, err := scanRoom(row); err == nil {
+		return room, nil
+	} else if err != sql.ErrNoRows {
+		return Room{}, err
+	}
+	name := "DM: " + a.Username + ", " + b.Username
+	room, err := CreateRoom(ctx, db, Room{Slug: slug, Name: name, Visibility: "private", CreatedBy: a.ID})
+	if err != nil {
+		return Room{}, err
+	}
+	if jerr := JoinRoom(ctx, db, room.ID, b.ID, "member"); jerr != nil {
+		return Room{}, jerr
+	}
+	return room, nil
+}
+
+// EnsureGlobalGeneralRoom creates a public global "general" room if none exists.
+func EnsureGlobalGeneralRoom(ctx context.Context, db *sql.DB, createdBy string) (Room, bool, error) {
+	var existingID int64
+	err := db.QueryRowContext(ctx, `SELECT room_id FROM rooms WHERE project_id IS NULL AND visibility = 'public' AND archived = 0 ORDER BY room_id LIMIT 1`).Scan(&existingID)
+	if err == nil {
+		room, gerr := GetRoom(ctx, db, existingID)
+		return room, false, gerr
+	}
+	if err != sql.ErrNoRows {
+		return Room{}, false, err
+	}
+	room, cerr := CreateRoom(ctx, db, Room{Slug: "general", Name: "general", Topic: "Everyone", Visibility: "public", CreatedBy: createdBy})
+	return room, cerr == nil, cerr
+}
+
+// EnsureProjectRoom creates a default public room for a project if it has none.
+func EnsureProjectRoom(ctx context.Context, db *sql.DB, projectID int64, name, createdBy string) (Room, bool, error) {
+	var existingID int64
+	err := db.QueryRowContext(ctx, `SELECT room_id FROM rooms WHERE project_id = ? AND ticket_id = '' AND archived = 0 ORDER BY room_id LIMIT 1`, projectID).Scan(&existingID)
+	if err == nil {
+		room, gerr := GetRoom(ctx, db, existingID)
+		return room, false, gerr
+	}
+	if err != sql.ErrNoRows {
+		return Room{}, false, err
+	}
+	pid := projectID
+	room, cerr := CreateRoom(ctx, db, Room{Name: name, Topic: "Project room", Visibility: "public", ProjectID: &pid, CreatedBy: createdBy})
+	return room, cerr == nil, cerr
 }

@@ -2051,3 +2051,6 @@ select {
 .chat-member { padding: 4px 8px; }
 .chat-mention { color: var(--accent, #ff7a1a); font-weight: 600; }
 .chat-label { color: #5aa9e6; font-weight: 600; }
+.chat-room-item .chat-room-count { float: right; opacity: .5; font-size: 11px; }
+.chat-room-item.unread { font-weight: 700; }
+.chat-unread-dot { color: var(--accent, #ff7a1a); font-weight: 800; }
