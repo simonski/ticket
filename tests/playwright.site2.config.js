@@ -7,6 +7,8 @@ const retries = Number(process.env.PLAYWRIGHT_RETRIES || 1);
 module.exports = defineConfig({
   testDir: "./playwright",
   testMatch: "site2.spec.js",
+  fullyParallel: true,
+  workers: 4,
   timeout: 30000,
   retries: Number.isInteger(retries) && retries >= 0 ? retries : 1,
   use: {

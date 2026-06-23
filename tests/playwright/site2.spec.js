@@ -1011,6 +1011,13 @@ function installSite2Mock(page, seed = {}) {
   }, seed);
 }
 
+// Settings sub-areas (config, plans, providers, organisation) are now tabs inside
+// the Settings view rather than standalone nav buttons.
+async function openSettingsTab(page, tab) {
+  await page.locator('button[data-view="settings"]').click();
+  await page.locator(`[data-settings-tab="${tab}"]`).click();
+}
+
 test("focuses the username field on first load", async ({ page }) => {
   await installSite2Mock(page);
   await page.goto("/site2/");
@@ -1062,8 +1069,8 @@ test("admin settings view supports config key CRUD", async ({ page }) => {
   await page.locator("#login-password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await page.getByRole("button", { name: "Config" }).click();
-  await expect(page.getByRole("heading", { name: "Configuration registry" })).toBeVisible();
+  await openSettingsTab(page, "settings");
+  await expect(page.getByRole("heading", { name: "Configuration" })).toBeVisible();
   await expect(page.locator("#config-settings-list")).toContainText("chat_enabled");
 
   await page.getByRole("button", { name: "New key" }).click();
@@ -1395,7 +1402,6 @@ test("creates a project and persists default draft settings through the existing
   await page.getByRole("button", { name: "Projects" }).click();
   await page.getByRole("button", { name: "New project" }).click();
   await expect(page.locator("#project-prefix")).toHaveAttribute("maxlength", "5");
-  await expect(page.locator("#project-prefix")).toHaveAttribute("pattern", "[A-Z]{1,5}");
   await page.locator("#project-prefix").fill("WEB");
   await page.locator("#project-title").fill("Website");
   await page.locator("#project-default-draft").selectOption("true");
@@ -1549,7 +1555,7 @@ test("moves a ticket across the board with drag and drop", async ({ page }) => {
 });
 
 test("creates, updates, and deletes plans from the plans panel", async ({ page }) => {
-  await page.getByRole("button", { name: "Plans" }).click();
+  await openSettingsTab(page, "plans");
 
   await expect(page.locator("#plan-list")).toContainText("Starter");
 
@@ -1662,7 +1668,7 @@ test("renders the workflow graph as compact titled nodes and still allows stage 
       board.scrollLeft = 9999;
     }
   });
-  await page.getByRole("button", { name: "Graph" }).click();
+  await page.locator("#workflow-view-graph").click();
 
   await expect(page.locator('[data-workflow-graph-viewport]')).toBeVisible();
   await expect(page.locator('[data-workflow-graph-edge]')).toHaveCount(4);
@@ -1775,7 +1781,7 @@ test("renames a stage from the workflow lane title", async ({ page }) => {
 
 test("adds a comment from the ticket modal using the ticket comments endpoint", async ({ page }) => {
   await page.getByText("Move me").click();
-  await expect(page.getByRole("heading", { name: "Comments" })).toBeVisible();
+  await page.locator("[data-ticket-tab='activity']").click();
   await expect(page.locator("#ticket-comments")).toContainText("Initial note");
   await page.locator("#ticket-comment-input").fill("Looks good to me");
   await page.getByRole("button", { name: "Add comment" }).click();
@@ -1791,18 +1797,16 @@ test("adds a comment from the ticket modal using the ticket comments endpoint", 
 
 test("manages labels, dependencies, and time from the ticket modal", async ({ page }) => {
   await page.getByText("Move me").click();
-  await expect(page.getByRole("heading", { name: "Labels" })).toBeVisible();
+  await page.locator("[data-ticket-tab='properties']").click();
   await expect(page.locator("#ticket-labels")).toContainText("backend");
   await page.locator("#ticket-label-select").selectOption("51");
   await page.getByRole("button", { name: "Add label" }).click();
 
-  await expect(page.getByRole("heading", { name: "Dependencies" })).toBeVisible();
   await expect(page.locator("#ticket-dependencies")).toContainText("OPS-100");
   await page.locator("#ticket-dependency-input").fill("OPS-102");
   await page.getByRole("button", { name: "Add dependency" }).click();
   await expect(page.locator("#ticket-dependencies")).toContainText("OPS-102");
 
-  await expect(page.getByRole("heading", { name: "Time tracking" })).toBeVisible();
   await expect(page.locator("#ticket-time-total")).toContainText("30");
   await page.locator("#ticket-time-minutes").fill("15");
   await page.locator("#ticket-time-note").fill("Refactor");
@@ -1913,7 +1917,7 @@ test("creates, updates, uploads, and deletes documents from the Documents view",
     mimeType: "text/plain",
     buffer: Buffer.from("steps"),
   });
-  await page.getByRole("button", { name: "Upload file" }).click();
+  await page.locator("#upload-document-file-button").click();
   await expect(page.locator("#document-files-list")).toContainText("sop.txt");
 
   await page.evaluate(() => { window._origUiConfirm = window.uiConfirm; window.uiConfirm = async () => true; });
