@@ -28,3 +28,7 @@ ticket.db
 *.db
 *.db-wal
 *.db-shm
+
+# Runtime logs (must not be committed)
+access.log
+*.log
