@@ -60,7 +60,8 @@ func TestFailureEscalationInboxLifecycle(t *testing.T) {
 	if entry.Status != InboxStatusOpen || entry.Kind != InboxKindFailureEscalation {
 		t.Fatalf("entry=%#v", entry)
 	}
-	if len(entry.Recommendations) != 3 {
+	// Two recommendations remain after the Goals feature (clarify_goal) was removed.
+	if len(entry.Recommendations) != 2 {
 		t.Fatalf("entry recommendations=%#v", entry.Recommendations)
 	}
 
