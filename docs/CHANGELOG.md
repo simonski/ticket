@@ -2,6 +2,38 @@
 
 All notable changes to the Ticket project are documented here.
 
+## [0.1.1103] - 2026-06-23
+
+### Added
+- **Extensible schema (attrs)** — high-churn entities (tickets, projects, roles,
+  workflow_stages) carry an `attrs` TEXT-JSON attribute bag; new optional/per-type
+  fields are added in Go with no schema migration or version bump, and become
+  queryable on demand via `json_extract` expression indexes (`EnsureAttrIndex`).
+  Design: `docs/design/extensible-schema.md`, `docs/adr/0001-json-attribute-bags.md`.
+- **Reinforced migrations** — `tk admin upgrade-database` / server-startup upgrade
+  take a WAL-checkpointed, integrity-verified backup and auto-roll-back on failure
+  (`docs/RUNBOOKS.md`).
+
+### Changed
+- **Schema version 10 → 12.** Soft/config/guidance columns consolidated into
+  `attrs` and dropped across all four entities (typed Go/API fields retained and
+  hydrated from the bag, so the CLI/API contract is unchanged).
+- **Go toolchain 1.26.3 → 1.26.4** (clears two `crypto/x509` stdlib advisories).
+- **Coverage gates recalibrated** to actual levels: `internal/store` 66%,
+  `internal/server` 57% (the old 69/63 were never met).
+- **`tk unassign <id>`** — the assignee name is now optional for admins (clears
+  whoever is assigned) (TK-92).
+
+### Removed
+- **Goals feature** removed entirely (entity, `clarify_goal` recommendation, and
+  related code). The "goal" concept is realized via the Feature/refinement model.
+
+### Fixed
+- **`tk edit` TUI** — letters `j/k/w/s` are now typed in text fields instead of
+  being captured as navigation; text-vs-control key handling separated (TK-86).
+- **Playwright harness** — the smoke suite serves `web/static` from the repo root
+  again and passes; `GET /api/releases/{id}` (405) handler added.
+
 ## [0.1.861] - 2026-04-28
 
 ### Changed

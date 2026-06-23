@@ -55,7 +55,7 @@ Examples: `state`, `stage`, `status`, `project_id`, `parent_id`, `priority`,
 `sort_order`, lifecycle flags (`draft`/`complete`/`archived`/`deleted`),
 timestamps.
 
-### Tier 2 — The attribute bag (`attrs`, JSONB)
+### Tier 2 — The attribute bag (`attrs`, TEXT JSON)
 One `attrs` column per high-churn entity, storing a JSON object. This is the
 **default home** for:
 - new optional / sparse fields,
@@ -215,22 +215,22 @@ erDiagram
     int    project_id FK
     string state
     string stage
-    blob   attrs "JSONB: soft + per-type fields"
+    string attrs "TEXT JSON: soft + per-type fields"
   }
   PROJECTS {
     int  project_id PK
     string prefix
-    blob attrs "JSONB"
+    string attrs "TEXT JSON"
   }
   ROLES {
     int role_id PK
     int workflow_id FK
-    blob attrs "JSONB"
+    string attrs "TEXT JSON"
   }
   WORKFLOW_STAGES {
     int workflow_stage_id PK
     int workflow_id FK
-    blob attrs "JSONB"
+    string attrs "TEXT JSON"
   }
   PROJECTS ||--o{ TICKETS : has
   WORKFLOWS ||--o{ ROLES : defines
@@ -321,8 +321,9 @@ Conservative bias: anything filtered / sorted / FK'd / aggregated stays **Keep**
 
 See ADR `docs/adr/0001-json-attribute-bags.md`. Summary: status-quo additive
 columns (rejected: the churn this epic exists to remove), an EAV side table
-(rejected: join cost, loss of atomic row, reporting pain), and plain TEXT JSON
-(rejected in favour of JSONB for size/speed; TEXT retained only transitionally).
+(rejected: join cost, loss of atomic row, reporting pain), and binary JSONB
+(rejected because it does not survive snapshot export/import — see §4; plain TEXT
+JSON is the chosen, permanent format).
 
 ## 11. Rollout / sequencing
 

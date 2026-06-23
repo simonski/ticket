@@ -87,7 +87,7 @@ and act on.  For example an agent will complete a story, so the story will be ma
 
 ## Running
  
-Part of the server using -orchestrator as part of the `tk serve -orchestrator` call.
+Part of the server using -orchestrator as part of the `tk server -orchestrator` call.
 
 ## Config
 
