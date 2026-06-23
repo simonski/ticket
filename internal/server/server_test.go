@@ -374,8 +374,11 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 	}
 	defer rootResp.Body.Close()
 	csp := rootResp.Header.Get("Content-Security-Policy")
-	if !strings.Contains(csp, "script-src 'self' 'nonce-") || !strings.Contains(csp, "style-src 'self' 'nonce-") {
-		t.Fatalf("root CSP missing nonce directives: %q", csp)
+	if !strings.Contains(csp, "script-src 'self' 'nonce-") {
+		t.Fatalf("root CSP missing script nonce directive: %q", csp)
+	}
+	if !strings.Contains(csp, "style-src 'self' 'unsafe-inline'") {
+		t.Fatalf("root CSP must allow inline styles (a nonce cannot cover style attributes): %q", csp)
 	}
 
 	body, err := io.ReadAll(rootResp.Body)
