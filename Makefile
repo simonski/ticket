@@ -218,34 +218,7 @@ ci: ci-verify ci-browser
 ci-publish: docker-push release-publish
 
 test-go-cover:
-	@export TICKET_FAST_HASH=1; set -e; \
-	for entry in \
-		"./cmd/tk 55" \
-		"./libticket 65" \
-		"./internal/client 55" \
-		"./internal/store 66" \
-		"./internal/server 57" \
-		"./internal/config 70"; do \
-		pkg=$${entry% *}; \
-		min=$${entry#* }; \
-		set +e; \
-		out=$$(go test "$$pkg" -cover 2>&1); \
-		status=$$?; \
-		set -e; \
-		printf "%s\n" "$$out"; \
-		if [ "$$status" -ne 0 ]; then \
-			exit "$$status"; \
-		fi; \
-		pct=$$(printf "%s\n" "$$out" | sed -n 's/.*coverage: \([0-9][0-9.]*\)%.*/\1/p' | tail -n 1); \
-		if [ -z "$$pct" ]; then \
-			printf "could not parse coverage for %s\n" "$$pkg" >&2; \
-			exit 1; \
-		fi; \
-		awk -v pct="$$pct" -v min="$$min" 'BEGIN { if (pct + 0 < min + 0) exit 1 }' || { \
-			printf "coverage threshold failed for %s: got %s%%, need %s%%\n" "$$pkg" "$$pct" "$$min" >&2; \
-			exit 1; \
-		}; \
-	done
+	@bash scripts/coverage.sh
 
 playwright-ready:
 	@if [ ! -d node_modules ]; then $(MAKE) setup-node; fi

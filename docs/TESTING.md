@@ -159,16 +159,26 @@ run the same suite:
 
 ## Coverage thresholds
 
-Enforced via `make test-go-cover`:
+Enforced via `make test-go-cover`, which runs `scripts/coverage.sh`.
 
-| Package              | Minimum |
-|----------------------|---------|
-| `cmd/tk`         | 55%     |
-| `libticket`          | 65%     |
-| `internal/client`    | 55%     |
-| `internal/store`     | 66%     |
-| `internal/server`    | 57%     |
-| `internal/config`    | 70%     |
+**Integration-aware measurement.** Coverage for each package is measured
+*including the test suites that exercise it*, not just its own `*_test.go` files.
+The libticket HTTP contract suite (`libticket/http_test.go`) drives
+`internal/server` and `internal/client` over real HTTP, and the `cmd/tk` CLI
+tests drive `internal/store` through the local service. Measuring each package
+with `-coverpkg` across those driving suites reflects what is actually tested —
+materially higher and more honest than per-package self-tests (e.g.
+`internal/client` 57%→67%, `internal/store` 67%→72%, `internal/server`
+57%→60%). Each target's driving suites are listed in `scripts/coverage.sh`.
+
+| Package              | Minimum | Driven by (in addition to its own tests) |
+|----------------------|---------|------------------------------------------|
+| `cmd/tk`             | 58%     | —                                        |
+| `libticket`          | 67%     | — (own local + HTTP contract suites)     |
+| `internal/client`    | 65%     | libticket HTTP contract                  |
+| `internal/store`     | 70%     | libticket, internal/server, cmd/tk       |
+| `internal/server`    | 60%     | libticket HTTP contract                  |
+| `internal/config`    | 80%     | —                                        |
 
 For local parity with GitHub Actions, run:
 
