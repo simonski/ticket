@@ -1,0 +1,159 @@
+package server
+
+import (
+	"net/http"
+	"strconv"
+	"testing"
+
+	"github.com/simonski/ticket/internal/store"
+)
+
+func roomLoginToken(t *testing.T, handler http.Handler, username, password string) string {
+	t.Helper()
+	resp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": username,
+		"password": password,
+	}, "")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("login %s: status = %d", username, resp.Code)
+	}
+	var payload struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, resp, &payload)
+	if payload.Token == "" {
+		t.Fatalf("login %s: empty token", username)
+	}
+	return payload.Token
+}
+
+func registerUser(t *testing.T, handler http.Handler, username, password string) {
+	t.Helper()
+	resp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": username,
+		"password": password,
+	}, "")
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("register %s: status = %d", username, resp.Code)
+	}
+}
+
+func TestRoomAPICRUDAndMessages(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	admin := roomLoginToken(t, handler, "admin", "password")
+
+	// Create a room.
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/rooms", map[string]any{
+		"name":  "General",
+		"topic": "Everything",
+	}, admin)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create room status = %d, body=%s", createResp.Code, createResp.Body.String())
+	}
+	var room store.Room
+	decodeResponse(t, createResp, &room)
+	if room.ID == 0 || room.Slug != "general" {
+		t.Fatalf("created room = %+v", room)
+	}
+
+	// List shows it.
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/rooms", nil, admin)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list status = %d", listResp.Code)
+	}
+	var rooms []store.Room
+	decodeResponse(t, listResp, &rooms)
+	if len(rooms) != 1 || rooms[0].ID != room.ID {
+		t.Fatalf("list = %+v", rooms)
+	}
+
+	// Post + list messages.
+	roomPath := "/api/rooms/" + itoa(room.ID)
+	postResp := doJSONRequest(t, handler, http.MethodPost, roomPath+"/messages", map[string]string{"body": "hello room"}, admin)
+	if postResp.Code != http.StatusCreated {
+		t.Fatalf("post message status = %d, body=%s", postResp.Code, postResp.Body.String())
+	}
+	msgResp := doJSONRequest(t, handler, http.MethodGet, roomPath+"/messages", nil, admin)
+	var msgs []store.RoomMessage
+	decodeResponse(t, msgResp, &msgs)
+	if len(msgs) != 1 || msgs[0].Body != "hello room" {
+		t.Fatalf("messages = %+v", msgs)
+	}
+
+	// Empty body rejected.
+	badResp := doJSONRequest(t, handler, http.MethodPost, roomPath+"/messages", map[string]string{"body": ""}, admin)
+	if badResp.Code != http.StatusBadRequest {
+		t.Fatalf("empty message status = %d, want 400", badResp.Code)
+	}
+
+	// Archive.
+	delResp := doJSONRequest(t, handler, http.MethodDelete, roomPath, nil, admin)
+	if delResp.Code != http.StatusOK {
+		t.Fatalf("archive status = %d", delResp.Code)
+	}
+	listResp = doJSONRequest(t, handler, http.MethodGet, "/api/rooms", nil, admin)
+	decodeResponse(t, listResp, &rooms)
+	if len(rooms) != 0 {
+		t.Fatalf("archived room still listed: %+v", rooms)
+	}
+}
+
+func TestRoomAPIJoinLeaveAndPrivateVisibility(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	admin := roomLoginToken(t, handler, "admin", "password")
+	registerUser(t, handler, "bob", "password123")
+	bob := roomLoginToken(t, handler, "bob", "password123")
+
+	// Public room: bob can see and join.
+	pubResp := doJSONRequest(t, handler, http.MethodPost, "/api/rooms", map[string]any{"name": "Public"}, admin)
+	var pub store.Room
+	decodeResponse(t, pubResp, &pub)
+	pubPath := "/api/rooms/" + itoa(pub.ID)
+
+	var bobRooms []store.Room
+	decodeResponse(t, doJSONRequest(t, handler, http.MethodGet, "/api/rooms", nil, bob), &bobRooms)
+	if !roomListed(bobRooms, pub.ID) {
+		t.Fatalf("bob should see the public room")
+	}
+	if joinResp := doJSONRequest(t, handler, http.MethodPost, pubPath+"/join", nil, bob); joinResp.Code != http.StatusOK {
+		t.Fatalf("bob join status = %d", joinResp.Code)
+	}
+	var members []store.RoomMember
+	decodeResponse(t, doJSONRequest(t, handler, http.MethodGet, pubPath+"/members", nil, admin), &members)
+	if len(members) != 2 {
+		t.Fatalf("members after join = %d, want 2", len(members))
+	}
+	if leaveResp := doJSONRequest(t, handler, http.MethodPost, pubPath+"/leave", nil, bob); leaveResp.Code != http.StatusOK {
+		t.Fatalf("bob leave status = %d", leaveResp.Code)
+	}
+
+	// Private room: bob cannot see or fetch it.
+	privResp := doJSONRequest(t, handler, http.MethodPost, "/api/rooms", map[string]any{"name": "Secret", "visibility": "private"}, admin)
+	var priv store.Room
+	decodeResponse(t, privResp, &priv)
+	decodeResponse(t, doJSONRequest(t, handler, http.MethodGet, "/api/rooms", nil, bob), &bobRooms)
+	if roomListed(bobRooms, priv.ID) {
+		t.Fatalf("bob should not see the private room")
+	}
+	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/rooms/"+itoa(priv.ID), nil, bob)
+	if getResp.Code != http.StatusForbidden {
+		t.Fatalf("bob fetch private room status = %d, want 403", getResp.Code)
+	}
+}
+
+func roomListed(rooms []store.Room, id int64) bool {
+	for _, r := range rooms {
+		if r.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func itoa(n int64) string {
+	return strconv.FormatInt(n, 10)
+}
