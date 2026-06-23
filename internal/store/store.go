@@ -364,8 +364,6 @@ CREATE TABLE IF NOT EXISTS tickets (
 	dor_map TEXT NOT NULL DEFAULT '{}',
 	dod_map TEXT NOT NULL DEFAULT '{}',
 	ac_map TEXT NOT NULL DEFAULT '{}',
-	git_repository TEXT NOT NULL DEFAULT '',
-	git_branch TEXT NOT NULL DEFAULT '',
 	workflow_stage_id INTEGER,
 	role_id INTEGER,
 	stage TEXT NOT NULL DEFAULT 'develop',
@@ -374,8 +372,6 @@ CREATE TABLE IF NOT EXISTS tickets (
 	priority INTEGER NOT NULL DEFAULT 3,
 	sort_order INTEGER NOT NULL DEFAULT 0,
 	estimate_effort INTEGER NOT NULL DEFAULT 0,
-	estimate_complete TEXT NOT NULL DEFAULT '',
-	health_score INTEGER NOT NULL DEFAULT 0,
 	assignee TEXT NOT NULL DEFAULT '',
 	draft INTEGER NOT NULL DEFAULT 1,
 	complete INTEGER NOT NULL DEFAULT 0,
@@ -1073,16 +1069,9 @@ CREATE TABLE user_notifications (
 			return err
 		}
 	}
-	if !columnExists(ctx, db, "tickets", "estimate_complete") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN estimate_complete TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "tickets", "git_repository") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN git_repository TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
+	// estimate_complete and git_repository moved into the attrs bag (TK-111); their
+	// legacy ADD COLUMN migrations were removed and the columns are dropped by the
+	// attrs-consolidation step below.
 	if !columnExists(ctx, db, "tickets", "dor_map") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN dor_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
 			return err
@@ -1098,28 +1087,8 @@ CREATE TABLE user_notifications (
 			return err
 		}
 	}
-	if !columnExists(ctx, db, "tickets", "git_branch") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "tickets", "health_score") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN health_score INTEGER NOT NULL DEFAULT 0`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "tickets", "open") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN open INTEGER NOT NULL DEFAULT 1`); err != nil {
-			return err
-		}
-		// Legacy behavior used archived for close/open. Preserve closed state and reset archived.
-		if _, err := db.ExecContext(ctx, `UPDATE tickets SET open = CASE WHEN archived = 1 THEN 0 ELSE 1 END`); err != nil {
-			return err
-		}
-		if _, err := db.ExecContext(ctx, `UPDATE tickets SET archived = 0`); err != nil {
-			return err
-		}
-	}
+	// git_branch and health_score moved into the attrs bag (TK-111); the legacy
+	// `open` column is dropped entirely. See the attrs-consolidation step below.
 	if !columnExists(ctx, db, "tickets", "deleted") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
@@ -1572,16 +1541,9 @@ CREATE TABLE user_notifications (
 			return err
 		}
 	}
-	// Add author column to store the username of who created the ticket
-	if !columnExists(ctx, db, "tickets", "author") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN author TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-		// Backfill author from created_by user ID
-		if _, err := db.ExecContext(ctx, `UPDATE tickets SET author = COALESCE((SELECT u.username FROM users u WHERE u.user_id = tickets.created_by), '') WHERE author = ''`); err != nil {
-			return err
-		}
-	}
+	// author moved into the attrs bag (TK-111); its legacy ADD COLUMN + backfill
+	// were removed. The attrs-consolidation step below migrates and drops it,
+	// backfilling author from created_by into attrs for rows that lack it.
 	// Account lockout columns for brute-force protection.
 	if !columnExists(ctx, db, "users", "failed_login_attempts") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0`); err != nil {
@@ -1606,7 +1568,6 @@ CREATE TABLE user_notifications (
 		{table: "tickets", column: "assignee", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_assignee ON tickets(assignee)`},
 		{table: "tickets", column: "stage", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_stage ON tickets(stage)`},
 		{table: "tickets", column: "state", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_state ON tickets(state)`},
-		{table: "tickets", column: "open", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_open ON tickets(open)`},
 		{table: "tickets", column: "draft", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_draft ON tickets(draft)`},
 		{table: "tickets", column: "complete", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_complete ON tickets(complete)`},
 		{table: "tickets", column: "archived", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_archived ON tickets(archived)`},
@@ -1723,12 +1684,8 @@ CREATE TABLE user_notifications (
 		}
 	}
 
-	// Add pr_url to tickets (developer agent stores PR link after completing).
-	if !columnExists(ctx, db, "tickets", "pr_url") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN pr_url TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
+	// pr_url moved into the attrs bag (TK-111); its legacy ADD COLUMN was removed
+	// and the column is migrated and dropped by the attrs-consolidation step below.
 
 	// Add started_at to tickets: when a ticket enters the active state (TK-88).
 	if !columnExists(ctx, db, "tickets", "started_at") {
@@ -1754,6 +1711,61 @@ CREATE TABLE user_notifications (
 			if _, err := db.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN attrs TEXT NOT NULL DEFAULT '{}'`); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Consolidate tickets soft columns into the attrs bag and drop them (TK-111).
+	// json_set only fills a key that is currently absent, so re-running this never
+	// clobbers a value written through the bag; the column is dropped once its data
+	// is preserved. Runs before the row-reading backfills below so they see the
+	// narrowed shape.
+	for _, col := range []string{"git_repository", "git_branch", "estimate_complete", "pr_url"} {
+		if columnExists(ctx, db, "tickets", col) {
+			if _, err := db.ExecContext(ctx, fmt.Sprintf(
+				`UPDATE tickets SET attrs = json_set(attrs, '$.%s', %s) `+
+					`WHERE json_extract(attrs, '$.%s') IS NULL AND TRIM(COALESCE(%s, '')) <> ''`,
+				col, col, col, col)); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, `ALTER TABLE tickets DROP COLUMN `+col); err != nil {
+				return err
+			}
+		}
+	}
+	if columnExists(ctx, db, "tickets", "health_score") {
+		if _, err := db.ExecContext(ctx, `UPDATE tickets SET attrs = json_set(attrs, '$.health_score', health_score) `+
+			`WHERE json_extract(attrs, '$.health_score') IS NULL AND COALESCE(health_score, 0) <> 0`); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets DROP COLUMN health_score`); err != nil {
+			return err
+		}
+	}
+	if columnExists(ctx, db, "tickets", "author") {
+		// Preserve an explicit author, else backfill from the creator's username
+		// (the behaviour the old author column migration had), all into attrs.
+		if _, err := db.ExecContext(ctx, `UPDATE tickets SET attrs = json_set(attrs, '$.author', author) `+
+			`WHERE json_extract(attrs, '$.author') IS NULL AND TRIM(COALESCE(author, '')) <> ''`); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, `UPDATE tickets SET attrs = json_set(attrs, '$.author', `+
+			`(SELECT u.username FROM users u WHERE u.user_id = tickets.created_by)) `+
+			`WHERE json_extract(attrs, '$.author') IS NULL `+
+			`AND TRIM(COALESCE((SELECT u.username FROM users u WHERE u.user_id = tickets.created_by), '')) <> ''`); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets DROP COLUMN author`); err != nil {
+			return err
+		}
+	}
+	// The legacy `open` column is dead (superseded by complete/archived). Drop its
+	// index (a column cannot be dropped while indexed) and the column itself.
+	if columnExists(ctx, db, "tickets", "open") {
+		if _, err := db.ExecContext(ctx, `DROP INDEX IF EXISTS idx_tickets_open`); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets DROP COLUMN open`); err != nil {
+			return err
 		}
 	}
 
