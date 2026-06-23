@@ -2014,11 +2014,22 @@ test("command palette: single-letter alias and /ticket-key quick-open", async ({
   await page.locator("#command-palette-input").press("Enter");
   await expect(page.locator('#main-nav button[data-view="projects"]')).toHaveClass(/active/);
 
-  // /<ticket-key> opens that ticket's detail modal.
+  // /<ticket-key> pushes a numbered action menu (command stack, TK-130).
   await page.keyboard.press("Shift");
   await page.keyboard.press("Shift");
   await page.locator("#command-palette-input").fill("ops-101");
-  await expect(page.locator("#command-palette-list")).toContainText("Open ticket OPS-101");
+  await expect(page.locator("#command-palette-list")).toContainText("OPS-101");
   await page.locator("#command-palette-input").press("Enter");
+  await expect(page.locator("#command-palette-list")).toContainText("Open detail");
+
+  // Esc pops one frame back to the command list without closing the palette.
+  await page.locator("#command-palette-input").press("Escape");
+  await expect(page.locator("#command-palette-overlay")).toBeVisible();
+  await expect(page.locator("#command-palette-list")).not.toContainText("Open detail");
+
+  // Re-enter the ticket actions and pick "Open detail" by number key.
+  await page.locator("#command-palette-input").fill("ops-101");
+  await page.locator("#command-palette-input").press("Enter");
+  await page.locator("#command-palette-input").press("1");
   await expect(page.locator("#ticket-modal")).toHaveClass(/open/);
 });

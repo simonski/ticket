@@ -8991,39 +8991,97 @@
             return commands;
         }
         function isPaletteOpen() { return paletteEls.overlay && !paletteEls.overlay.classList.contains("hidden"); }
-        function renderPaletteList() {
-            const query = String(paletteEls.input.value || "").replace(/^\//, "").trim().toLowerCase();
-            const matches = buildPaletteCommands().filter((cmd) => !query || cmd.key.includes(query) || cmd.label.toLowerCase().includes(query));
-            const rank = (cmd) => (cmd.key === query ? 0 : cmd.key.startsWith(query) ? 1 : cmd.label.toLowerCase().startsWith(query) ? 2 : 3);
-            matches.sort((a, b) => rank(a) - rank(b));
-            // A ticket key like "tk-23" jumps straight to that ticket's detail.
-            if (TICKET_KEY_RE.test(query)) {
-                matches.unshift({ slash: "/" + query, key: query, label: "Open ticket " + query.toUpperCase(), action: "ticket", ticketKey: query.toUpperCase() });
+        // The palette is a STACK of frames (TK-130): the command list, and entity
+        // action menus pushed on top (e.g. a ticket's actions). Esc pops one frame;
+        // popping past the root closes the palette.
+        let paletteStack = [{ kind: "commands" }];
+        // After navigating to a view, optionally focus an element (e.g. /chat
+        // focuses the chat composer once the rooms view registers it, TK-118 S5).
+        const PALETTE_FOCUS = { chat: "#chat-composer-input" };
+        function paletteFocusView(view) {
+            const sel = PALETTE_FOCUS[view];
+            if (!sel) { return; }
+            setTimeout(() => { const el = document.querySelector(sel); if (el) { el.focus(); } }, 60);
+        }
+        function paletteTopFrame() { return paletteStack[paletteStack.length - 1]; }
+        function paletteQuery() { return String(paletteEls.input.value || "").replace(/^\//, "").trim().toLowerCase(); }
+        function promptTicketComment(key) {
+            return Promise.resolve(uiPrompt("Comment on " + key, "", "Comment")).then((text) => {
+                const body = String(text || "").trim();
+                if (!body) { return; }
+                return api("/api/tickets/" + encodeURIComponent(key) + "/comments", { method: "POST", body: { comment: body } })
+                    .then(() => setNotice("Commented on " + key + "."))
+                    .catch((err) => setNotice("Comment failed: " + err.message, true));
+            });
+        }
+        function ticketActionItems(key) {
+            return [
+                { label: "Open detail", run: () => openTicketByKey(key) },
+                { label: "Add comment…", run: () => promptTicketComment(key) },
+                { label: "Copy key", run: () => { try { if (navigator.clipboard) { navigator.clipboard.writeText(key); } } catch (e) {} setNotice("Copied " + key + "."); } },
+            ];
+        }
+        function pushTicketActions(key) {
+            paletteStack.push({ kind: "actions", title: key, items: ticketActionItems(key) });
+            paletteActiveIndex = 0;
+            paletteEls.input.value = "";
+            renderPalette();
+        }
+        function popPaletteFrame() {
+            if (paletteStack.length <= 1) { return false; }
+            paletteStack.pop();
+            paletteActiveIndex = 0;
+            paletteEls.input.value = "";
+            renderPalette();
+            return true;
+        }
+        function paletteFrameItems() {
+            const frame = paletteTopFrame();
+            const query = paletteQuery();
+            if (frame.kind === "actions") {
+                return frame.items
+                    .filter((it) => !query || it.label.toLowerCase().includes(query))
+                    .map((it, i) => ({ left: String(i + 1), label: it.label, run: () => { closeCommandPalette(); it.run(); } }));
             }
-            if (paletteActiveIndex >= matches.length) { paletteActiveIndex = Math.max(0, matches.length - 1); }
-            paletteEls.list._matches = matches;
-            if (!matches.length) {
+            const rank = (cmd) => (cmd.key === query ? 0 : cmd.key.startsWith(query) ? 1 : cmd.label.toLowerCase().startsWith(query) ? 2 : 3);
+            const items = buildPaletteCommands()
+                .filter((cmd) => !query || cmd.key.includes(query) || cmd.label.toLowerCase().includes(query))
+                .sort((a, b) => rank(a) - rank(b))
+                .map((cmd) => ({ left: cmd.slash, label: cmd.label, run: () => { closeCommandPalette(); switchView(cmd.view); paletteFocusView(cmd.view); } }));
+            if (TICKET_KEY_RE.test(query)) {
+                const key = query.toUpperCase();
+                items.unshift({ left: "/" + query, label: "Ticket " + key + " — actions…", run: () => pushTicketActions(key) });
+            }
+            return items;
+        }
+        function renderPalette() {
+            const frame = paletteTopFrame();
+            const items = paletteFrameItems();
+            paletteEls.input.placeholder = frame.kind === "actions"
+                ? (frame.title + " — pick an action (number / ↑↓)")
+                : "Type a / command — e.g. /chat, /backlog, /tk-23";
+            if (paletteActiveIndex >= items.length) { paletteActiveIndex = Math.max(0, items.length - 1); }
+            paletteEls.list._items = items;
+            if (!items.length) {
                 paletteEls.list.innerHTML = "<li class=\"command-palette-empty\">No matching commands</li>";
                 return;
             }
-            paletteEls.list.innerHTML = matches.map((cmd, i) =>
+            paletteEls.list.innerHTML = items.map((it, i) =>
                 "<li class=\"command-palette-item" + (i === paletteActiveIndex ? " active" : "") + "\" role=\"option\" data-cp-index=\"" + i + "\">" +
-                "<span class=\"cp-slash\">" + escapeHTML(cmd.slash) + "</span><span class=\"cp-label\">" + escapeHTML(cmd.label) + "</span></li>").join("");
+                "<span class=\"cp-slash\">" + escapeHTML(it.left) + "</span><span class=\"cp-label\">" + escapeHTML(it.label) + "</span></li>").join("");
         }
         function runPaletteActive() {
-            const matches = paletteEls.list._matches || [];
-            const cmd = matches[paletteActiveIndex];
-            if (!cmd) { return; }
-            closeCommandPalette();
-            if (cmd.action === "ticket") { openTicketByKey(cmd.ticketKey); return; }
-            switchView(cmd.view);
+            const items = paletteEls.list._items || [];
+            const it = items[paletteActiveIndex];
+            if (it) { it.run(); }
         }
         function openCommandPalette() {
             if (!paletteEls.overlay || isPaletteOpen()) { return; }
+            paletteStack = [{ kind: "commands" }];
             paletteActiveIndex = 0;
             paletteEls.input.value = "";
             paletteEls.overlay.classList.remove("hidden");
-            renderPaletteList();
+            renderPalette();
             setTimeout(() => { paletteEls.input.focus(); }, 0);
         }
         function closeCommandPalette() {
@@ -9031,13 +9089,17 @@
         }
         function setupCommandPalette() {
             if (!paletteEls.overlay) { return; }
-            paletteEls.input.addEventListener("input", () => { paletteActiveIndex = 0; renderPaletteList(); });
+            paletteEls.input.addEventListener("input", () => { paletteActiveIndex = 0; renderPalette(); });
             paletteEls.input.addEventListener("keydown", (event) => {
-                const matches = paletteEls.list._matches || [];
-                if (event.key === "ArrowDown") { event.preventDefault(); paletteActiveIndex = Math.min(matches.length - 1, paletteActiveIndex + 1); renderPaletteList(); }
-                else if (event.key === "ArrowUp") { event.preventDefault(); paletteActiveIndex = Math.max(0, paletteActiveIndex - 1); renderPaletteList(); }
+                const items = paletteEls.list._items || [];
+                if (event.key === "ArrowDown") { event.preventDefault(); paletteActiveIndex = Math.min(items.length - 1, paletteActiveIndex + 1); renderPalette(); }
+                else if (event.key === "ArrowUp") { event.preventDefault(); paletteActiveIndex = Math.max(0, paletteActiveIndex - 1); renderPalette(); }
                 else if (event.key === "Enter") { event.preventDefault(); runPaletteActive(); }
-                else if (event.key === "Escape") { event.preventDefault(); closeCommandPalette(); }
+                else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!popPaletteFrame()) { closeCommandPalette(); } }
+                else if (/^[1-9]$/.test(event.key) && paletteTopFrame().kind === "actions") {
+                    const idx = Number(event.key) - 1;
+                    if (idx < items.length) { event.preventDefault(); paletteActiveIndex = idx; runPaletteActive(); }
+                }
             });
             paletteEls.list.addEventListener("click", (event) => {
                 const item = event.target.closest("[data-cp-index]");
