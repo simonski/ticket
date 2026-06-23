@@ -19,3 +19,6 @@ test-results/
 coverage.out
 config.json*.test
 task
+
+# tk pre-upgrade database backups
+*.bak-*
