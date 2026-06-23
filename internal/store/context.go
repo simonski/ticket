@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Context graph (GOAL.md "context graph").
+// Context graph (FACTORY.md §5.7 "Context graph and knowledge").
 //
 // Tickets, documents, and external URLs form a project-scoped graph: nodes are
 // the entities themselves, edges are typed links recorded in context_edges.

@@ -7961,7 +7961,7 @@
             }
         }
 
-        // Context links (GOAL.md context graph): documents, URLs, and other tickets
+        // Context links (FACTORY.md §5.7 context graph): documents, URLs, and other tickets
         // attached to this ticket as supporting context.
         function contextEdgeLabel(edge) {
             const isSource = state.activeTicket && edge.source_type === "ticket" &&
