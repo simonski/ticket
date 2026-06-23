@@ -1973,3 +1973,33 @@ test("creates, updates, uploads, and deletes documents from the Documents view",
     ]),
   );
 });
+
+test("Shift Shift command palette navigates between windows", async ({ page }) => {
+  // Double-Shift opens the palette.
+  await page.keyboard.press("Shift");
+  await page.keyboard.press("Shift");
+  await expect(page.locator("#command-palette-overlay")).toBeVisible();
+
+  // Filter to a slash-shortcut and navigate with Enter.
+  await page.locator("#command-palette-input").fill("proj");
+  await expect(page.locator("#command-palette-list")).toContainText("/projects");
+  await page.locator("#command-palette-input").press("Enter");
+  await expect(page.locator('#main-nav button[data-view="projects"]')).toHaveClass(/active/);
+  await expect(page.locator("#command-palette-overlay")).toBeHidden();
+
+  // /backlog is an alias for the board (tickets) window.
+  await page.keyboard.press("Shift");
+  await page.keyboard.press("Shift");
+  await expect(page.locator("#command-palette-overlay")).toBeVisible();
+  await page.locator("#command-palette-input").fill("backlog");
+  await expect(page.locator("#command-palette-list")).toContainText("/backlog");
+  await page.locator("#command-palette-input").press("Enter");
+  await expect(page.locator('#main-nav button[data-view="tickets"]')).toHaveClass(/active/);
+
+  // Esc closes the palette without navigating.
+  await page.keyboard.press("Shift");
+  await page.keyboard.press("Shift");
+  await expect(page.locator("#command-palette-overlay")).toBeVisible();
+  await page.locator("#command-palette-input").press("Escape");
+  await expect(page.locator("#command-palette-overlay")).toBeHidden();
+});
