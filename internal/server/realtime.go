@@ -13,6 +13,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/simonski/ticket/internal/store"
 	"sync"
 	"time"
 )
@@ -24,6 +26,8 @@ type liveEvent struct {
 	ChangeType string `json:"change_type,omitempty"`
 	ProjectID  int64  `json:"project_id,omitempty"`
 	TicketID   string `json:"ticket_id,omitempty"`
+	RoomID     int64  `json:"room_id,omitempty"`
+	Payload    any    `json:"payload,omitempty"`
 	At         string `json:"at"`
 }
 
@@ -38,6 +42,7 @@ type liveClient struct {
 	done      chan struct{}
 	once      sync.Once
 	projectID int64 // if set, only receive events for this project
+	roomID    int64 // if set, also receive room events for this room
 }
 
 func newLiveHub() *liveHub {
@@ -74,8 +79,7 @@ func (h *liveHub) broadcast(event liveEvent) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for client := range h.clients {
-		// Skip clients subscribed to a different project.
-		if client.projectID != 0 && event.ProjectID != 0 && client.projectID != event.ProjectID {
+		if !deliverToClient(client, event) {
 			continue
 		}
 		select {
@@ -83,6 +87,24 @@ func (h *liveHub) broadcast(event liveEvent) {
 		default:
 		}
 	}
+}
+
+// deliverToClient decides whether a live event should be delivered to a client.
+// Room events go only to clients subscribed to that room; other events respect
+// the optional project subscription filter.
+func deliverToClient(client *liveClient, event liveEvent) bool {
+	if event.RoomID != 0 {
+		return client.roomID == event.RoomID
+	}
+	if client.projectID != 0 && event.ProjectID != 0 && client.projectID != event.ProjectID {
+		return false
+	}
+	return true
+}
+
+// broadcastRoomMessage fans a newly-posted room message out to subscribers.
+func (h *liveHub) broadcastRoomMessage(roomID int64, msg store.RoomMessage) {
+	h.broadcast(liveEvent{Type: "room_message", RoomID: roomID, Payload: msg})
 }
 
 func (c *liveClient) close() {
@@ -142,9 +164,15 @@ func websocketServe(hub *liveHub, w http.ResponseWriter, r *http.Request) error 
 			var msg struct {
 				Type      string `json:"type"`
 				ProjectID int64  `json:"project_id"`
+				RoomID    int64  `json:"room_id"`
 			}
-			if json.Unmarshal(payload, &msg) == nil && msg.Type == "subscribe" && msg.ProjectID > 0 {
-				client.projectID = msg.ProjectID
+			if json.Unmarshal(payload, &msg) == nil && msg.Type == "subscribe" {
+				if msg.ProjectID > 0 {
+					client.projectID = msg.ProjectID
+				}
+				if msg.RoomID > 0 {
+					client.roomID = msg.RoomID
+				}
 			}
 		}
 	}
