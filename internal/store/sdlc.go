@@ -246,10 +246,16 @@ func AddWorkflowStageWithDefinitions(ctx context.Context, db *sql.DB, workflowID
 	if stageName == "" {
 		return WorkflowStage{}, errors.New("stage name is required")
 	}
+	// guidance text lives in the attrs bag (TK-114); preserve the prior mapping
+	// (description=wow, acceptance_criteria=definition_of_ready=dor, ...).
+	attrsJSON, err := stageAttrsForWrite(nil, wow, dor, dor, dod)
+	if err != nil {
+		return WorkflowStage{}, err
+	}
 	result, err := db.ExecContext(ctx, `
-		INSERT INTO workflow_stages (workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, attrs, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, '{}', CURRENT_TIMESTAMP)
-	`, workflowID, stageName, strings.TrimSpace(wow), strings.TrimSpace(dor), strings.TrimSpace(dor), strings.TrimSpace(dod), sortOrder)
+		INSERT INTO workflow_stages (workflow_id, stage_name, sort_order, attrs, updated_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`, workflowID, stageName, sortOrder, attrsJSON)
 	if err != nil {
 		return WorkflowStage{}, err
 	}
@@ -275,7 +281,13 @@ func SetWorkflowStageBacklog(ctx context.Context, db *sql.DB, stageID int64, isB
 // stage updates do not touch attrs, so the bag is preserved across them; this is
 // the explicit way to write it.
 func SetWorkflowStageAttrs(ctx context.Context, db *sql.DB, stageID int64, attrs Attrs) (WorkflowStage, error) {
-	attrsJSON, err := marshalAttrs(attrs)
+	// The guidance-text fields also live in the bag (TK-114), so replace only the
+	// extra keys and fold the stage's existing guidance text back in.
+	current, err := getWorkflowStageRow(ctx, db, stageID)
+	if err != nil {
+		return WorkflowStage{}, err
+	}
+	attrsJSON, err := stageAttrsForWrite(attrs, current.Description, current.AcceptanceCriteria, current.DefinitionOfReady, current.DefinitionOfDone)
 	if err != nil {
 		return WorkflowStage{}, err
 	}
@@ -305,29 +317,24 @@ func UpdateWorkflowStageWithDefinitions(ctx context.Context, db *sql.DB, stageID
 	if name == "" {
 		return WorkflowStage{}, errors.New("stage name is required")
 	}
-	if isBacklogStage != nil {
-		result, err := db.ExecContext(ctx, `
-			UPDATE workflow_stages
-			SET stage_name = ?, description = ?, acceptance_criteria = ?, definition_of_ready = ?, definition_of_done = ?, is_backlog_stage = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE workflow_stage_id = ?
-		`, name, strings.TrimSpace(wow), strings.TrimSpace(dor), strings.TrimSpace(dor), strings.TrimSpace(dod), *isBacklogStage, stageID)
-		if err != nil {
-			return WorkflowStage{}, err
-		}
-		affected, err := result.RowsAffected()
-		if err != nil {
-			return WorkflowStage{}, err
-		}
-		if affected == 0 {
-			return WorkflowStage{}, sql.ErrNoRows
-		}
-		return getWorkflowStageRow(ctx, db, stageID)
+	// Guidance text lives in the attrs bag (TK-114); fold it in over the stage's
+	// existing extra bag, preserving the prior column mapping
+	// (description=wow, acceptance_criteria=definition_of_ready=dor, ...).
+	current, err := getWorkflowStageRow(ctx, db, stageID)
+	if err != nil {
+		return WorkflowStage{}, err
 	}
-	result, err := db.ExecContext(ctx, `
-		UPDATE workflow_stages
-		SET stage_name = ?, description = ?, acceptance_criteria = ?, definition_of_ready = ?, definition_of_done = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE workflow_stage_id = ?
-	`, name, strings.TrimSpace(wow), strings.TrimSpace(dor), strings.TrimSpace(dor), strings.TrimSpace(dod), stageID)
+	attrsJSON, err := stageAttrsForWrite(current.Attrs, wow, dor, dor, dod)
+	if err != nil {
+		return WorkflowStage{}, err
+	}
+	query := `UPDATE workflow_stages SET stage_name = ?, attrs = ?, updated_at = CURRENT_TIMESTAMP WHERE workflow_stage_id = ?`
+	args := []any{name, attrsJSON, stageID}
+	if isBacklogStage != nil {
+		query = `UPDATE workflow_stages SET stage_name = ?, attrs = ?, is_backlog_stage = ?, updated_at = CURRENT_TIMESTAMP WHERE workflow_stage_id = ?`
+		args = []any{name, attrsJSON, *isBacklogStage, stageID}
+	}
+	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return WorkflowStage{}, err
 	}
@@ -599,10 +606,14 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 		if stageName == "" {
 			return Workflow{}, errors.New("workflow stage name is required")
 		}
+		stageAttrsJSON, attrsErr := stageAttrsForWrite(nil, s.Description, "", "", "")
+		if attrsErr != nil {
+			return Workflow{}, attrsErr
+		}
 		stageResult, err := tx.ExecContext(ctx, `
-			INSERT INTO workflow_stages (workflow_id, stage_name, description, sort_order, updated_at)
+			INSERT INTO workflow_stages (workflow_id, stage_name, sort_order, attrs, updated_at)
 			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-		`, workflowID, stageName, strings.TrimSpace(s.Description), s.SortOrder)
+		`, workflowID, stageName, s.SortOrder, stageAttrsJSON)
 		if err != nil {
 			return Workflow{}, err
 		}
@@ -895,16 +906,44 @@ func getWorkflowRow(ctx context.Context, db *sql.DB, id int64) (Workflow, error)
 	return w, nil
 }
 
+// hydrateStageAttrs copies the bag-backed guidance-text fields into typed
+// WorkflowStage fields and strips them from the visible bag (TK-114).
+func hydrateStageAttrs(s *WorkflowStage) {
+	s.Description = s.Attrs.GetString("description")
+	s.AcceptanceCriteria = s.Attrs.GetString("acceptance_criteria")
+	s.DefinitionOfReady = s.Attrs.GetString("definition_of_ready")
+	s.DefinitionOfDone = s.Attrs.GetString("definition_of_done")
+	for _, k := range []string{"description", "acceptance_criteria", "definition_of_ready", "definition_of_done"} {
+		delete(s.Attrs, k)
+	}
+	if len(s.Attrs) == 0 {
+		s.Attrs = nil
+	}
+}
+
+// stageAttrsForWrite folds the bag-backed guidance-text fields into a base bag.
+func stageAttrsForWrite(base Attrs, description, acceptanceCriteria, definitionOfReady, definitionOfDone string) (string, error) {
+	merged := Attrs{}
+	for k, v := range base {
+		merged[k] = v
+	}
+	merged.SetString("description", strings.TrimSpace(description))
+	merged.SetString("acceptance_criteria", strings.TrimSpace(acceptanceCriteria))
+	merged.SetString("definition_of_ready", strings.TrimSpace(definitionOfReady))
+	merged.SetString("definition_of_done", strings.TrimSpace(definitionOfDone))
+	return marshalAttrs(merged)
+}
+
 func getWorkflowStageRow(ctx context.Context, db *sql.DB, id int64) (WorkflowStage, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT workflow_stage_id, workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, COALESCE(is_backlog_stage, 0), created_at, updated_at, attrs
+		SELECT workflow_stage_id, workflow_id, stage_name, sort_order, COALESCE(is_backlog_stage, 0), created_at, updated_at, attrs
 		FROM workflow_stages
 		WHERE workflow_stage_id = ?
 	`, id)
 	var s WorkflowStage
 	var attrsJSON sql.NullString
-	if err := row.Scan(&s.ID, &s.WorkflowID, &s.StageName, &s.Description,
-		&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.IsBacklogStage, &s.CreatedAt, &s.UpdatedAt, &attrsJSON); err != nil {
+	if err := row.Scan(&s.ID, &s.WorkflowID, &s.StageName,
+		&s.SortOrder, &s.IsBacklogStage, &s.CreatedAt, &s.UpdatedAt, &attrsJSON); err != nil {
 		return WorkflowStage{}, err
 	}
 	attrs, err := parseAttrs(attrsJSON.String)
@@ -912,6 +951,7 @@ func getWorkflowStageRow(ctx context.Context, db *sql.DB, id int64) (WorkflowSta
 		return WorkflowStage{}, err
 	}
 	s.Attrs = attrs
+	hydrateStageAttrs(&s)
 	roles, err := ListWorkflowStageRoles(ctx, db, s.WorkflowID, s.ID)
 	if err != nil {
 		return WorkflowStage{}, err
@@ -928,7 +968,7 @@ func getWorkflowStageRow(ctx context.Context, db *sql.DB, id int64) (WorkflowSta
 
 func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]WorkflowStage, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT workflow_stage_id, workflow_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, COALESCE(is_backlog_stage, 0), created_at, updated_at, attrs
+		SELECT workflow_stage_id, workflow_id, stage_name, sort_order, COALESCE(is_backlog_stage, 0), created_at, updated_at, attrs
 		FROM workflow_stages
 		WHERE workflow_id = ?
 		ORDER BY sort_order, workflow_stage_id
@@ -941,8 +981,8 @@ func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]Wo
 	for rows.Next() {
 		var s WorkflowStage
 		var attrsJSON sql.NullString
-		if scanErr := rows.Scan(&s.ID, &s.WorkflowID, &s.StageName, &s.Description,
-			&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.IsBacklogStage, &s.CreatedAt, &s.UpdatedAt, &attrsJSON); scanErr != nil {
+		if scanErr := rows.Scan(&s.ID, &s.WorkflowID, &s.StageName,
+			&s.SortOrder, &s.IsBacklogStage, &s.CreatedAt, &s.UpdatedAt, &attrsJSON); scanErr != nil {
 			return nil, scanErr
 		}
 		attrs, parseErr := parseAttrs(attrsJSON.String)
@@ -950,6 +990,7 @@ func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]Wo
 			return nil, parseErr
 		}
 		s.Attrs = attrs
+		hydrateStageAttrs(&s)
 		stages = append(stages, s)
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {
