@@ -1188,6 +1188,11 @@ test("passkey login signs in from the website without posting a password", async
     });
   });
   await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
 
   await page.locator("#login-username").fill("admin");
   await page.getByRole("button", { name: "Use passkey" }).click();
@@ -1737,8 +1742,8 @@ test("renders the workflow graph as compact titled nodes and still allows stage 
   });
   expect(graphGeometry.nodes.every((node) => node.visible)).toBe(true);
   expect(graphGeometry.overlaps).toEqual([]);
-  await expect(page.locator('.workflow-graph-node')).not.toContainText("Add role");
-  await expect(page.locator('.workflow-graph-node')).not.toContainText("Save stage");
+  await expect(page.locator('[data-workflow-graph-viewport]')).not.toContainText("Add role");
+  await expect(page.locator('[data-workflow-graph-viewport]')).not.toContainText("Save stage");
 
   await page.locator("#new-stage-name").fill("review");
   await page.locator("#save-stage-button").click();
