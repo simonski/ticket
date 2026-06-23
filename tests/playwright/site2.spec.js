@@ -2111,3 +2111,13 @@ test("chat: rooms list, messages, send, and create a room", async ({ page }) => 
   await page.locator("#dialog-ok").click();
   await expect(page.locator("#chat-rooms-list")).toContainText("Engineering");
 });
+
+test("chat: breakout room from a ticket", async ({ page }) => {
+  // Open a ticket and start a breakout room scoped to it.
+  await page.getByText("Move me").click();
+  await expect(page.locator("#ticket-modal")).toHaveClass(/open/);
+  await page.locator("#ticket-breakout-button").click();
+  await expect(page.locator('#main-nav button[data-view="chat"]')).toHaveClass(/active/);
+  await expect(page.locator("#chat-room-title")).toContainText("Breakout");
+  await expect(page.locator("#chat-rooms-list")).toContainText("Breakout");
+});

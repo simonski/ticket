@@ -2300,6 +2300,24 @@
                 });
             }).catch((err) => setNotice("Create room failed: " + err.message, true));
         }
+        // Open (or create) a breakout room scoped to a ticket (S8).
+        function openBreakoutRoom(ticket) {
+            if (!ticket || !ticket.id) { return; }
+            const ticketKey = ticket.id;
+            const projectID = ticket.project_id || state.selectedProjectID || null;
+            const go = (roomID) => {
+                if (typeof closeTicketModal === "function") { closeTicketModal(); }
+                switchView("chat");
+                loadRooms().then(() => { renderRoomsList(); selectRoom(roomID); });
+            };
+            loadRooms().then(() => {
+                const existing = state.rooms.find((r) => r.ticket_id === ticketKey);
+                if (existing) { go(existing.room_id); return; }
+                apiClient.post("/api/rooms", { name: "Breakout " + ticketKey, topic: ticket.title || "", project_id: projectID, ticket_id: ticketKey })
+                    .then((room) => { if (room && room.room_id) { go(room.room_id); } })
+                    .catch((err) => setNotice("Breakout failed: " + err.message, true));
+            });
+        }
         function subscribeRoom(roomID) {
             try {
                 if (state.liveSocket && state.liveSocket.readyState === 1) {
@@ -2317,6 +2335,8 @@
             }
             const newBtn = document.getElementById("new-room-button");
             if (newBtn) { newBtn.addEventListener("click", createRoomFromPrompt); }
+            const breakoutBtn = document.getElementById("ticket-breakout-button");
+            if (breakoutBtn) { breakoutBtn.addEventListener("click", () => openBreakoutRoom(state.activeTicket)); }
             const composer = document.getElementById("chat-composer");
             if (composer) { composer.addEventListener("submit", (event) => { event.preventDefault(); sendRoomMessage(); }); }
             const joinBtn = document.getElementById("chat-join-button");
