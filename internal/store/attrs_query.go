@@ -76,6 +76,7 @@ func ListTicketsByAttr(ctx context.Context, db *sql.DB, projectID int64, key, va
 	if err != nil {
 		return nil, err
 	}
+	// #nosec G202 -- ticketSelectColumns is a fixed column list and expr is built from an allowlist-validated key (ValidAttrsKey); the compared value is a bound parameter.
 	query := `SELECT ` + ticketSelectColumns("") + `
 		FROM tickets
 		WHERE project_id = ? AND deleted = 0 AND ` + expr + ` = ?
