@@ -278,6 +278,8 @@ func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, us
 		if hub != nil {
 			hub.broadcastRoomMessage(roomID, msg)
 		}
+		// If an agent member was @mentioned, let it reply asynchronously (TK-131).
+		go replyAsAgents(context.Background(), db, room, msg, hub)
 		writeJSON(w, http.StatusCreated, msg)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
