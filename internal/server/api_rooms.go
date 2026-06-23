@@ -131,7 +131,7 @@ func (r *router) registerRoomHandlers() {
 		case "members":
 			handleRoomMembers(w, req, db, roomID)
 		case "messages":
-			handleRoomMessages(w, req, db, user, roomID)
+			handleRoomMessages(w, req, db, user, roomID, r.live)
 		default:
 			writeError(w, http.StatusNotFound, "unknown room subresource")
 		}
@@ -218,7 +218,7 @@ func handleRoomMembers(w http.ResponseWriter, req *http.Request, db *sql.DB, roo
 	}
 }
 
-func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, user store.User, roomID int64) {
+func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, user store.User, roomID int64, hub *liveHub) {
 	switch req.Method {
 	case http.MethodGet:
 		limit, _ := strconv.Atoi(req.URL.Query().Get("limit"))
@@ -251,8 +251,10 @@ func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, us
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		// Broadcast to live room subscribers (no-op until the WS hub lands, S4).
-		broadcastRoomMessage(roomID, msg)
+		// Fan the message out to live room subscribers (S4 hub).
+		if hub != nil {
+			hub.broadcastRoomMessage(roomID, msg)
+		}
 		writeJSON(w, http.StatusCreated, msg)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
