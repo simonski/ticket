@@ -411,3 +411,50 @@ func fieldGapLines(lines []string, label, nextLabel string) int {
 	}
 	return end - start - 1
 }
+
+func TestHandleKeyEditTypesNavLettersInTitle(t *testing.T) {
+	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
+	m.width = 100
+	m.mode = modeEdit
+	m.form = newEditForm(store.Ticket{Title: "", Type: "task"})
+	m.form.focus = efTitle
+	m.form.applyFocus(m.width - 2)
+
+	// TK-86: in the title field, j/k/w/s/a/d must be typed, not treated as
+	// navigation, and focus must stay on the title.
+	for _, ch := range []string{"w", "a", "s", "d", "j", "k"} {
+		updatedAny, _ := m.handleKeyEdit(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(ch)})
+		updated, ok := updatedAny.(Model)
+		if !ok {
+			t.Fatalf("handleKeyEdit type = %T, want Model", updatedAny)
+		}
+		m = updated
+		if m.form.focus != efTitle {
+			t.Fatalf("focus moved off title while typing %q (focus=%d)", ch, m.form.focus)
+		}
+	}
+	if got := m.form.title.Value(); got != "wasdjk" {
+		t.Fatalf("title value = %q, want %q", got, "wasdjk")
+	}
+}
+
+func TestHandleKeyEditControlFieldNavigation(t *testing.T) {
+	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
+	m.width = 100
+	m.mode = modeEdit
+	m.form = newEditForm(store.Ticket{Title: "x", Type: "task"})
+	m.form.focus = efType // a control (non-text) field
+	m.form.applyFocus(m.width - 2)
+
+	// j advances control fields; k goes back.
+	updatedAny, _ := m.handleKeyEdit(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	updated := updatedAny.(Model)
+	if updated.form.focus != efStatus {
+		t.Fatalf("j on control field: focus = %d, want efStatus(%d)", updated.form.focus, efStatus)
+	}
+	updatedAny, _ = updated.handleKeyEdit(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	updated = updatedAny.(Model)
+	if updated.form.focus != efType {
+		t.Fatalf("k on control field: focus = %d, want efType(%d)", updated.form.focus, efType)
+	}
+}
