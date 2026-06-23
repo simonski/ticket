@@ -12,18 +12,18 @@ import (
 // TicketID: both nil/empty = global; ProjectID set = project room; ProjectID +
 // TicketID set = a breakout room around an epic/story.
 type Room struct {
-	ID         int64
-	Slug       string
-	Name       string
-	Topic      string
-	Visibility string // public | private
-	ProjectID  *int64
-	TicketID   string // breakout ticket key, "" when not a breakout
-	Archived   bool
-	CreatedBy  string
-	Attrs      Attrs
-	CreatedAt  string
-	UpdatedAt  string
+	ID         int64  `json:"room_id"`
+	Slug       string `json:"slug"`
+	Name       string `json:"name"`
+	Topic      string `json:"topic"`
+	Visibility string `json:"visibility"` // public | private
+	ProjectID  *int64 `json:"project_id,omitempty"`
+	TicketID   string `json:"ticket_id,omitempty"` // breakout ticket key, "" when not a breakout
+	Archived   bool   `json:"archived"`
+	CreatedBy  string `json:"created_by"`
+	Attrs      Attrs  `json:"attrs,omitempty"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
 }
 
 // Scope returns "global", "project", or "breakout".
@@ -39,22 +39,22 @@ func (r Room) Scope() string {
 
 // RoomMember is a participant (human or agent) in a room.
 type RoomMember struct {
-	RoomID     int64
-	MemberID   string
-	Role       string // owner | member
-	JoinedAt   string
-	LastReadAt string
+	RoomID     int64  `json:"room_id"`
+	MemberID   string `json:"member_id"`
+	Role       string `json:"role"` // owner | member
+	JoinedAt   string `json:"joined_at"`
+	LastReadAt string `json:"last_read_at"`
 }
 
 // RoomMessage is a single message in a room.
 type RoomMessage struct {
-	ID        int64
-	RoomID    int64
-	SenderID  string
-	Kind      string // text | system | task | agent_event
-	Body      string
-	Attrs     Attrs
-	CreatedAt string
+	ID        int64  `json:"message_id"`
+	RoomID    int64  `json:"room_id"`
+	SenderID  string `json:"sender_id"`
+	Kind      string `json:"kind"` // text | system | task | agent_event
+	Body      string `json:"body"`
+	Attrs     Attrs  `json:"attrs,omitempty"`
+	CreatedAt string `json:"created_at"`
 }
 
 // RoomFilter narrows ListRooms. A zero filter lists all non-archived rooms.
