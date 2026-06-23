@@ -2002,8 +2002,14 @@
         }
 
         async function loadRoles() {
-            const roles = await api("/api/roles");
-            state.roles = Array.isArray(roles) ? roles.map(normalizeRole) : [];
+            // /api/roles is admin-only; non-admins must still be able to boot, so
+            // degrade to an empty list rather than aborting the whole load.
+            try {
+                const roles = await api("/api/roles");
+                state.roles = Array.isArray(roles) ? roles.map(normalizeRole) : [];
+            } catch (error) {
+                state.roles = [];
+            }
             if (!state.selectedRoleID && state.roles.length) {
                 state.selectedRoleID = state.roles[0].id;
             }
@@ -2211,12 +2217,27 @@
                 .replace(/#([A-Za-z0-9][A-Za-z0-9_-]*)/g, "<span class=\"chat-label\">#$1</span>");
         }
         function refreshChatView() {
-            loadRooms().then(() => {
+            loadRooms().then(() => ensureDefaultRooms()).then(() => {
                 renderRoomsList();
                 if (state.activeRoomID && state.rooms.some((r) => r.room_id === state.activeRoomID)) {
                     selectRoom(state.activeRoomID);
                 }
             });
+        }
+        // Automatically create a public global room and a project room the first
+        // time chat is opened without them.
+        function ensureDefaultRooms() {
+            const tasks = [];
+            if (!state.rooms.some((r) => roomScope(r) === "global" && r.visibility === "public")) {
+                tasks.push(apiClient.post("/api/rooms", { name: "general", visibility: "public" }).catch(() => {}));
+            }
+            if (state.selectedProjectID && !state.rooms.some((r) => roomScope(r) === "project" && r.project_id === state.selectedProjectID)) {
+                const proj = (state.projects || []).find((p) => p.id === state.selectedProjectID);
+                const pname = proj ? String(proj.prefix || proj.title || "project").toLowerCase() : "project";
+                tasks.push(apiClient.post("/api/rooms", { name: pname, visibility: "public", project_id: state.selectedProjectID }).catch(() => {}));
+            }
+            if (!tasks.length) { return Promise.resolve(); }
+            return Promise.all(tasks).then(() => loadRooms());
         }
         function loadRooms() {
             return api("/api/rooms").then((rooms) => {
@@ -2237,8 +2258,10 @@
                 if (!scoped.length) { return; }
                 html += "<div class=\"chat-room-group\">" + escapeHTML(g[1]) + "</div>";
                 html += scoped.map((r) =>
-                    "<button type=\"button\" class=\"chat-room-item" + (r.room_id === state.activeRoomID ? " active" : "") + "\" data-room-id=\"" + r.room_id + "\">" +
-                    (r.visibility === "private" ? "🔒 " : "# ") + escapeHTML(r.name) + "</button>").join("");
+                    "<button type=\"button\" class=\"chat-room-item" + (r.room_id === state.activeRoomID ? " active" : "") + (r.unread ? " unread" : "") + "\" data-room-id=\"" + r.room_id + "\">" +
+                    (r.unread ? "<span class=\"chat-unread-dot\">*</span> " : "") +
+                    (r.visibility === "private" ? "🔒 " : "# ") + escapeHTML(r.name) +
+                    "<span class=\"chat-room-count\">" + (r.member_count || 0) + "</span></button>").join("");
             });
             list.innerHTML = html;
         }
@@ -2259,8 +2282,9 @@
             if (joinBtn) { joinBtn.hidden = false; }
             if (leaveBtn) { leaveBtn.hidden = false; }
             subscribeRoom(roomID);
-            loadRoomMessages(roomID);
-            loadRoomMembers(roomID);
+            // Loading messages marks the room read server-side; refresh the list
+            // afterwards so the unread marker clears.
+            loadRoomMessages(roomID).then(() => loadRooms()).then(renderRoomsList);
         }
         function loadRoomMessages(roomID) {
             return api("/api/rooms/" + roomID + "/messages").then((msgs) => {
@@ -2269,18 +2293,9 @@
                 if (!box) { return; }
                 box.innerHTML = (Array.isArray(msgs) ? msgs : []).map((m) =>
                     "<div class=\"chat-msg chat-msg-" + escapeHTML(m.kind || "text") + "\" data-message-id=\"" + m.message_id + "\">" +
-                    "<span class=\"chat-msg-sender\">" + escapeHTML(m.sender_id) + "</span> " +
+                    "<span class=\"chat-msg-sender\">" + escapeHTML(m.sender_name || m.sender_id) + "</span> " +
                     "<span class=\"chat-msg-body\">" + highlightRoomText(m.body) + "</span></div>").join("");
                 box.scrollTop = box.scrollHeight;
-            }).catch(() => {});
-        }
-        function loadRoomMembers(roomID) {
-            return api("/api/rooms/" + roomID + "/members").then((members) => {
-                if (state.activeRoomID !== roomID) { return; }
-                const box = document.getElementById("chat-members");
-                if (!box) { return; }
-                box.innerHTML = (Array.isArray(members) ? members : []).map((m) =>
-                    "<div class=\"chat-member\">" + escapeHTML(m.member_id) + (m.role === "owner" ? " <span class=\"meta\">owner</span>" : "") + "</div>").join("");
             }).catch(() => {});
         }
         function sendRoomMessage() {
@@ -2291,7 +2306,13 @@
             const roomID = state.activeRoomID;
             input.value = "";
             apiClient.post("/api/rooms/" + roomID + "/messages", { body: body })
-                .then(() => loadRoomMessages(roomID))
+                .then((msg) => loadRooms().then(() => {
+                    renderRoomsList();
+                    // /msg routes to a DM room and /new creates a room — follow the
+                    // message if the server placed it somewhere other than here.
+                    const target = (msg && msg.room_id && msg.room_id !== roomID) ? msg.room_id : roomID;
+                    if (target !== roomID) { selectRoom(target); } else { loadRoomMessages(roomID); }
+                }))
                 .catch((err) => setNotice("Send failed: " + err.message, true));
         }
         function createRoomFromPrompt() {
@@ -2349,14 +2370,14 @@
             if (joinBtn) {
                 joinBtn.addEventListener("click", () => {
                     if (!state.activeRoomID) { return; }
-                    apiClient.post("/api/rooms/" + state.activeRoomID + "/join").then(() => loadRoomMembers(state.activeRoomID)).catch(() => {});
+                    apiClient.post("/api/rooms/" + state.activeRoomID + "/join").then(() => loadRooms()).then(renderRoomsList).catch(() => {});
                 });
             }
             const leaveBtn = document.getElementById("chat-leave-button");
             if (leaveBtn) {
                 leaveBtn.addEventListener("click", () => {
                     if (!state.activeRoomID) { return; }
-                    apiClient.post("/api/rooms/" + state.activeRoomID + "/leave").then(() => loadRoomMembers(state.activeRoomID)).catch(() => {});
+                    apiClient.post("/api/rooms/" + state.activeRoomID + "/leave").then(() => loadRooms()).then(renderRoomsList).catch(() => {});
                 });
             }
         }

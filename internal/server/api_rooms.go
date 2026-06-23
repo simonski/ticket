@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -46,6 +47,12 @@ func (r *router) registerRoomHandlers() {
 			}
 			if rooms == nil {
 				rooms = []store.Room{}
+			}
+			counts, _ := store.RoomMemberCounts(req.Context(), db)
+			unread, _ := store.UnreadRoomIDs(req.Context(), db, user.ID)
+			for i := range rooms {
+				rooms[i].MemberCount = counts[rooms[i].ID]
+				rooms[i].Unread = unread[rooms[i].ID]
 			}
 			writeJSON(w, http.StatusOK, rooms)
 		case http.MethodPost:
@@ -235,6 +242,8 @@ func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, us
 		if msgs == nil {
 			msgs = []store.RoomMessage{}
 		}
+		// Opening a room's messages clears its unread marker for this member.
+		_ = store.MarkRoomRead(req.Context(), db, roomID, user.ID)
 		writeJSON(w, http.StatusOK, msgs)
 	case http.MethodPost:
 		var body struct {
@@ -245,18 +254,8 @@ func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, us
 			writeError(w, http.StatusBadRequest, "message body is required")
 			return
 		}
-		// "/task [@agent] <description>" creates a tracked ticket assigned to the
-		// agent and posts a task message linking it (S7).
-		if assignee, desc, isTask := parseTaskCommand(body.Body); isTask {
-			msg, terr := createRoomTask(req.Context(), db, room, user, assignee, desc)
-			if terr != nil {
-				writeError(w, http.StatusBadRequest, terr.Error())
-				return
-			}
-			if hub != nil {
-				hub.broadcastRoomMessage(roomID, msg)
-			}
-			writeJSON(w, http.StatusCreated, msg)
+		// Slash commands (and the bare "@user …" DM shortcut) are dispatched here.
+		if handleRoomCommand(w, req, db, room, user, body.Body, hub) {
 			return
 		}
 		attrs := store.Attrs{}
@@ -361,4 +360,156 @@ func parseMentions(body string) []string {
 		}
 	}
 	return out
+}
+
+// handleRoomCommand dispatches chat slash commands (and the bare "@user …" DM
+// shortcut). Returns true when it handled the input (a response was written).
+func handleRoomCommand(w http.ResponseWriter, req *http.Request, db *sql.DB, room store.Room, user store.User, body string, hub *liveHub) bool {
+	ctx := req.Context()
+	s := strings.TrimSpace(body)
+	var cmd, arg string
+	switch {
+	case strings.HasPrefix(s, "/"):
+		parts := strings.SplitN(strings.TrimPrefix(s, "/"), " ", 2)
+		cmd = strings.ToLower(parts[0])
+		if len(parts) > 1 {
+			arg = strings.TrimSpace(parts[1])
+		}
+	case strings.HasPrefix(s, "@"):
+		// "@username message" is a DM shortcut, but only when the name resolves to
+		// a real user; otherwise it's an ordinary in-room mention.
+		rest := strings.TrimPrefix(s, "@")
+		fields := strings.SplitN(rest, " ", 2)
+		if len(fields) == 2 {
+			// Bare @user DMs a human; @agent stays an in-room mention so the agent
+			// replies in the room (use /msg to DM an agent explicitly).
+			if u, err := store.GetUserByUsername(ctx, db, fields[0]); err == nil && u.UserType != "agent" {
+				cmd, arg = "msg", rest
+			}
+		}
+	}
+	if cmd == "" {
+		return false
+	}
+
+	post := func(text, kind string, extra store.Attrs) bool {
+		msg, err := store.PostRoomMessage(ctx, db, store.RoomMessage{RoomID: room.ID, SenderID: user.ID, Kind: kind, Body: text, Attrs: extra})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return true
+		}
+		if hub != nil {
+			hub.broadcastRoomMessage(room.ID, msg)
+		}
+		writeJSON(w, http.StatusCreated, msg)
+		return true
+	}
+
+	switch cmd {
+	case "task":
+		assignee, desc, _ := parseTaskCommand("/task " + arg)
+		msg, terr := createRoomTask(ctx, db, room, user, assignee, desc)
+		if terr != nil {
+			writeError(w, http.StatusBadRequest, terr.Error())
+			return true
+		}
+		if hub != nil {
+			hub.broadcastRoomMessage(room.ID, msg)
+		}
+		writeJSON(w, http.StatusCreated, msg)
+		return true
+	case "new":
+		if arg == "" {
+			writeError(w, http.StatusBadRequest, "usage: /new <room name>")
+			return true
+		}
+		created, cerr := store.CreateRoom(ctx, db, store.Room{Name: arg, Visibility: "public", ProjectID: room.ProjectID, CreatedBy: user.ID})
+		if cerr != nil {
+			writeError(w, http.StatusBadRequest, cerr.Error())
+			return true
+		}
+		return post("created room #"+created.Name, "system", store.Attrs{"new_room_id": created.ID})
+	case "invite":
+		target, err := store.GetUserByUsername(ctx, db, strings.TrimPrefix(arg, "@"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "unknown user: "+arg)
+			return true
+		}
+		if jerr := store.JoinRoom(ctx, db, room.ID, target.ID, "member"); jerr != nil {
+			writeStoreError(w, jerr)
+			return true
+		}
+		if room.ProjectID != nil {
+			_, _ = store.AddProjectMember(ctx, db, *room.ProjectID, target.ID, "member")
+		}
+		return post("invited @"+target.Username, "system", nil)
+	case "kick":
+		target, err := store.GetUserByUsername(ctx, db, strings.TrimPrefix(arg, "@"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "unknown user: "+arg)
+			return true
+		}
+		if lerr := store.LeaveRoom(ctx, db, room.ID, target.ID); lerr != nil {
+			writeStoreError(w, lerr)
+			return true
+		}
+		return post("removed @"+target.Username, "system", nil)
+	case "join":
+		if jerr := store.JoinRoom(ctx, db, room.ID, user.ID, "member"); jerr != nil {
+			writeStoreError(w, jerr)
+			return true
+		}
+		return post("@"+user.Username+" joined", "system", nil)
+	case "leave":
+		if lerr := store.LeaveRoom(ctx, db, room.ID, user.ID); lerr != nil {
+			writeStoreError(w, lerr)
+			return true
+		}
+		return post("@"+user.Username+" left", "system", nil)
+	case "list":
+		return post(roomListText(ctx, db, user), "system", nil)
+	case "msg":
+		fields := strings.SplitN(strings.TrimSpace(arg), " ", 2)
+		if len(fields) < 2 || strings.TrimSpace(fields[1]) == "" {
+			writeError(w, http.StatusBadRequest, "usage: /msg @username <message>")
+			return true
+		}
+		target, err := store.GetUserByUsername(ctx, db, strings.TrimPrefix(fields[0], "@"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "unknown user: "+fields[0])
+			return true
+		}
+		dm, derr := store.FindOrCreateDMRoom(ctx, db, user, target)
+		if derr != nil {
+			writeStoreError(w, derr)
+			return true
+		}
+		msg, perr := store.PostRoomMessage(ctx, db, store.RoomMessage{RoomID: dm.ID, SenderID: user.ID, Kind: "text", Body: strings.TrimSpace(fields[1])})
+		if perr != nil {
+			writeError(w, http.StatusBadRequest, perr.Error())
+			return true
+		}
+		if hub != nil {
+			hub.broadcastRoomMessage(dm.ID, msg)
+		}
+		writeJSON(w, http.StatusCreated, msg)
+		return true
+	default:
+		return false
+	}
+}
+
+func roomListText(ctx context.Context, db *sql.DB, user store.User) string {
+	rooms, err := store.ListRooms(ctx, db, store.RoomFilter{MemberID: user.ID})
+	if err != nil || len(rooms) == 0 {
+		return "No rooms."
+	}
+	counts, _ := store.RoomMemberCounts(ctx, db)
+	sort.Slice(rooms, func(i, j int) bool { return strings.ToLower(rooms[i].Name) < strings.ToLower(rooms[j].Name) })
+	var b strings.Builder
+	b.WriteString("Rooms:")
+	for _, r := range rooms {
+		b.WriteString("\n#" + r.Name + " (" + strconv.Itoa(counts[r.ID]) + " members)")
+	}
+	return b.String()
 }

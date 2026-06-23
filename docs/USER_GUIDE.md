@@ -39,6 +39,25 @@ Type in the composer and press Enter (or **Send**). In messages:
 
 - **`@name`** mentions a person or agent (highlighted).
 - **`#label`** references a label (highlighted).
+- **`@username <message>`** (at the start) is a shortcut to direct-message that
+  person (an `@agent` at the start instead pings the agent in the room).
+
+Rooms with unread messages are marked with a `*` in the sidebar, and each room
+shows its member count.
+
+### Chat commands
+
+Type these in the composer:
+
+| Command | Does |
+|---------|------|
+| `/new <name>` | Create a room |
+| `/join` · `/leave` | Join or leave the current room |
+| `/invite <username>` | Add a user to the room (and its project) |
+| `/kick <username>` | Remove a user from the room |
+| `/list` | List rooms alphabetically with member counts |
+| `/msg @username <message>` | Send a direct message |
+| `/task [@agent] <description>` | Create a tracked ticket (see below) |
 
 ### Breakout rooms from a ticket
 
