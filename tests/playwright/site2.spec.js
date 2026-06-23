@@ -1578,8 +1578,8 @@ test("creates, updates, and deletes plans from the plans panel", async ({ page }
   await page.locator("#default-plan-select").selectOption("enterprise");
   await page.getByRole("button", { name: "Save onboarding policy" }).click();
 
-  await page.getByRole("button", { name: "Delete plan" }).click();
-  await page.getByRole("button", { name: "Delete" }).click();
+  await page.locator("#delete-plan-button").click();
+  await page.locator("#dialog-ok").click();
 
   await expect(page.locator("#plan-list")).not.toContainText("Enterprise Plus");
 
@@ -1649,7 +1649,7 @@ test("workflow settings autosave changes", async ({ page }) => {
   await page.getByRole("button", { name: "Workflows" }).click();
   await page.locator("#workflow-settings summary").click();
   await page.locator("#workflow-description").fill("Ship safer changes");
-  await page.locator('label[for="workflow-approval-policy-all"]').click();
+  await page.locator('#workflow-approval-policy-all').check();
 
   await expect.poll(async () => page.evaluate(() => window.__site2Requests.filter((request) => request.method === "PUT" && request.path === "/api/workflows/1"))).toHaveLength(1);
 
@@ -1800,7 +1800,7 @@ test("manages labels, dependencies, and time from the ticket modal", async ({ pa
   await page.locator("[data-ticket-tab='properties']").click();
   await expect(page.locator("#ticket-labels")).toContainText("backend");
   await page.locator("#ticket-label-select").selectOption("51");
-  await page.getByRole("button", { name: "Add label" }).click();
+  await page.locator("#add-ticket-label-button").click();
 
   await expect(page.locator("#ticket-dependencies")).toContainText("OPS-100");
   await page.locator("#ticket-dependency-input").fill("OPS-102");
@@ -1921,7 +1921,7 @@ test("creates, updates, uploads, and deletes documents from the Documents view",
   await expect(page.locator("#document-files-list")).toContainText("sop.txt");
 
   await page.evaluate(() => { window._origUiConfirm = window.uiConfirm; window.uiConfirm = async () => true; });
-  await page.getByRole("button", { name: "Delete document" }).click();
+  await page.locator("#delete-document-button").click();
   await page.evaluate(() => { if (window._origUiConfirm) window.uiConfirm = window._origUiConfirm; });
   await expect(page.locator("#document-list")).not.toContainText("Incident SOP v2");
 
