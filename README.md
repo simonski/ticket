@@ -1,51 +1,35 @@
-# ticket
+# ticket (`tk`)
 
-The ticket system `tk` is an issue tracking toolkit for agentic software engineering.  It is "batteries included" - providing a CLI, server, terminal UI, an agent SKILL and a REST API — backed by SQLite.
+An issue tracker for agentic software engineering.
 
-It operates as a client/server system:
+One Go binary — CLI, terminal UI, HTTP server, REST API, and an agent skill — backed by SQLite.
 
-- **Server** — the HTTP server owns the SQLite database and exposes API + web UI.
-- **Client** — CLI/TUI talk to the configured server either by a human or an agent.
-
-Architecture and design notes are in [docs/DESIGN.md](./docs/DESIGN.md).
-
-The mission — what this program is meant to be — is captured in
-[docs/FACTORY.md](./docs/FACTORY.md): a single, technology-neutral
-specification of the software factory (vision, requirements, SDLC, and
-worked examples), complete enough to rebuild the system from scratch.
-
-
-
----
+```shell
+tk new "Fix the login bug"   # create a ticket
+tk ls                        # list open tickets
+tk get TK-1                  # view one
+```
 
 ## Install
 
 ```shell
-# brew
-brew install simonski/tap/ticket
-
-# go
-go install github.com/simonski/ticket/cmd/tk
-
-# source
-cd $CODE
-git clone https://github.com/simonski/ticket.git
-cd ticket
-make install
+brew install simonski/tap/ticket        # Homebrew
+go install github.com/simonski/ticket/cmd/tk@latest   # Go
 ```
 
-## Start here
+Or from source: `git clone https://github.com/simonski/ticket.git && cd ticket && make install`.
 
-If you're new to the repo, read these first:
+## Learn more
 
-1. [QUICKSTART.md](./docs/QUICKSTART.md) - quick setup and daily workflow
-2. [TUTORIAL.md](./docs/TUTORIAL.md) - executable end-to-end walkthrough
-3. [DEVELOPER_GUIDE.md](./docs/DEVELOPER_GUIDE.md) - contributor and agent implementation context
-4. [CLAUDE.md](./CLAUDE.md) - execution-focused build/test guidance
+- [Quickstart](./docs/QUICKSTART.md) — setup and the daily workflow
+- [Tutorial](./docs/TUTORIAL.md) — an executable end-to-end walkthrough
+- [Design](./docs/DESIGN.md) — architecture and data model
+
+Contributing or building agents? See the [Developer Guide](./docs/DEVELOPER_GUIDE.md).
 
 ## Community
 
-- [CONTRIBUTING.md](./.github/CONTRIBUTING.md)
-- [CODE_OF_CONDUCT.md](./.github/CODE_OF_CONDUCT.md)
-- [SECURITY.md](./.github/SECURITY.md)
-- [SUPPORT.md](./.github/SUPPORT.md)
+[Contributing](./.github/CONTRIBUTING.md) ·
+[Code of Conduct](./.github/CODE_OF_CONDUCT.md) ·
+[Security](./.github/SECURITY.md) ·
+[Support](./.github/SUPPORT.md)
