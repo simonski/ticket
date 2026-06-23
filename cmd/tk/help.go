@@ -297,9 +297,9 @@ var helpIndex = map[string]commandHelp{
 		example: "tk assign TK-42 alice",
 	},
 	"unassign": {
-		usage:   "tk unassign [-id] <id> <name>",
-		details: []string{"Admin-only command that clears a ticket assignment from the named user.", "The named user must exist and be enabled."},
-		example: "tk unassign TK-42 alice",
+		usage:   "tk unassign [-id] <id> [name]",
+		details: []string{"Admin-only command that clears a ticket assignment.", "With a name, the named user must exist, be enabled, and be the current assignee.", "Without a name, an admin clears whoever is currently assigned (no-op if already unassigned)."},
+		example: "tk unassign TK-42",
 	},
 	"claim": {
 		usage:   "tk claim [-id] <id>",
