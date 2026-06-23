@@ -2049,3 +2049,5 @@ select {
 .chat-composer { display: flex; gap: 8px; padding: 8px 4px; border-top: 1px solid var(--border, #333); }
 .chat-composer-input, #chat-composer-input { flex: 1; padding: 9px 12px; border-radius: 7px; border: 1px solid var(--border, #444); background: transparent; color: inherit; }
 .chat-member { padding: 4px 8px; }
+.chat-mention { color: var(--accent, #ff7a1a); font-weight: 600; }
+.chat-label { color: #5aa9e6; font-weight: 600; }

@@ -2204,6 +2204,12 @@
             if (!room.project_id) { return "global"; }
             return room.ticket_id ? "breakout" : "project";
         }
+        // @name and #label become highlighted entities in the message feed (S6).
+        function highlightRoomText(body) {
+            return escapeHTML(String(body || ""))
+                .replace(/@([A-Za-z0-9][A-Za-z0-9_-]*)/g, "<span class=\"chat-mention\">@$1</span>")
+                .replace(/#([A-Za-z0-9][A-Za-z0-9_-]*)/g, "<span class=\"chat-label\">#$1</span>");
+        }
         function refreshChatView() {
             loadRooms().then(() => {
                 renderRoomsList();
@@ -2264,7 +2270,7 @@
                 box.innerHTML = (Array.isArray(msgs) ? msgs : []).map((m) =>
                     "<div class=\"chat-msg chat-msg-" + escapeHTML(m.kind || "text") + "\" data-message-id=\"" + m.message_id + "\">" +
                     "<span class=\"chat-msg-sender\">" + escapeHTML(m.sender_id) + "</span> " +
-                    "<span class=\"chat-msg-body\">" + escapeHTML(m.body) + "</span></div>").join("");
+                    "<span class=\"chat-msg-body\">" + highlightRoomText(m.body) + "</span></div>").join("");
                 box.scrollTop = box.scrollHeight;
             }).catch(() => {});
         }

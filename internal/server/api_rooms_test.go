@@ -240,3 +240,31 @@ func TestRoomTaskCommandCreatesTicket(t *testing.T) {
 		t.Fatalf("/task in global room status = %d, want 400", badTask.Code)
 	}
 }
+
+func TestParseMentions(t *testing.T) {
+	got := parseMentions("hey @alice and @bob-1, see #backend and @alice again")
+	want := []string{"alice", "bob-1"}
+	if len(got) != len(want) || got[0] != "alice" || got[1] != "bob-1" {
+		t.Fatalf("parseMentions = %v, want %v", got, want)
+	}
+	if len(parseMentions("no mentions here")) != 0 {
+		t.Fatalf("expected no mentions")
+	}
+}
+
+func TestRoomMessageStoresMentions(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	admin := roomLoginToken(t, handler, "admin", "password")
+	var room store.Room
+	decodeResponse(t, doJSONRequest(t, handler, http.MethodPost, "/api/rooms", map[string]any{"name": "Standup"}, admin), &room)
+
+	var msg store.RoomMessage
+	decodeResponse(t, doJSONRequest(t, handler, http.MethodPost, "/api/rooms/"+itoa(room.ID)+"/messages",
+		map[string]string{"body": "ping @agent-1 about #deploy"}, admin), &msg)
+	mentions, ok := msg.Attrs["mentions"].([]any)
+	if !ok || len(mentions) != 1 || mentions[0] != "agent-1" {
+		t.Fatalf("message mentions = %v (ok=%v)", msg.Attrs["mentions"], ok)
+	}
+}

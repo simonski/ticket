@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -258,11 +259,16 @@ func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, us
 			writeJSON(w, http.StatusCreated, msg)
 			return
 		}
+		attrs := store.Attrs{}
+		if mentions := parseMentions(body.Body); len(mentions) > 0 {
+			attrs["mentions"] = mentions
+		}
 		msg, err := store.PostRoomMessage(req.Context(), db, store.RoomMessage{
 			RoomID:   roomID,
 			SenderID: user.ID,
 			Kind:     body.Kind,
 			Body:     body.Body,
+			Attrs:    attrs,
 		})
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -336,4 +342,21 @@ func createRoomTask(ctx context.Context, db *sql.DB, room store.Room, user store
 		Body:     label,
 		Attrs:    store.Attrs{"task_id": ticket.ID, "assignee": assignee},
 	})
+}
+
+var roomMentionRe = regexp.MustCompile(`@([A-Za-z0-9][A-Za-z0-9_-]*)`)
+
+// parseMentions extracts unique @-mentioned names from a message body.
+func parseMentions(body string) []string {
+	matches := roomMentionRe.FindAllStringSubmatch(body, -1)
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range matches {
+		name := m[1]
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	return out
 }
