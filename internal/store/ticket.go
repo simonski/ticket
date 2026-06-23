@@ -285,14 +285,16 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	if err != nil {
 		return Ticket{}, err
 	}
-	attrsJSON, err := marshalAttrs(params.Attrs)
+	// git_repository, git_branch, estimate_complete, author (and health_score,
+	// pr_url which default to 0/"") now live in the attrs bag (TK-111).
+	attrsJSON, err := ticketAttrsForWrite(params.Attrs, params.GitRepository, params.GitBranch, params.EstimateComplete, params.Author, "", 0)
 	if err != nil {
 		return Ticket{}, err
 	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, author, draft, created_by, attrs)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), nullableInt64(ticketWorkflowID), nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), 0, strings.TrimSpace(params.Assignee), strings.TrimSpace(params.Author), 1, nullableUserID(params.CreatedBy), attrsJSON)
+		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, assignee, draft, created_by, attrs)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, dorJSON, dodJSON, acJSON, nullableInt64(ticketWorkflowID), nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.Assignee), 1, nullableUserID(params.CreatedBy), attrsJSON)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -561,12 +563,15 @@ writeTicket:
 	if !reopened && current.Complete {
 		completeVal = 1
 	}
-	// attrs: preserve the existing bag unless the caller supplies a replacement.
-	attrsToWrite := current.Attrs
+	// attrs: start from the existing extra bag (or a caller-supplied replacement)
+	// and fold the bag-backed soft fields in (TK-111). git_repository/git_branch/
+	// estimate_complete follow this update's values; author/pr_url/health_score are
+	// not edited here, so the current values are preserved.
+	baseAttrs := current.Attrs
 	if params.Attrs != nil {
-		attrsToWrite = params.Attrs
+		baseAttrs = params.Attrs
 	}
-	attrsJSON, err := marshalAttrs(attrsToWrite)
+	attrsJSON, err := ticketAttrsForWrite(baseAttrs, nextGitRepository, nextGitBranch, strings.TrimSpace(params.EstimateComplete), current.Author, current.PrURL, current.HealthScore)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -574,10 +579,10 @@ writeTicket:
 	// active state; otherwise preserve the existing value (TK-88).
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, role_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, complete = ?, type = ?, attrs = ?, updated_at = CURRENT_TIMESTAMP,
+		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, role_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, complete = ?, type = ?, attrs = ?, updated_at = CURRENT_TIMESTAMP,
 			started_at = CASE WHEN ? = 'active' AND ? != 'active' THEN CURRENT_TIMESTAMP ELSE ? END
 		WHERE ticket_id = ?
-	`, title, params.Description, nextAcceptanceCriteria, dorJSON, dodJSON, acJSON, nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), completeVal, nextType, attrsJSON, state, current.State, current.StartedAt, id)
+	`, title, params.Description, nextAcceptanceCriteria, dorJSON, dodJSON, acJSON, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, completeVal, nextType, attrsJSON, state, current.State, current.StartedAt, id)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -819,7 +824,7 @@ func MarkTicketReady(ctx context.Context, db *sql.DB, id, actorUsername, actorID
 // SetTicketPrURL stores the PR URL on a ticket after a developer agent creates it.
 func SetTicketPrURL(ctx context.Context, db *sql.DB, id, prURL string) (Ticket, error) {
 	result, err := db.ExecContext(ctx, `
-		UPDATE tickets SET pr_url = ?, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?
+		UPDATE tickets SET attrs = json_set(attrs, '$.pr_url', ?), updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?
 	`, strings.TrimSpace(prURL), id)
 	if err != nil {
 		return Ticket{}, err
@@ -1201,7 +1206,7 @@ func SetTicketHealth(ctx context.Context, db *sql.DB, id string, score int) (Tic
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET health_score = ?, updated_at = CURRENT_TIMESTAMP
+		SET attrs = json_set(attrs, '$.health_score', ?), updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
 	`, score, id)
 	if err != nil {
@@ -1485,22 +1490,61 @@ type scanner interface {
 var ticketColumnNames = []string{
 	"ticket_id", "project_id", "parent_id", "clone_of", "type", "title",
 	"description", "acceptance_criteria", "dor_map", "dod_map", "ac_map",
-	"git_repository", "git_branch", "workflow_id", "workflow_stage_id", "role_id",
+	"workflow_id", "workflow_stage_id", "role_id",
 	"stage", "state", "status", "priority", "sort_order", "estimate_effort",
-	"estimate_complete", "health_score", "assignee", "author", "draft", "complete",
+	"assignee", "draft", "complete",
 	"archived", "deleted", "previous_workflow_stage_id", "previous_role_id",
 	"release_id", "created_by", "created_at", "updated_at", "recommended_ready",
-	"pr_url", "started_at", "attrs",
+	"started_at", "attrs",
 }
 
 // ticketColumnCoalesce maps nullable columns to the SQL literal substituted via
 // COALESCE when selecting them, so scanTicket can scan into non-pointer fields.
 var ticketColumnCoalesce = map[string]string{
-	"author":            "''",
 	"created_by":        "''",
 	"recommended_ready": "0",
-	"pr_url":            "''",
 	"started_at":        "''",
+}
+
+// ticketAttrStringKeys are the soft string fields that now live in the attrs bag
+// (TK-111) and are surfaced as typed Ticket fields for back-compat.
+var ticketAttrStringKeys = []string{"git_repository", "git_branch", "estimate_complete", "author", "pr_url"}
+
+const ticketAttrHealthScoreKey = "health_score"
+
+// hydrateTicketAttrs copies the bag-backed soft fields out of t.Attrs into their
+// typed Ticket fields and removes them from the user-visible bag (so they are not
+// duplicated). It is the read-side of the attrs consolidation.
+func hydrateTicketAttrs(t *Ticket) {
+	t.GitRepository = t.Attrs.GetString("git_repository")
+	t.GitBranch = t.Attrs.GetString("git_branch")
+	t.EstimateComplete = t.Attrs.GetString("estimate_complete")
+	t.Author = t.Attrs.GetString("author")
+	t.PrURL = t.Attrs.GetString("pr_url")
+	t.HealthScore = t.Attrs.GetInt(ticketAttrHealthScoreKey)
+	for _, k := range ticketAttrStringKeys {
+		delete(t.Attrs, k)
+	}
+	delete(t.Attrs, ticketAttrHealthScoreKey)
+	if len(t.Attrs) == 0 {
+		t.Attrs = nil
+	}
+}
+
+// ticketAttrsForWrite merges the bag-backed typed fields into a base bag and
+// returns the JSON text to store. It is the write-side of the attrs consolidation.
+func ticketAttrsForWrite(base Attrs, gitRepository, gitBranch, estimateComplete, author, prURL string, healthScore int) (string, error) {
+	merged := Attrs{}
+	for k, v := range base {
+		merged[k] = v
+	}
+	merged.SetString("git_repository", strings.TrimSpace(gitRepository))
+	merged.SetString("git_branch", strings.TrimSpace(gitBranch))
+	merged.SetString("estimate_complete", strings.TrimSpace(estimateComplete))
+	merged.SetString("author", strings.TrimSpace(author))
+	merged.SetString("pr_url", strings.TrimSpace(prURL))
+	merged.SetInt(ticketAttrHealthScoreKey, healthScore)
+	return marshalAttrs(merged)
 }
 
 // ticketSelectColumns returns the comma-separated SELECT expressions for reading a
@@ -1562,8 +1606,6 @@ func scanTicket(s scanner) (Ticket, error) {
 		&dorJSON,
 		&dodJSON,
 		&acJSON,
-		&ticket.GitRepository,
-		&ticket.GitBranch,
 		&workflowID,
 		&workflowStageID,
 		&roleID,
@@ -1573,10 +1615,7 @@ func scanTicket(s scanner) (Ticket, error) {
 		&ticket.Priority,
 		&ticket.Order,
 		&ticket.EstimateEffort,
-		&ticket.EstimateComplete,
-		&ticket.HealthScore,
 		&ticket.Assignee,
-		&ticket.Author,
 		&draft,
 		&complete,
 		&archived,
@@ -1588,7 +1627,6 @@ func scanTicket(s scanner) (Ticket, error) {
 		&ticket.CreatedAt,
 		&ticket.UpdatedAt,
 		&recommendedReady,
-		&ticket.PrURL,
 		&ticket.StartedAt,
 		&attrsJSON,
 	); err != nil {
@@ -1645,6 +1683,7 @@ func scanTicket(s scanner) (Ticket, error) {
 	ticket.Archived = archived == 1
 	ticket.Deleted = deleted == 1
 	ticket.RecommendedReady = recommendedReady == 1
+	hydrateTicketAttrs(&ticket)
 	return ticket, nil
 }
 
