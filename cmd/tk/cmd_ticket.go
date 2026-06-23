@@ -251,7 +251,7 @@ Commands:
   claim    -id <id>                           Assign to self
   unclaim  -id <id>                           Unassign self
   assign   -id <id> <user>                    Assign to someone
-  unassign -id <id> <user>                    Unassign someone
+  unassign -id <id> [user]                    Unassign someone (admin may omit the name)
   request                                     Next available ticket
   intervene -id <id> -outcome <decision>      Apply intervention decision
 
@@ -1776,10 +1776,16 @@ func runUnassign(args []string) error {
 		return err
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
-	if err != nil || len(rest) != 1 {
-		return errors.New("usage: tk unassign [-id] <id> <name> [-m comment]")
+	if err != nil || len(rest) > 1 {
+		return errors.New("usage: tk unassign [-id] <id> [name] [-m comment]")
 	}
-	return unassignTicket(idVal, rest[0], true, *message)
+	// The assignee name is optional: an admin may unassign whoever is currently
+	// assigned by omitting it (TK-92).
+	expected := ""
+	if len(rest) == 1 {
+		expected = rest[0]
+	}
+	return unassignTicket(idVal, expected, true, *message)
 }
 
 func runClaim(args []string) error {
@@ -1892,7 +1898,9 @@ func unassignTicket(idArg, expectedAssignee string, requireAdmin bool, message .
 	if requireAdmin && (status.User == nil || status.User.Role != "admin") {
 		return errors.New("user is not an admin")
 	}
-	if requireAdmin {
+	// Validate the named user only when a name was supplied. An admin may omit the
+	// name to clear whoever is currently assigned (TK-92).
+	if requireAdmin && expectedAssignee != "" {
 		users, usersErr := svc.ListUsers(context.Background())
 		if usersErr != nil {
 			return usersErr
@@ -1915,8 +1923,18 @@ func unassignTicket(idArg, expectedAssignee string, requireAdmin bool, message .
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(current.Assignee) != strings.TrimSpace(expectedAssignee) {
-		return fmt.Errorf("ticket is not assigned to %s", expectedAssignee)
+	currentAssignee := strings.TrimSpace(current.Assignee)
+	if expectedAssignee != "" {
+		if currentAssignee != strings.TrimSpace(expectedAssignee) {
+			return fmt.Errorf("ticket is not assigned to %s", expectedAssignee)
+		}
+	} else if currentAssignee == "" {
+		// Nothing to do: no name given and the ticket is already unassigned.
+		if outputJSON {
+			return printJSON(current)
+		}
+		fmt.Printf("%s is already unassigned\n", ticketLabel(current))
+		return nil
 	}
 	var msg string
 	if len(message) > 0 {
@@ -1942,7 +1960,11 @@ func unassignTicket(idArg, expectedAssignee string, requireAdmin bool, message .
 	if outputJSON {
 		return printJSON(updated)
 	}
-	fmt.Printf("unassigned %s from %s\n", ticketLabel(updated), expectedAssignee)
+	removed := expectedAssignee
+	if removed == "" {
+		removed = currentAssignee
+	}
+	fmt.Printf("unassigned %s from %s\n", ticketLabel(updated), removed)
 	return nil
 }
 

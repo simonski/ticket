@@ -11122,3 +11122,42 @@ func TestRunListBubblesParentEpicByDescendantRecency(t *testing.T) {
 		t.Fatalf("list output missing child ticket:\n%s", output)
 	}
 }
+
+func TestUnassignWithoutNameAsAdmin(t *testing.T) {
+	setupLocalCLI(t)
+	id := createLocalTask(t, []string{"add", "Assign me"})
+	if err := run([]string{"assign", id, "admin"}); err != nil {
+		t.Fatalf("assign error = %v", err)
+	}
+	svc := localCLIService(t)
+	if tk, err := svc.GetTicket(context.Background(), id); err != nil {
+		t.Fatalf("GetTicket error = %v", err)
+	} else if strings.TrimSpace(tk.Assignee) != "admin" {
+		t.Fatalf("precondition: assignee = %q, want admin", tk.Assignee)
+	}
+
+	// TK-92: admin unassigns without naming the assignee.
+	out := captureStdout(t, func() {
+		if err := run([]string{"unassign", id}); err != nil {
+			t.Fatalf("unassign (no name) error = %v", err)
+		}
+	})
+	if tk, err := svc.GetTicket(context.Background(), id); err != nil {
+		t.Fatalf("GetTicket error = %v", err)
+	} else if strings.TrimSpace(tk.Assignee) != "" {
+		t.Fatalf("assignee not cleared: %q", tk.Assignee)
+	}
+	if !strings.Contains(out, "unassigned") || !strings.Contains(out, "admin") {
+		t.Fatalf("unexpected output = %q", out)
+	}
+
+	// Idempotent: a second unassign with no name reports already-unassigned.
+	out2 := captureStdout(t, func() {
+		if err := run([]string{"unassign", id}); err != nil {
+			t.Fatalf("second unassign error = %v", err)
+		}
+	})
+	if !strings.Contains(out2, "already unassigned") {
+		t.Fatalf("expected already-unassigned message, got %q", out2)
+	}
+}
