@@ -376,53 +376,73 @@ func (m Model) handleKeyEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// A text field (Title/Description/Acceptance) is being edited. In a text field
+	// every printable key must reach the input — including j/k/w/s/a/d — so the
+	// vim/wasd single-key navigation only applies on the non-text control fields.
+	inText := f.focus == efTitle || f.focus == efDesc || f.focus == efAC
+
 	switch key {
 	case "esc":
 		return m.goBack()
 	case "ctrl+s", "ctrl+d":
 		return m, m.saveTicket()
-	case "up", "k", "w":
-		switch f.focus {
-		case efDesc:
-			if !textareaAtFirstLine(f.desc) {
-				f.desc, _ = f.desc.Update(msg)
-				return m, nil
-			}
-		case efAC:
-			if !textareaAtFirstLine(f.acceptCrit) {
-				f.acceptCrit, _ = f.acceptCrit.Update(msg)
-				return m, nil
-			}
-		}
-		f.prevField()
-		f.applyFocus(m.width - 2)
-	case "down", "j", "s":
-		switch f.focus {
-		case efDesc:
-			if !textareaAtLastLine(f.desc) {
-				f.desc, _ = f.desc.Update(msg)
-				return m, nil
-			}
-		case efAC:
-			if !textareaAtLastLine(f.acceptCrit) {
-				f.acceptCrit, _ = f.acceptCrit.Update(msg)
-				return m, nil
-			}
-		}
-		f.nextField()
-		f.applyFocus(m.width - 2)
 	case "tab":
 		f.nextField()
 		f.applyFocus(m.width - 2)
+		return m, nil
 	case "shift+tab":
 		f.prevField()
 		f.applyFocus(m.width - 2)
-	case "enter", " ":
-		// Space must reach text input fields, not trigger picker/save actions
-		if key == " " && (f.focus == efTitle || f.focus == efDesc || f.focus == efAC) {
-			cmd := f.update(msg)
-			return m, cmd
+		return m, nil
+	case "up":
+		// Within a textarea, move the cursor; jump fields only at the boundary.
+		if f.focus == efDesc && !textareaAtFirstLine(f.desc) {
+			f.desc, _ = f.desc.Update(msg)
+			return m, nil
 		}
+		if f.focus == efAC && !textareaAtFirstLine(f.acceptCrit) {
+			f.acceptCrit, _ = f.acceptCrit.Update(msg)
+			return m, nil
+		}
+		f.prevField()
+		f.applyFocus(m.width - 2)
+		return m, nil
+	case "down":
+		if f.focus == efDesc && !textareaAtLastLine(f.desc) {
+			f.desc, _ = f.desc.Update(msg)
+			return m, nil
+		}
+		if f.focus == efAC && !textareaAtLastLine(f.acceptCrit) {
+			f.acceptCrit, _ = f.acceptCrit.Update(msg)
+			return m, nil
+		}
+		f.nextField()
+		f.applyFocus(m.width - 2)
+		return m, nil
+	}
+
+	if inText {
+		// Enter advances out of the single-line title; in the textareas it inserts
+		// a newline. All other keys (letters, space, punctuation) are typed.
+		if key == "enter" && f.focus == efTitle {
+			f.nextField()
+			f.applyFocus(m.width - 2)
+			return m, nil
+		}
+		cmd := f.update(msg)
+		return m, cmd
+	}
+
+	// Control fields: type/status/draft/workflow/save. Single-key navigation and
+	// enter/space activation (open the picker, or save).
+	switch key {
+	case "k", "w":
+		f.prevField()
+		f.applyFocus(m.width - 2)
+	case "j", "s":
+		f.nextField()
+		f.applyFocus(m.width - 2)
+	case "enter", " ":
 		switch f.focus {
 		case efType:
 			f.picker = &pickerPopup{items: ticketTypes, cursor: indexOf(ticketTypes, f.ticketType), forField: "type"}
@@ -436,11 +456,6 @@ func (m Model) handleKeyEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			f.picker = &pickerPopup{items: items, cursor: workflowPickerCursor(items, f.workflowID), forField: "workflow"}
 		case efSave:
 			return m, m.saveTicket()
-		}
-	default:
-		if f.focus == efTitle || f.focus == efDesc || f.focus == efAC {
-			cmd := f.update(msg)
-			return m, cmd
 		}
 	}
 	return m, nil
