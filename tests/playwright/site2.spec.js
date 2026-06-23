@@ -15,12 +15,17 @@ function installSite2Mock(page, seed = {}) {
         default_draft: false,
       },
     ];
+    // The mock server session persists across page reloads (the test db is
+    // re-seeded on every addInitScript run, so server-side auth lives in
+    // localStorage). This lets refresh/restore tests model "client auth storage
+    // cleared but server session still valid".
+    const serverAuthed = window.localStorage.getItem("site2.serverAuth") === "1";
     const db = {
       status: Object.assign({
-        authenticated: false,
+        authenticated: serverAuthed,
         mode: "local",
         version: "dev",
-        user: null,
+        user: serverAuthed ? { username: "admin", role: "admin", email: "admin@example.com" } : null,
         registration_enabled: true,
         registration_auto_approve: true,
       }, mockSeed.status || {}),
@@ -345,6 +350,7 @@ function installSite2Mock(page, seed = {}) {
       }
       if (path === "/api/login" && method === "POST") {
         db.status.authenticated = true;
+        window.localStorage.setItem("site2.serverAuth", "1");
         db.status.user = { username: body.username || "admin", role: "admin", email: "admin@example.com" };
         return json({ token: "test-token", user: { username: body.username || "admin", role: "admin", email: "admin@example.com" } });
       }
@@ -468,6 +474,7 @@ function installSite2Mock(page, seed = {}) {
       }
       if (path === "/api/logout" && method === "POST") {
         db.status.authenticated = false;
+        window.localStorage.removeItem("site2.serverAuth");
         db.status.user = null;
         return json({ status: "ok" });
       }
@@ -1221,6 +1228,11 @@ test("account settings modal manages website passkeys", async ({ page }) => {
     });
   });
   await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
   await page.locator("#login-username").fill("admin");
   await page.locator("#login-password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -1233,8 +1245,11 @@ test("account settings modal manages website passkeys", async ({ page }) => {
   await expect(page.locator("#account-passkey-list")).toContainText("Laptop");
 
   await page.locator("[data-passkey-id='cred-old'] [data-passkey-action='rename']").click();
+  // Wait for the prompt dialog to finish opening (it sets the input to the current
+  // name) before overwriting it, otherwise the fill races with the dialog setup.
+  await expect(page.locator("#dialog-input")).toBeVisible();
   await page.locator("#dialog-input").fill("Desk key");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.locator("#dialog-ok").click();
   await expect(page.locator("#account-passkey-list")).toContainText("Desk key");
 
   await page.locator("#account-passkey-name").fill("Phone");
@@ -1242,7 +1257,7 @@ test("account settings modal manages website passkeys", async ({ page }) => {
   await expect(page.locator("#account-passkey-list")).toContainText("Phone");
 
   await page.locator("[data-passkey-id='cred-old'] [data-passkey-action='delete']").click();
-  await page.getByRole("button", { name: "Delete" }).click();
+  await page.locator("#dialog-ok").click();
   await expect(page.locator("#account-passkey-list")).not.toContainText("Desk key");
 
   const requests = await page.evaluate(() => window.__site2Requests || []);

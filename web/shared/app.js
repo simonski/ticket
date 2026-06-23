@@ -1146,6 +1146,9 @@
             const settings = dialogState;
             dialogResolve = null;
             dialogState = null;
+            // Capture the prompt input value BEFORE clearing the field, otherwise
+            // the resolver always receives an empty string.
+            const inputValue = els.dialogInput ? els.dialogInput.value : "";
             if (els.dialogInputWrap) {
                 els.dialogInputWrap.classList.add("hidden");
             }
@@ -1154,7 +1157,7 @@
             }
             if (resolver) {
                 if (settings && settings.input) {
-                    resolver(result === true && els.dialogInput ? els.dialogInput.value : null);
+                    resolver(result === true ? inputValue : null);
                     return;
                 }
                 resolver(Boolean(result));
