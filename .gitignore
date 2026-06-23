@@ -22,3 +22,9 @@ task
 
 # tk pre-upgrade database backups
 *.bak-*
+
+# Local tk databases (created when tk runs in local mode in the repo dir)
+ticket.db
+*.db
+*.db-wal
+*.db-shm
