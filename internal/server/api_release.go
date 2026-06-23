@@ -72,7 +72,7 @@ func (r *router) registerReleaseHandlers() {
 	mux := r.mux
 	notify := r.notify
 
-	// PUT/DELETE /api/releases/{id} and POST /api/releases/{id}/status
+	// GET/PUT/DELETE /api/releases/{id} and POST /api/releases/{id}/status
 	mux.HandleFunc("/api/releases/", func(w http.ResponseWriter, req *http.Request) {
 		trimmed := strings.TrimPrefix(req.URL.Path, "/api/releases/")
 		parts := strings.Split(strings.Trim(trimmed, "/"), "/")
@@ -126,6 +126,9 @@ func (r *router) registerReleaseHandlers() {
 		}
 
 		switch req.Method {
+		case http.MethodGet:
+			// existing was already loaded for authorization above.
+			writeJSON(w, http.StatusOK, existing)
 		case http.MethodPut:
 			var payload releaseRequest
 			if decodeErr := json.NewDecoder(req.Body).Decode(&payload); decodeErr != nil {
