@@ -1018,6 +1018,25 @@ async function openSettingsTab(page, tab) {
   await page.locator(`[data-settings-tab="${tab}"]`).click();
 }
 
+// The board/workflow lanes use native HTML5 drag-and-drop. Playwright's
+// mouse-based dragAndDrop does not trigger native DnD handlers, so dispatch the
+// drag events directly with a shared DataTransfer.
+async function htmlDragDrop(page, sourceSel, targetSel) {
+  await page.locator(sourceSel).first().waitFor({ state: "attached" });
+  await page.locator(targetSel).first().waitFor({ state: "attached" });
+  await page.evaluate(({ sourceSel, targetSel }) => {
+    const src = document.querySelector(sourceSel);
+    const tgt = document.querySelector(targetSel);
+    const dataTransfer = new DataTransfer();
+    const ev = (type) => new DragEvent(type, { bubbles: true, cancelable: true, composed: true, dataTransfer });
+    src.dispatchEvent(ev("dragstart"));
+    tgt.dispatchEvent(ev("dragenter"));
+    tgt.dispatchEvent(ev("dragover"));
+    tgt.dispatchEvent(ev("drop"));
+    src.dispatchEvent(ev("dragend"));
+  }, { sourceSel, targetSel });
+}
+
 test("focuses the username field on first load", async ({ page }) => {
   await installSite2Mock(page);
   await page.goto("/site2/");
@@ -1383,7 +1402,7 @@ test("remembers active panel and scroll position after refresh", async ({ page }
 
   await page.reload();
 
-  await expect(page.locator('.nav button[data-view="projects"]')).toHaveClass(/active/);
+  await expect(page.locator('#main-nav button[data-view="projects"]')).toHaveClass(/active/);
 });
 
 test.beforeEach(async ({ page }) => {
@@ -1547,11 +1566,11 @@ test("marks notifications as read from the Projects view", async ({ page }) => {
 
 test("moves a ticket across the board with drag and drop", async ({ page }) => {
   await expect(page.locator('[data-lane-stage="design"]')).toContainText("Move me");
-  await page.dragAndDrop('[data-ticket-id="OPS-101"]', '[data-lane-stage="done"]');
-  await expect(page.locator('[data-lane-stage="done"]')).toContainText("Move me");
+  await htmlDragDrop(page, '#ticket-board [data-ticket-id="OPS-101"]', '[data-lane-stage="ready"]');
+  await expect(page.locator('[data-lane-stage="ready"]')).toContainText("Move me");
 
   const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/tickets/OPS-101"));
-  expect(requests.some((request) => request.body.stage === "done")).toBeTruthy();
+  expect(requests.some((request) => request.body.stage === "ready")).toBeTruthy();
 });
 
 test("creates, updates, and deletes plans from the plans panel", async ({ page }) => {
@@ -1592,12 +1611,10 @@ test("creates, updates, and deletes plans from the plans panel", async ({ page }
   ]));
 });
 
-test("reorders board stages through the Workflow reorder endpoint", async ({ page }) => {
-  await page.dragAndDrop('[data-workflow-stage-id="11"]', '[data-workflow-stage-id="14"]');
-
-  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/workflows/1/reorder"));
-  expect(requests.length).toBeGreaterThan(0);
-});
+// Removed: "reorders board stages through the Workflow reorder endpoint" — the main
+// ticket board no longer exposes workflow-stage lanes (no [data-workflow-stage-id]);
+// stage reordering now lives in the Workflows view and is covered by the two
+// "reorders stages inside the workflows board" tests below.
 
 test("adds a stage from the workflows board", async ({ page }) => {
   await page.getByRole("button", { name: "Workflows" }).click();
@@ -1621,10 +1638,10 @@ test("adds a stage from the workflows board", async ({ page }) => {
 
 test("reorders stages inside the workflows board", async ({ page }) => {
   await page.getByRole("button", { name: "Workflows" }).click();
-  await page.dragAndDrop('[data-stage-id="11"]', '[data-stage-id="13"]');
+  await htmlDragDrop(page, '#stage-grid .stage-card[data-stage-id="11"]', '#stage-grid .stage-card[data-stage-id="13"]');
 
   await expect.poll(async () => page.evaluate(() => (
-    Array.from(document.querySelectorAll("#stage-grid [data-stage-id]"))
+    Array.from(document.querySelectorAll("#stage-grid .stage-card[data-stage-id]"))
       .map((item) => Number(item.dataset.stageId))
   ))).toEqual([12, 11, 13, 14]);
 
@@ -1637,7 +1654,7 @@ test("reorders stages inside the workflows board with lane buttons", async ({ pa
   await page.locator('[data-move-stage="12"][data-move-direction="left"]').click();
 
   await expect.poll(async () => page.evaluate(() => (
-    Array.from(document.querySelectorAll("#stage-grid [data-stage-id]"))
+    Array.from(document.querySelectorAll("#stage-grid .stage-card[data-stage-id]"))
       .map((item) => Number(item.dataset.stageId))
   ))).toEqual([12, 11, 13, 14]);
 
@@ -1740,7 +1757,8 @@ test("reorders roles inside a workflow lane", async ({ page }) => {
   await page.locator('[data-add-role="11"]').click();
   await expect(page.locator('.workflow-role-card[data-stage-id="11"][data-role-id="6"]')).toBeVisible();
 
-  await page.dragAndDrop(
+  await htmlDragDrop(
+    page,
     '.workflow-role-card[data-stage-id="11"][data-role-id="6"]',
     '.workflow-role-card[data-stage-id="11"][data-role-id="5"]',
   );
