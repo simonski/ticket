@@ -70,6 +70,30 @@ components:
       description: Agent UUID as username, agent password as password
 
   schemas:
+    Room:
+      type: object
+      description: A multiplayer chat room. Scope is global (no project), project, or breakout (project + ticket).
+      properties:
+        room_id: { type: integer }
+        slug: { type: string }
+        name: { type: string }
+        topic: { type: string }
+        visibility: { type: string, enum: [public, private] }
+        project_id: { type: integer, nullable: true }
+        ticket_id: { type: string }
+        archived: { type: boolean }
+        created_by: { type: string }
+        attrs: { type: object, additionalProperties: true }
+    RoomMessage:
+      type: object
+      properties:
+        message_id: { type: integer }
+        room_id: { type: integer }
+        sender_id: { type: string }
+        kind: { type: string, enum: [text, system, task, agent_event] }
+        body: { type: string }
+        attrs: { type: object, additionalProperties: true }
+        created_at: { type: string }
     Error:
       type: object
       required: [error]
@@ -1609,6 +1633,137 @@ components:
         error: "ticket not found"
 
 paths:
+  # ── Chat rooms ───────────────────────────────────────────────────────
+  /api/rooms:
+    get:
+      tags: [Rooms]
+      summary: List rooms visible to the caller
+      operationId: listRooms
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [global] } }
+        - { name: project_id, in: query, schema: { type: integer } }
+        - { name: ticket_id, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Rooms
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Room' } }
+    post:
+      tags: [Rooms]
+      summary: Create a room
+      operationId: createRoom
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                topic: { type: string }
+                visibility: { type: string, enum: [public, private] }
+                project_id: { type: integer, nullable: true }
+                ticket_id: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Room' }
+  /api/rooms/{room_id}:
+    parameters:
+      - { name: room_id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Rooms]
+      summary: Get a room
+      operationId: getRoom
+      responses:
+        '200': { description: Room, content: { application/json: { schema: { $ref: '#/components/schemas/Room' } } } }
+        '403': { description: Not a member of a private room }
+        '404': { description: Not found }
+    patch:
+      tags: [Rooms]
+      summary: Update a room (owner/admin)
+      operationId: updateRoom
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Room' } } } }
+    delete:
+      tags: [Rooms]
+      summary: Archive a room (owner/admin)
+      operationId: archiveRoom
+      responses:
+        '200': { description: Archived }
+  /api/rooms/{room_id}/join:
+    parameters:
+      - { name: room_id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Rooms]
+      summary: Join a room
+      operationId: joinRoom
+      responses:
+        '200': { description: Joined, content: { application/json: { schema: { $ref: '#/components/schemas/Room' } } } }
+  /api/rooms/{room_id}/leave:
+    parameters:
+      - { name: room_id, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Rooms]
+      summary: Leave a room
+      operationId: leaveRoom
+      responses:
+        '200': { description: Left }
+  /api/rooms/{room_id}/members:
+    parameters:
+      - { name: room_id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Rooms]
+      summary: List room members
+      operationId: listRoomMembers
+      responses:
+        '200': { description: Members }
+    post:
+      tags: [Rooms]
+      summary: Invite a member
+      operationId: addRoomMember
+      responses:
+        '201': { description: Added }
+  /api/rooms/{room_id}/messages:
+    parameters:
+      - { name: room_id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Rooms]
+      summary: List messages (paginated)
+      operationId: listRoomMessages
+      parameters:
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: before, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Messages
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/RoomMessage' } }
+    post:
+      tags: [Rooms]
+      summary: Post a message (supports the /task command)
+      operationId: postRoomMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+                kind: { type: string }
+      responses:
+        '201':
+          description: Posted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoomMessage' }
   # ── Health ──────────────────────────────────────────────────────────
   /api/healthz:
     get:
