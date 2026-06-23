@@ -590,8 +590,6 @@ CREATE TABLE IF NOT EXISTS workflow_stages (
 	workflow_stage_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	workflow_id INTEGER NOT NULL,
 	stage_name TEXT NOT NULL,
-	description TEXT NOT NULL DEFAULT '',
-	acceptance_criteria TEXT NOT NULL DEFAULT '',
 	sort_order INTEGER NOT NULL DEFAULT 0,
 	is_backlog_stage INTEGER NOT NULL DEFAULT 0,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1216,17 +1214,10 @@ CREATE TABLE user_notifications (
 	if err := backfillTicketWorkflowStages(ctx, db); err != nil {
 		return err
 	}
-	// Add DoR/DoD to workflow stages
-	if !columnExists(ctx, db, "workflow_stages", "definition_of_ready") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE workflow_stages ADD COLUMN definition_of_ready TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "workflow_stages", "definition_of_done") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE workflow_stages ADD COLUMN definition_of_done TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
+	// workflow_stages description/acceptance_criteria/definition_of_ready/
+	// definition_of_done are folded into the stage attrs bag (TK-114); their legacy
+	// ADD COLUMN migrations were removed and the columns are migrated and dropped by
+	// the attrs-consolidation step below.
 	// Add new columns to users for merged agent support
 	if !columnExists(ctx, db, "users", "user_type") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN user_type TEXT NOT NULL DEFAULT 'user'`); err != nil {
@@ -1773,6 +1764,22 @@ CREATE TABLE user_notifications (
 				return err
 			}
 			if _, err := db.ExecContext(ctx, `ALTER TABLE roles DROP COLUMN `+col); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Fold workflow_stages guidance text columns into the attrs bag and drop them
+	// (TK-114). All four are scalar text. Non-clobbering and idempotent.
+	for _, col := range []string{"description", "acceptance_criteria", "definition_of_ready", "definition_of_done"} {
+		if columnExists(ctx, db, "workflow_stages", col) {
+			if _, err := db.ExecContext(ctx, fmt.Sprintf(
+				`UPDATE workflow_stages SET attrs = json_set(attrs, '$.%s', %s) `+
+					`WHERE json_extract(attrs, '$.%s') IS NULL AND TRIM(COALESCE(%s, '')) <> ''`,
+				col, col, col, col)); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, `ALTER TABLE workflow_stages DROP COLUMN `+col); err != nil {
 				return err
 			}
 		}
