@@ -331,3 +331,15 @@ introduce `attrs` (TK-109) → queryable bag (TK-110) → per-entity consolidati
 TK-111 (tickets, first/riskiest) → TK-112/113/114 (projects/roles/stages). Each
 story branches from the epic tip and PRs into `epic/extensible-schema`; the epic
 PRs into `main` only once all stories land.
+
+### 9.5 Consolidation status summary
+
+| Entity | Consolidated into `attrs` (dropped) | Story |
+|--------|--------------------------------------|-------|
+| tickets | git_repository, git_branch, estimate_complete, health_score, author, pr_url (+ dead `open`) | TK-111 |
+| projects | agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key | TK-112 |
+| roles | description, acceptance_criteria, dor_map, dod_map, ac_map | TK-113 |
+| workflow_stages | description, acceptance_criteria, definition_of_ready, definition_of_done | TK-114 |
+
+Remaining deferred: the `dor_map`/`dod_map`/`ac_map` fold for **tickets** and
+**projects** (TK-115). `projects.git_repository`/`notes` reclassified Keep.
