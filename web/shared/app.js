@@ -8941,7 +8941,33 @@
             });
         }
         // ── Command palette: Shift Shift quick-switcher (TK-127) ──────────
-        const PALETTE_ALIASES = { backlog: "tickets", board: "tickets", chat: "chat", mailbox: "interventions", inbox: "interventions" };
+        // Friendly + single-letter aliases so the site is keyboard-driveable
+        // (e.g. /c = /chat, /b = /backlog). Aliases pointing at not-yet-registered
+        // views (like chat) simply don't appear until that view exists.
+        const PALETTE_ALIASES = {
+            c: "chat", chat: "chat",
+            b: "tickets", board: "tickets", backlog: "tickets",
+            p: "projects",
+            w: "workflows",
+            d: "documents",
+            m: "interventions", mailbox: "interventions", inbox: "interventions",
+            r: "roles",
+            t: "teams",
+            g: "context",
+            x: "agents", a: "agents",
+            u: "users",
+            s: "settings",
+        };
+        const TICKET_KEY_RE = /^[a-z]{1,6}-\d+$/i;
+        async function openTicketByKey(rawKey) {
+            const key = String(rawKey || "").trim().toUpperCase();
+            let ticket = (state.tickets || []).find((t) => String(t.id || "").toUpperCase() === key);
+            if (!ticket) {
+                try { ticket = await api("/api/tickets/" + encodeURIComponent(key)); } catch (err) { ticket = null; }
+            }
+            if (ticket && (ticket.id || ticket.ticket_id)) { openTicketModal(ticket); }
+            else { setNotice("Ticket " + key + " not found.", true); }
+        }
         const paletteEls = {
             overlay: document.getElementById("command-palette-overlay"),
             input: document.getElementById("command-palette-input"),
@@ -8968,6 +8994,12 @@
         function renderPaletteList() {
             const query = String(paletteEls.input.value || "").replace(/^\//, "").trim().toLowerCase();
             const matches = buildPaletteCommands().filter((cmd) => !query || cmd.key.includes(query) || cmd.label.toLowerCase().includes(query));
+            const rank = (cmd) => (cmd.key === query ? 0 : cmd.key.startsWith(query) ? 1 : cmd.label.toLowerCase().startsWith(query) ? 2 : 3);
+            matches.sort((a, b) => rank(a) - rank(b));
+            // A ticket key like "tk-23" jumps straight to that ticket's detail.
+            if (TICKET_KEY_RE.test(query)) {
+                matches.unshift({ slash: "/" + query, key: query, label: "Open ticket " + query.toUpperCase(), action: "ticket", ticketKey: query.toUpperCase() });
+            }
             if (paletteActiveIndex >= matches.length) { paletteActiveIndex = Math.max(0, matches.length - 1); }
             paletteEls.list._matches = matches;
             if (!matches.length) {
@@ -8983,6 +9015,7 @@
             const cmd = matches[paletteActiveIndex];
             if (!cmd) { return; }
             closeCommandPalette();
+            if (cmd.action === "ticket") { openTicketByKey(cmd.ticketKey); return; }
             switchView(cmd.view);
         }
         function openCommandPalette() {

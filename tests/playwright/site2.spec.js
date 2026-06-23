@@ -2003,3 +2003,22 @@ test("Shift Shift command palette navigates between windows", async ({ page }) =
   await page.locator("#command-palette-input").press("Escape");
   await expect(page.locator("#command-palette-overlay")).toBeHidden();
 });
+
+test("command palette: single-letter alias and /ticket-key quick-open", async ({ page }) => {
+  // Single-letter alias: /b -> board (tickets).
+  await page.keyboard.press("Shift");
+  await page.keyboard.press("Shift");
+  await expect(page.locator("#command-palette-overlay")).toBeVisible();
+  await page.locator("#command-palette-input").fill("p");
+  await expect(page.locator(".command-palette-item").first()).toContainText("/p");
+  await page.locator("#command-palette-input").press("Enter");
+  await expect(page.locator('#main-nav button[data-view="projects"]')).toHaveClass(/active/);
+
+  // /<ticket-key> opens that ticket's detail modal.
+  await page.keyboard.press("Shift");
+  await page.keyboard.press("Shift");
+  await page.locator("#command-palette-input").fill("ops-101");
+  await expect(page.locator("#command-palette-list")).toContainText("Open ticket OPS-101");
+  await page.locator("#command-palette-input").press("Enter");
+  await expect(page.locator("#ticket-modal")).toHaveClass(/open/);
+});
