@@ -261,9 +261,11 @@ test-browser-smoke: playwright-ready
 
 test-browser-full: test-playwright
 
-# Mock-API browser tests for the live SPA (web/default + web/shared). Not part
-# of test-all yet: most of the suite predates the site2→default rename and
-# needs reviving (see docs/TODO.md). Run specific tests with PLAYWRIGHT_GREP.
+# Mock-API browser tests for the live SPA (web/default + web/shared). The harness
+# (tests/serve-site.py) serves correctly; the suite itself is NOT part of test-all
+# because most of it predates the site2→default rename and has drifted against the
+# current SPA (dead selectors, moved panels). Reviving it is tracked in TK-117.
+# Run specific tests with PLAYWRIGHT_GREP.
 test-browser-site2: playwright-ready
 	@PLAYWRIGHT_SITE2_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
 	PLAYWRIGHT_SITE2_PORT=$$PLAYWRIGHT_SITE2_PORT npx playwright test -c tests/playwright.site2.config.js $(if $(PLAYWRIGHT_GREP),-g "$(PLAYWRIGHT_GREP)",)
