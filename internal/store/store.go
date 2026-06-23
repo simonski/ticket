@@ -787,6 +787,48 @@ CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_pull_requests_ticket_id ON pull_requests(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_pull_requests_project_id ON pull_requests(project_id);
 
+CREATE TABLE IF NOT EXISTS rooms (
+	room_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	slug TEXT NOT NULL,
+	name TEXT NOT NULL,
+	topic TEXT NOT NULL DEFAULT '',
+	visibility TEXT NOT NULL DEFAULT 'public',
+	project_id INTEGER,
+	ticket_id TEXT,
+	archived INTEGER NOT NULL DEFAULT 0,
+	created_by TEXT NOT NULL DEFAULT '',
+	attrs TEXT NOT NULL DEFAULT '{}',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS room_members (
+	room_id INTEGER NOT NULL,
+	member_id TEXT NOT NULL,
+	role TEXT NOT NULL DEFAULT 'member',
+	joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	last_read_at TEXT NOT NULL DEFAULT '',
+	PRIMARY KEY (room_id, member_id),
+	FOREIGN KEY(room_id) REFERENCES rooms(room_id)
+);
+
+CREATE TABLE IF NOT EXISTS room_messages (
+	message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	room_id INTEGER NOT NULL,
+	sender_id TEXT NOT NULL,
+	kind TEXT NOT NULL DEFAULT 'text',
+	body TEXT NOT NULL DEFAULT '',
+	attrs TEXT NOT NULL DEFAULT '{}',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(room_id) REFERENCES rooms(room_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rooms_slug ON rooms(slug);
+CREATE INDEX IF NOT EXISTS idx_rooms_project_id ON rooms(project_id);
+CREATE INDEX IF NOT EXISTS idx_rooms_ticket_id ON rooms(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_room_members_member_id ON room_members(member_id);
+CREATE INDEX IF NOT EXISTS idx_room_messages_room_id ON room_messages(room_id, message_id);
+
 `
 
 	if _, err := db.ExecContext(ctx, schema); err != nil {
