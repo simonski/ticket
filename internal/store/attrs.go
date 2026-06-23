@@ -48,6 +48,26 @@ func parseAttrs(text string) (Attrs, error) {
 	return a, nil
 }
 
+// guidanceMapFromAttr converts a decoded attrs value (a nested JSON object) into a
+// GuidanceMap. Used when a guidance map (dor/dod/ac) is folded into the bag as a
+// nested object (TK-113/TK-115). Returns nil for a missing or non-object value.
+func guidanceMapFromAttr(v any) GuidanceMap {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := make(GuidanceMap, len(m))
+	for k, val := range m {
+		if s, ok := val.(string); ok {
+			out[k] = s
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // GetString returns the value at key as a string, or "" if absent or not a string.
 func (a Attrs) GetString(key string) string {
 	if v, ok := a[key].(string); ok {

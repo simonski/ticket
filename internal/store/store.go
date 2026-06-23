@@ -276,11 +276,6 @@ CREATE TABLE IF NOT EXISTS roles (
 	role_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	workflow_id INTEGER,
 	title TEXT NOT NULL,
-	description TEXT NOT NULL DEFAULT '',
-	acceptance_criteria TEXT NOT NULL DEFAULT '',
-	dor_map TEXT NOT NULL DEFAULT '{}',
-	dod_map TEXT NOT NULL DEFAULT '{}',
-	ac_map TEXT NOT NULL DEFAULT '{}',
 	attrs TEXT NOT NULL DEFAULT '{}',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1093,21 +1088,9 @@ CREATE TABLE user_notifications (
 			return err
 		}
 	}
-	if !columnExists(ctx, db, "roles", "dor_map") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE roles ADD COLUMN dor_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "roles", "dod_map") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE roles ADD COLUMN dod_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "roles", "ac_map") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE roles ADD COLUMN ac_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
-			return err
-		}
-	}
+	// roles description/acceptance_criteria/dor_map/dod_map/ac_map are folded into
+	// the roles attrs bag (TK-113); their legacy ADD COLUMN migrations were removed
+	// and the columns are migrated and dropped by the attrs-consolidation step below.
 	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tickets_workflow_stage_id ON tickets(workflow_stage_id)`); err != nil {
 		return err
 	}
@@ -1759,6 +1742,37 @@ CREATE TABLE user_notifications (
 				return err
 			}
 			if _, err := db.ExecContext(ctx, `ALTER TABLE projects DROP COLUMN `+col); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Fold roles guidance columns into the attrs bag and drop them (TK-113). The
+	// scalar text fields (description, acceptance_criteria) are stored as strings;
+	// the guidance maps (dor_map/dod_map/ac_map) are embedded as nested JSON objects
+	// via json(col). Non-clobbering and idempotent.
+	for _, col := range []string{"description", "acceptance_criteria"} {
+		if columnExists(ctx, db, "roles", col) {
+			if _, err := db.ExecContext(ctx, fmt.Sprintf(
+				`UPDATE roles SET attrs = json_set(attrs, '$.%s', %s) `+
+					`WHERE json_extract(attrs, '$.%s') IS NULL AND TRIM(COALESCE(%s, '')) <> ''`,
+				col, col, col, col)); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, `ALTER TABLE roles DROP COLUMN `+col); err != nil {
+				return err
+			}
+		}
+	}
+	for _, col := range []string{"dor_map", "dod_map", "ac_map"} {
+		if columnExists(ctx, db, "roles", col) {
+			if _, err := db.ExecContext(ctx, fmt.Sprintf(
+				`UPDATE roles SET attrs = json_set(attrs, '$.%s', json(%s)) `+
+					`WHERE json_extract(attrs, '$.%s') IS NULL AND TRIM(COALESCE(%s, '')) NOT IN ('', '{}')`,
+				col, col, col, col)); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, `ALTER TABLE roles DROP COLUMN `+col); err != nil {
 				return err
 			}
 		}
