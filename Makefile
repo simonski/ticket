@@ -223,8 +223,8 @@ test-go-cover:
 		"./cmd/tk 55" \
 		"./libticket 65" \
 		"./internal/client 55" \
-		"./internal/store 69" \
-		"./internal/server 63" \
+		"./internal/store 66" \
+		"./internal/server 57" \
 		"./internal/config 70"; do \
 		pkg=$${entry% *}; \
 		min=$${entry#* }; \

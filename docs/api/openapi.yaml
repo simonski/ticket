@@ -7962,6 +7962,32 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
   /api/releases/{release_id}:
+    get:
+      tags: [Releases]
+      summary: Get a release by id
+      operationId: getRelease
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: release_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Release
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     put:
       tags: [Releases]
       summary: Update a release

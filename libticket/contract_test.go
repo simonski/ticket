@@ -1773,4 +1773,119 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		// Cleanup
 		_ = svc.DeleteUser(context.Background(), "resetme")
 	})
+
+	t.Run("plans-default-project-git-repos-pull-requests-releases", func(t *testing.T) {
+		ctx := context.Background()
+		project, err := svc.CreateProject(ctx, libticket.ProjectCreateRequest{
+			Title: "Release Contract Project", Description: "d", AcceptanceCriteria: "ac",
+		})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+		projectRef := strconv.FormatInt(project.ID, 10)
+
+		// Plans.
+		if _, err := svc.ListPlans(ctx); err != nil {
+			t.Fatalf("ListPlans() error = %v", err)
+		}
+		defaultPlan, err := svc.DefaultPlan(ctx)
+		if err != nil {
+			t.Fatalf("DefaultPlan() error = %v", err)
+		}
+		if defaultPlan.Slug != "" {
+			if err := svc.SetDefaultPlan(ctx, defaultPlan.Slug); err != nil {
+				t.Fatalf("SetDefaultPlan() error = %v", err)
+			}
+		}
+
+		// My default project.
+		if _, err := svc.SetMyDefaultProject(ctx, projectRef); err != nil {
+			t.Fatalf("SetMyDefaultProject() error = %v", err)
+		}
+		if _, err := svc.GetMyDefaultProject(ctx); err != nil {
+			t.Fatalf("GetMyDefaultProject() error = %v", err)
+		}
+		if err := svc.ClearMyDefaultProject(ctx); err != nil {
+			t.Fatalf("ClearMyDefaultProject() error = %v", err)
+		}
+
+		// Project git repositories.
+		repo := "git@example.com:acme/widgets.git"
+		if err := svc.AddProjectGitRepository(ctx, projectRef, repo); err != nil {
+			t.Fatalf("AddProjectGitRepository() error = %v", err)
+		}
+		repos, err := svc.ListProjectGitRepositories(ctx, projectRef)
+		if err != nil {
+			t.Fatalf("ListProjectGitRepositories() error = %v", err)
+		}
+		if len(repos) == 0 {
+			t.Fatal("ListProjectGitRepositories() returned none")
+		}
+		if _, err := svc.FindProjectByGitRepository(ctx, repo); err != nil {
+			t.Fatalf("FindProjectByGitRepository() error = %v", err)
+		}
+		if err := svc.RemoveProjectGitRepository(ctx, projectRef, repo); err != nil {
+			t.Fatalf("RemoveProjectGitRepository() error = %v", err)
+		}
+
+		// Pull requests.
+		prTicket, err := svc.CreateTicket(ctx, libticket.TicketCreateRequest{ProjectID: project.ID, Type: "task", Title: "PR ticket"})
+		if err != nil {
+			t.Fatalf("CreateTicket() error = %v", err)
+		}
+		pr, err := svc.CreatePullRequest(ctx, libticket.PullRequestRequest{
+			TicketID: prTicket.ID, Title: "PR", URL: "https://example.com/pr/1", Provider: "github",
+		})
+		if err != nil {
+			t.Fatalf("CreatePullRequest() error = %v", err)
+		}
+		if _, err := svc.GetPullRequest(ctx, pr.ID); err != nil {
+			t.Fatalf("GetPullRequest() error = %v", err)
+		}
+		if _, err := svc.ListPullRequestsByTicket(ctx, prTicket.ID); err != nil {
+			t.Fatalf("ListPullRequestsByTicket() error = %v", err)
+		}
+		if _, err := svc.ListPullRequestsByProject(ctx, projectRef); err != nil {
+			t.Fatalf("ListPullRequestsByProject() error = %v", err)
+		}
+		if _, err := svc.SetPullRequestStatus(ctx, pr.ID, "merged"); err != nil {
+			t.Fatalf("SetPullRequestStatus() error = %v", err)
+		}
+
+		// Releases.
+		rel, err := svc.CreateRelease(ctx, project.ID, "v1", "first release", "2026-12-31")
+		if err != nil {
+			t.Fatalf("CreateRelease() error = %v", err)
+		}
+		relID := int64(rel.ID)
+		if _, err := svc.GetRelease(ctx, relID); err != nil {
+			t.Fatalf("GetRelease() error = %v", err)
+		}
+		if _, err := svc.ListReleases(ctx, project.ID); err != nil {
+			t.Fatalf("ListReleases() error = %v", err)
+		}
+		if _, err := svc.UpdateRelease(ctx, relID, "v1.0", "updated", "2026-12-31"); err != nil {
+			t.Fatalf("UpdateRelease() error = %v", err)
+		}
+		feature, err := svc.CreateTicket(ctx, libticket.TicketCreateRequest{ProjectID: project.ID, Type: "feature", Title: "Feature"})
+		if err != nil {
+			t.Fatalf("CreateTicket(feature) error = %v", err)
+		}
+		if err := svc.AddFeatureToRelease(ctx, feature.ID, relID); err != nil {
+			t.Fatalf("AddFeatureToRelease() error = %v", err)
+		}
+		if err := svc.RemoveFeatureFromRelease(ctx, feature.ID); err != nil {
+			t.Fatalf("RemoveFeatureFromRelease() error = %v", err)
+		}
+		if _, err := svc.SetReleaseStatus(ctx, relID, "in_progress"); err != nil {
+			t.Fatalf("SetReleaseStatus() error = %v", err)
+		}
+		rel2, err := svc.CreateRelease(ctx, project.ID, "v2", "", "")
+		if err != nil {
+			t.Fatalf("CreateRelease(v2) error = %v", err)
+		}
+		if err := svc.DeleteRelease(ctx, int64(rel2.ID)); err != nil {
+			t.Fatalf("DeleteRelease() error = %v", err)
+		}
+	})
 }
