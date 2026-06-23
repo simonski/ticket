@@ -198,19 +198,7 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	if state == StateActive && strings.TrimSpace(params.Assignee) == "" {
 		return Ticket{}, errors.New("active ticket requires assignee")
 	}
-	dorJSON, err := guidanceMapJSON(params.DORMap)
-	if err != nil {
-		return Ticket{}, err
-	}
-	dodJSON, err := guidanceMapJSON(params.DODMap)
-	if err != nil {
-		return Ticket{}, err
-	}
 	acMap := withLegacyAcceptanceCriteria(params.AcceptanceCriteria, params.ACMap)
-	acJSON, err := guidanceMapJSON(acMap)
-	if err != nil {
-		return Ticket{}, err
-	}
 	acceptanceCriteria := strings.TrimSpace(params.AcceptanceCriteria)
 	if acceptanceCriteria == "" && acMap != nil {
 		acceptanceCriteria = acMap[DefaultGuidanceStageKey]
@@ -287,14 +275,14 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	}
 	// git_repository, git_branch, estimate_complete, author (and health_score,
 	// pr_url which default to 0/"") now live in the attrs bag (TK-111).
-	attrsJSON, err := ticketAttrsForWrite(params.Attrs, params.GitRepository, params.GitBranch, params.EstimateComplete, params.Author, "", 0)
+	attrsJSON, err := ticketAttrsForWrite(params.Attrs, params.GitRepository, params.GitBranch, params.EstimateComplete, params.Author, "", 0, params.DORMap, params.DODMap, acMap)
 	if err != nil {
 		return Ticket{}, err
 	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, assignee, draft, created_by, attrs)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, dorJSON, dodJSON, acJSON, nullableInt64(ticketWorkflowID), nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.Assignee), 1, nullableUserID(params.CreatedBy), attrsJSON)
+		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, assignee, draft, created_by, attrs)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, nullableInt64(ticketWorkflowID), nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.Assignee), 1, nullableUserID(params.CreatedBy), attrsJSON)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -407,18 +395,6 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 		nextACMap = withLegacyAcceptanceCriteria(params.AcceptanceCriteria, current.ACMap)
 	}
 	nextACMap = withLegacyAcceptanceCriteria(nextAcceptanceCriteria, nextACMap)
-	dorJSON, err := guidanceMapJSON(nextDORMap)
-	if err != nil {
-		return Ticket{}, err
-	}
-	dodJSON, err := guidanceMapJSON(nextDODMap)
-	if err != nil {
-		return Ticket{}, err
-	}
-	acJSON, err := guidanceMapJSON(nextACMap)
-	if err != nil {
-		return Ticket{}, err
-	}
 	if assignmentErr := validateTicketAssignmentChange(current.Assignee, assignee, params.ActorUsername, params.ActorRole); assignmentErr != nil {
 		return Ticket{}, assignmentErr
 	}
@@ -571,7 +547,8 @@ writeTicket:
 	if params.Attrs != nil {
 		baseAttrs = params.Attrs
 	}
-	attrsJSON, err := ticketAttrsForWrite(baseAttrs, nextGitRepository, nextGitBranch, strings.TrimSpace(params.EstimateComplete), current.Author, current.PrURL, current.HealthScore)
+	// Guidance maps (dor/dod/ac) are also folded into the bag (TK-115).
+	attrsJSON, err := ticketAttrsForWrite(baseAttrs, nextGitRepository, nextGitBranch, strings.TrimSpace(params.EstimateComplete), current.Author, current.PrURL, current.HealthScore, nextDORMap, nextDODMap, nextACMap)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -579,10 +556,10 @@ writeTicket:
 	// active state; otherwise preserve the existing value (TK-88).
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, role_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, complete = ?, type = ?, attrs = ?, updated_at = CURRENT_TIMESTAMP,
+		SET title = ?, description = ?, acceptance_criteria = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, role_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, complete = ?, type = ?, attrs = ?, updated_at = CURRENT_TIMESTAMP,
 			started_at = CASE WHEN ? = 'active' AND ? != 'active' THEN CURRENT_TIMESTAMP ELSE ? END
 		WHERE ticket_id = ?
-	`, title, params.Description, nextAcceptanceCriteria, dorJSON, dodJSON, acJSON, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, completeVal, nextType, attrsJSON, state, current.State, current.StartedAt, id)
+	`, title, params.Description, nextAcceptanceCriteria, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, completeVal, nextType, attrsJSON, state, current.State, current.StartedAt, id)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -1492,7 +1469,7 @@ type scanner interface {
 // SELECT in this package.
 var ticketColumnNames = []string{
 	"ticket_id", "project_id", "parent_id", "clone_of", "type", "title",
-	"description", "acceptance_criteria", "dor_map", "dod_map", "ac_map",
+	"description", "acceptance_criteria",
 	"workflow_id", "workflow_stage_id", "role_id",
 	"stage", "state", "status", "priority", "sort_order", "estimate_effort",
 	"assignee", "draft", "complete",
@@ -1525,10 +1502,17 @@ func hydrateTicketAttrs(t *Ticket) {
 	t.Author = t.Attrs.GetString("author")
 	t.PrURL = t.Attrs.GetString("pr_url")
 	t.HealthScore = t.Attrs.GetInt(ticketAttrHealthScoreKey)
+	// Guidance maps folded into the bag (TK-115).
+	t.DORMap = guidanceMapFromAttr(t.Attrs["dor_map"])
+	t.DODMap = guidanceMapFromAttr(t.Attrs["dod_map"])
+	t.ACMap = withLegacyAcceptanceCriteria(t.AcceptanceCriteria, guidanceMapFromAttr(t.Attrs["ac_map"]))
 	for _, k := range ticketAttrStringKeys {
 		delete(t.Attrs, k)
 	}
 	delete(t.Attrs, ticketAttrHealthScoreKey)
+	for _, k := range []string{"dor_map", "dod_map", "ac_map"} {
+		delete(t.Attrs, k)
+	}
 	if len(t.Attrs) == 0 {
 		t.Attrs = nil
 	}
@@ -1536,7 +1520,7 @@ func hydrateTicketAttrs(t *Ticket) {
 
 // ticketAttrsForWrite merges the bag-backed typed fields into a base bag and
 // returns the JSON text to store. It is the write-side of the attrs consolidation.
-func ticketAttrsForWrite(base Attrs, gitRepository, gitBranch, estimateComplete, author, prURL string, healthScore int) (string, error) {
+func ticketAttrsForWrite(base Attrs, gitRepository, gitBranch, estimateComplete, author, prURL string, healthScore int, dor, dod, ac GuidanceMap) (string, error) {
 	merged := Attrs{}
 	for k, v := range base {
 		merged[k] = v
@@ -1547,6 +1531,9 @@ func ticketAttrsForWrite(base Attrs, gitRepository, gitBranch, estimateComplete,
 	merged.SetString("author", strings.TrimSpace(author))
 	merged.SetString("pr_url", strings.TrimSpace(prURL))
 	merged.SetInt(ticketAttrHealthScoreKey, healthScore)
+	setGuidanceAttr(merged, "dor_map", dor)
+	setGuidanceAttr(merged, "dod_map", dod)
+	setGuidanceAttr(merged, "ac_map", ac)
 	return marshalAttrs(merged)
 }
 
@@ -1584,9 +1571,6 @@ func scanTicket(s scanner) (Ticket, error) {
 	var workflowID sql.NullInt64
 	var workflowStageID sql.NullInt64
 	var roleID sql.NullInt64
-	var dorJSON string
-	var dodJSON string
-	var acJSON string
 	var storedStatus string
 	var draft int
 	var complete int
@@ -1606,9 +1590,6 @@ func scanTicket(s scanner) (Ticket, error) {
 		&ticket.Title,
 		&ticket.Description,
 		&ticket.AcceptanceCriteria,
-		&dorJSON,
-		&dodJSON,
-		&acJSON,
 		&workflowID,
 		&workflowStageID,
 		&roleID,
@@ -1665,21 +1646,6 @@ func scanTicket(s scanner) (Ticket, error) {
 		v := int(releaseID.Int64)
 		ticket.ReleaseID = &v
 	}
-	dorMap, err := parseGuidanceMap(dorJSON)
-	if err != nil {
-		return Ticket{}, err
-	}
-	dodMap, err := parseGuidanceMap(dodJSON)
-	if err != nil {
-		return Ticket{}, err
-	}
-	acMap, err := parseGuidanceMap(acJSON)
-	if err != nil {
-		return Ticket{}, err
-	}
-	ticket.DORMap = dorMap
-	ticket.DODMap = dodMap
-	ticket.ACMap = withLegacyAcceptanceCriteria(ticket.AcceptanceCriteria, acMap)
 	ticket.Status = RenderLifecycleStatus(ticket.Stage, ticket.State)
 	ticket.Draft = draft == 1
 	ticket.Complete = complete == 1
