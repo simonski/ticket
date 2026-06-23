@@ -5,6 +5,7 @@ Start with the [README](../README.md). This folder holds the deeper docs, groupe
 ## Getting started
 - [QUICKSTART](./QUICKSTART.md) — install, set up, and the daily workflow.
 - [TUTORIAL](./TUTORIAL.md) — an executable end-to-end walkthrough.
+- [USER_GUIDE](./USER_GUIDE.md) — everyday web-app use: command palette, chat/rooms, tasking agents.
 - [ONBOARDING](./ONBOARDING.md) — contributor environment setup.
 
 ## Understand the system

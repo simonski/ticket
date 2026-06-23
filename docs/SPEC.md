@@ -549,6 +549,36 @@ Subscription/registration plan controlling quotas and on-registration actions
 tickets, tickets per project, team memberships, API calls per day, and
 registration actions (auto-assign public team, auto-create private project).
 
+### 5.25a Room
+
+A multiplayer chat room (see `docs/design/multiplayer-rooms.md`). Scope is derived
+from the optional `project_id` / `ticket_id`: both empty = **global**; `project_id`
+set = **project**; `project_id` + `ticket_id` set = **breakout** (around an
+epic/story).
+
+| Field | Type | Constraints |
+|-------|------|-------------|
+| room_id | INTEGER | Primary key, autoincrement |
+| slug | TEXT | URL-safe; derived from name when omitted |
+| name | TEXT | Required |
+| topic | TEXT | Default empty |
+| visibility | TEXT | `public` \| `private`, default `public` |
+| project_id | INTEGER | Nullable FK → projects |
+| ticket_id | TEXT | Nullable FK → tickets (breakout scope) |
+| archived | INTEGER | Boolean, default 0 |
+| created_by | TEXT | FK → users (creator; auto-joined as owner) |
+| attrs | TEXT | JSON attribute bag (default `{}`) |
+
+**Room Member** (`room_members`): `room_id`, `member_id` (FK → users; humans and
+agents share the id space), `role` (`owner` \| `member`), `joined_at`,
+`last_read_at`.
+
+**Room Message** (`room_messages`): `message_id`, `room_id`, `sender_id`, `kind`
+(`text` \| `system` \| `task` \| `agent_event`), `body`, `attrs` (JSON; carries
+`mentions[]`, and `task_id` for `/task` messages), `created_at`. Private rooms are
+visible only to members. `/task [@agent] <desc>` posts a `task` message and
+creates a ticket; @mentioning an agent member triggers a live agent reply.
+
 ### 5.26 Other entities
 
 The implementation also models: user notifications, project access requests,

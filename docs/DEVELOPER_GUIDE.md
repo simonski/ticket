@@ -27,7 +27,7 @@ make test-all
 
 The repository keeps user-facing and developer-facing docs intentionally compact:
 
-- User-facing docs: `README.md`, `docs/QUICKSTART.md`, `docs/TUTORIAL.md`, `docs/ONBOARDING.md`
+- User-facing docs: `README.md`, `docs/QUICKSTART.md`, `docs/TUTORIAL.md`, `docs/USER_GUIDE.md`, `docs/ONBOARDING.md`
 - Developer-facing docs: this file + the architecture/process/instructions listed above
 
 Superseded guidance is removed rather than archived; the authoritative current
