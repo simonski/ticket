@@ -34,7 +34,7 @@ func GetProjectByAlias(ctx context.Context, db *sql.DB, alias, userID string) (P
 	}
 	trimmedUserID := strings.TrimSpace(userID)
 	query := `
-		SELECT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.agent_model_provider, p.agent_model_name, p.agent_model_url, p.agent_model_api_key, p.programme_id, p.attrs
+		SELECT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.programme_id, p.attrs
 		FROM project_aliases pa
 		JOIN projects p ON p.project_id = pa.project_id
 		WHERE pa.alias_name = ? AND ((pa.user_id IS NULL AND ? = '') OR pa.user_id = ?)

@@ -274,6 +274,14 @@ Conservative bias: anything filtered / sorted / FK'd / aggregated stays **Keep**
 
 ### 9.2 `projects`
 
+> **Status (TK-112):** the four `agent_model_*` config columns have been
+> consolidated into `attrs` and dropped (typed `Project` fields retained). After
+> implementation, `git_repository` and `notes` were reclassified **Keep**:
+> `git_repository` is entangled with the `project_git_repositories` sync table and
+> the `GetProjectByGitRepository` query, and `notes` is interleaved with kept
+> columns in many statements — both better left as columns. The `dor/dod/ac` Fold
+> is part of TK-115.
+
 | Column | Decision | Rationale |
 |--------|----------|-----------|
 | project_id, prefix, title | Keep | PK / identity / displayed |
