@@ -1997,3 +1997,40 @@ select {
 .workflow-graph-surface { position: relative; }
 .workflow-graph-links { position: absolute; top: 0; left: 0; }
 .workflow-graph-node { position: absolute; }
+
+/* Command palette (Shift Shift quick-switcher, TK-127). */
+#command-palette-overlay { align-items: flex-start; }
+.command-palette {
+  width: min(560px, 92vw);
+  margin-top: 12vh;
+  background: var(--surface, #1b1d22);
+  border: 1px solid var(--border, #333);
+  border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.command-palette-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  font-size: 16px;
+  border: none;
+  border-bottom: 1px solid var(--border, #333);
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+.command-palette-list { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow-y: auto; }
+.command-palette-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 7px; cursor: pointer;
+}
+.command-palette-item .cp-slash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; opacity: 0.8; }
+.command-palette-item .cp-label { margin-left: auto; opacity: 0.65; font-size: 13px; }
+.command-palette-item.active, .command-palette-item:hover { background: var(--accent-soft, rgba(255, 122, 26, 0.16)); }
+.command-palette-empty { padding: 14px 16px; opacity: 0.6; }
+.command-palette-hint { padding: 8px 14px; font-size: 12px; opacity: 0.55; border-top: 1px solid var(--border, #333); }
+.command-palette-hint kbd {
+  font-family: inherit; font-size: 11px; padding: 1px 5px; margin: 0 2px;
+  border: 1px solid var(--border, #444); border-radius: 4px; opacity: 0.9;
+}

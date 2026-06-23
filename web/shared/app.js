@@ -8940,8 +8940,95 @@
                 }
             });
         }
+        // ── Command palette: Shift Shift quick-switcher (TK-127) ──────────
+        const PALETTE_ALIASES = { backlog: "tickets", board: "tickets", chat: "chat", mailbox: "interventions", inbox: "interventions" };
+        const paletteEls = {
+            overlay: document.getElementById("command-palette-overlay"),
+            input: document.getElementById("command-palette-input"),
+            list: document.getElementById("command-palette-list"),
+        };
+        let paletteActiveIndex = 0;
+        let lastShiftAt = 0;
+        function buildPaletteCommands() {
+            const known = new Set(availableViewNames());
+            const labelByView = {};
+            NAV_ITEMS.forEach((item) => { labelByView[item.view] = item.label; });
+            const commands = [];
+            const seen = new Set();
+            const add = (slash, view) => {
+                if (!known.has(view) || seen.has(slash)) { return; }
+                seen.add(slash);
+                commands.push({ slash: "/" + slash, key: slash, view: view, label: labelByView[view] || view });
+            };
+            visibleNavItems().forEach((item) => add(item.view, item.view));
+            Object.keys(PALETTE_ALIASES).forEach((alias) => add(alias, PALETTE_ALIASES[alias]));
+            return commands;
+        }
+        function isPaletteOpen() { return paletteEls.overlay && !paletteEls.overlay.classList.contains("hidden"); }
+        function renderPaletteList() {
+            const query = String(paletteEls.input.value || "").replace(/^\//, "").trim().toLowerCase();
+            const matches = buildPaletteCommands().filter((cmd) => !query || cmd.key.includes(query) || cmd.label.toLowerCase().includes(query));
+            if (paletteActiveIndex >= matches.length) { paletteActiveIndex = Math.max(0, matches.length - 1); }
+            paletteEls.list._matches = matches;
+            if (!matches.length) {
+                paletteEls.list.innerHTML = "<li class=\"command-palette-empty\">No matching commands</li>";
+                return;
+            }
+            paletteEls.list.innerHTML = matches.map((cmd, i) =>
+                "<li class=\"command-palette-item" + (i === paletteActiveIndex ? " active" : "") + "\" role=\"option\" data-cp-index=\"" + i + "\">" +
+                "<span class=\"cp-slash\">" + escapeHTML(cmd.slash) + "</span><span class=\"cp-label\">" + escapeHTML(cmd.label) + "</span></li>").join("");
+        }
+        function runPaletteActive() {
+            const matches = paletteEls.list._matches || [];
+            const cmd = matches[paletteActiveIndex];
+            if (!cmd) { return; }
+            closeCommandPalette();
+            switchView(cmd.view);
+        }
+        function openCommandPalette() {
+            if (!paletteEls.overlay || isPaletteOpen()) { return; }
+            paletteActiveIndex = 0;
+            paletteEls.input.value = "";
+            paletteEls.overlay.classList.remove("hidden");
+            renderPaletteList();
+            setTimeout(() => { paletteEls.input.focus(); }, 0);
+        }
+        function closeCommandPalette() {
+            if (paletteEls.overlay) { paletteEls.overlay.classList.add("hidden"); }
+        }
+        function setupCommandPalette() {
+            if (!paletteEls.overlay) { return; }
+            paletteEls.input.addEventListener("input", () => { paletteActiveIndex = 0; renderPaletteList(); });
+            paletteEls.input.addEventListener("keydown", (event) => {
+                const matches = paletteEls.list._matches || [];
+                if (event.key === "ArrowDown") { event.preventDefault(); paletteActiveIndex = Math.min(matches.length - 1, paletteActiveIndex + 1); renderPaletteList(); }
+                else if (event.key === "ArrowUp") { event.preventDefault(); paletteActiveIndex = Math.max(0, paletteActiveIndex - 1); renderPaletteList(); }
+                else if (event.key === "Enter") { event.preventDefault(); runPaletteActive(); }
+                else if (event.key === "Escape") { event.preventDefault(); closeCommandPalette(); }
+            });
+            paletteEls.list.addEventListener("click", (event) => {
+                const item = event.target.closest("[data-cp-index]");
+                if (!item) { return; }
+                paletteActiveIndex = Number(item.dataset.cpIndex) || 0;
+                runPaletteActive();
+            });
+            paletteEls.overlay.addEventListener("click", (event) => { if (event.target === paletteEls.overlay) { closeCommandPalette(); } });
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Shift" && !event.repeat) {
+                    const now = Date.now();
+                    if (now - lastShiftAt < 400) { lastShiftAt = 0; if (isPaletteOpen()) { closeCommandPalette(); } else { openCommandPalette(); } }
+                    else { lastShiftAt = now; }
+                    return;
+                }
+                lastShiftAt = 0;
+            });
+        }
         document.addEventListener("keydown", (event) => {
             if (event.key !== "Escape") {
+                return;
+            }
+            if (paletteEls.overlay && !paletteEls.overlay.classList.contains("hidden")) {
+                closeCommandPalette();
                 return;
             }
             if (els.dialogOverlay && !els.dialogOverlay.classList.contains("hidden")) {
@@ -8952,6 +9039,7 @@
                 closeTicketModal();
             }
         });
+        setupCommandPalette();
         state.viewScrollByPanel = loadStoredViewScrollByPanel();
         state.currentView = loadStoredSelectedView() || state.currentView;
         switchView(state.currentView, { restoreScroll: false });
