@@ -232,13 +232,12 @@ test-browser-smoke: playwright-ready
 	@PLAYWRIGHT_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
 	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test -c tests/playwright.config.js $(PLAYWRIGHT_SMOKE_SPECS)
 
-test-browser-full: test-playwright
+test-browser-full: test-playwright test-browser-site2
 
 # Mock-API browser tests for the live SPA (web/default + web/shared). The harness
-# (tests/serve-site.py) serves correctly; the suite itself is NOT part of test-all
-# because most of it predates the site2→default rename and has drifted against the
-# current SPA (dead selectors, moved panels). Reviving it is tracked in TK-117.
-# Run specific tests with PLAYWRIGHT_GREP.
+# (tests/serve-site.py) serves web/default + web/shared. Revived against the
+# current SPA in TK-117 and wired into test-browser-full (and thus test-all /
+# ci-browser); runs fully parallel. Run specific tests with PLAYWRIGHT_GREP.
 test-browser-site2: playwright-ready
 	@PLAYWRIGHT_SITE2_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
 	PLAYWRIGHT_SITE2_PORT=$$PLAYWRIGHT_SITE2_PORT npx playwright test -c tests/playwright.site2.config.js $(if $(PLAYWRIGHT_GREP),-g "$(PLAYWRIGHT_GREP)",)
