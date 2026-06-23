@@ -307,10 +307,6 @@ CREATE TABLE IF NOT EXISTS projects (
 	ticket_sequence INTEGER NOT NULL DEFAULT 0,
 	default_draft INTEGER NOT NULL DEFAULT 0,
 	workflow_id INTEGER,
-	agent_model_provider TEXT NOT NULL DEFAULT '',
-	agent_model_name TEXT NOT NULL DEFAULT '',
-	agent_model_url TEXT NOT NULL DEFAULT '',
-	agent_model_api_key TEXT NOT NULL DEFAULT '',
 	attrs TEXT NOT NULL DEFAULT '{}',
 	FOREIGN KEY(created_by) REFERENCES users(user_id),
 	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id)
@@ -972,26 +968,9 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
-	if !columnExists(ctx, db, "projects", "agent_model_provider") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN agent_model_provider TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "projects", "agent_model_name") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN agent_model_name TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "projects", "agent_model_url") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN agent_model_url TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(ctx, db, "projects", "agent_model_api_key") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN agent_model_api_key TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
+	// agent_model_provider/name/url/api_key moved into the projects attrs bag
+	// (TK-112); their legacy ADD COLUMN migrations were removed and the columns are
+	// migrated and dropped by the attrs-consolidation step below.
 	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_projects_workflow_id ON projects(workflow_id)`); err != nil {
 		return err
 	}
@@ -1766,6 +1745,22 @@ CREATE TABLE user_notifications (
 		}
 		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets DROP COLUMN open`); err != nil {
 			return err
+		}
+	}
+
+	// Consolidate projects agent-model config columns into the attrs bag and drop
+	// them (TK-112). Same idempotent, non-clobbering pattern as tickets above.
+	for _, col := range []string{"agent_model_provider", "agent_model_name", "agent_model_url", "agent_model_api_key"} {
+		if columnExists(ctx, db, "projects", col) {
+			if _, err := db.ExecContext(ctx, fmt.Sprintf(
+				`UPDATE projects SET attrs = json_set(attrs, '$.%s', %s) `+
+					`WHERE json_extract(attrs, '$.%s') IS NULL AND TRIM(COALESCE(%s, '')) <> ''`,
+				col, col, col, col)); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, `ALTER TABLE projects DROP COLUMN `+col); err != nil {
+				return err
+			}
 		}
 	}
 
