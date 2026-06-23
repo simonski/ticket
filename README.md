@@ -25,7 +25,7 @@ Or from source: `git clone https://github.com/simonski/ticket.git && cd ticket &
 - [Tutorial](./docs/TUTORIAL.md) — an executable end-to-end walkthrough
 - [Design](./docs/DESIGN.md) — architecture and data model
 
-Contributing or building agents? See the [Developer Guide](./docs/DEVELOPER_GUIDE.md).
+Full docs index: [docs/INDEX.md](./docs/INDEX.md). Contributing or building agents? See the [Developer Guide](./docs/DEVELOPER_GUIDE.md).
 
 ## Community
 

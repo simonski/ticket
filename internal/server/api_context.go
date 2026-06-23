@@ -8,7 +8,7 @@ import (
 	"github.com/simonski/ticket/internal/store"
 )
 
-// handleProjectContext serves the project-scoped context graph (GOAL.md):
+// handleProjectContext serves the project-scoped context graph (FACTORY.md §5.7):
 //
 //	GET /api/projects/{ref}/context        — full context graph (nodes + edges)
 //	GET /api/projects/{ref}/context/search — search nodes by text (?q=)

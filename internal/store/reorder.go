@@ -12,7 +12,7 @@ import (
 // order and are placed after the listed ones. Every listed ID must be a live
 // child of the parent and may appear only once.
 //
-// This backs the decomposition-reordering contract in GOAL.md: during
+// This backs the decomposition-reordering contract in FACTORY.md §5.3 (FR-14): during
 // refinement the human can reprioritize the proposed breakdown before sign-off.
 func ReorderChildTickets(ctx context.Context, db *sql.DB, parentID string, orderedIDs []string, actorUsername, actorID string) ([]Ticket, error) {
 	parent, err := GetTicket(ctx, db, parentID)
