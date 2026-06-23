@@ -1231,6 +1231,7 @@ func ListTickets(ctx context.Context, db *sql.DB, params TicketListParams) ([]Ti
 		return nil, errors.New("project is required")
 	}
 
+	// #nosec G202 -- ticketSelectColumns returns a fixed, code-controlled column list (no user input); filter values are bound parameters.
 	query := `
 		SELECT ` + ticketSelectColumns("") + `
 		FROM tickets
@@ -1317,6 +1318,7 @@ func SearchTickets(ctx context.Context, db *sql.DB, projectID int64, query strin
 }
 
 func GetTicketByProject(ctx context.Context, db *sql.DB, projectID int64, id string) (Ticket, error) {
+	// #nosec G202 -- ticketSelectColumns is a fixed, code-controlled column list (no user input); values are bound parameters.
 	row := db.QueryRowContext(ctx, `
 		SELECT `+ticketSelectColumns("")+`
 		FROM tickets
@@ -1333,6 +1335,7 @@ func GetTicketByProject(ctx context.Context, db *sql.DB, projectID int64, id str
 }
 
 func GetTicket(ctx context.Context, db *sql.DB, id string) (Ticket, error) {
+	// #nosec G202 -- ticketSelectColumns is a fixed, code-controlled column list (no user input); values are bound parameters.
 	row := db.QueryRowContext(ctx, `
 		SELECT `+ticketSelectColumns("")+`
 		FROM tickets
@@ -1932,6 +1935,7 @@ func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id, actorID str
 }
 
 func listStoredChildTickets(ctx context.Context, db *sql.DB, parentID string) ([]Ticket, error) {
+	// #nosec G202 -- ticketSelectColumns is a fixed, code-controlled column list (no user input); values are bound parameters.
 	rows, err := db.QueryContext(ctx, `
 		SELECT `+ticketSelectColumns("")+`
 		FROM tickets

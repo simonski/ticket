@@ -91,6 +91,7 @@ func ReorderChildTickets(ctx context.Context, db *sql.DB, parentID string, order
 // ListChildTicketsByOrder returns a parent's live children sorted by their
 // explicit sort_order (creation order as tie-break).
 func ListChildTicketsByOrder(ctx context.Context, db *sql.DB, parentID string) ([]Ticket, error) {
+	// #nosec G202 -- ticketSelectColumns is a fixed, code-controlled column list (no user input); values are bound parameters.
 	rows, err := db.QueryContext(ctx, `
 		SELECT `+ticketSelectColumns("")+`
 		FROM tickets
