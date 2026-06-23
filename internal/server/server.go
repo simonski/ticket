@@ -360,8 +360,13 @@ func securityHeadersHandler(next http.Handler) http.Handler {
 		if requestIsSecure(r) {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
+		// Scripts stay nonce-locked. Styles use 'unsafe-inline' because the SPA
+		// relies on inline style attributes for layout, and a CSP nonce cannot
+		// apply to style *attributes* (only to <style> elements) — so a nonce
+		// silently blocks them and breaks rendering. img-src allows inline data:
+		// SVG icons.
 		w.Header().Set("Content-Security-Policy",
-			fmt.Sprintf("default-src 'self'; script-src 'self' 'nonce-%s'; style-src 'self' 'nonce-%s'", nonce, nonce))
+			fmt.Sprintf("default-src 'self'; script-src 'self' 'nonce-%s'; style-src 'self' 'unsafe-inline'; img-src 'self' data:", nonce))
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), cspNonceKey{}, nonce)))
 	})
 }
