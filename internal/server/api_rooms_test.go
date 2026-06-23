@@ -157,3 +157,86 @@ func roomListed(rooms []store.Room, id int64) bool {
 func itoa(n int64) string {
 	return strconv.FormatInt(n, 10)
 }
+
+func TestParseTaskCommand(t *testing.T) {
+	cases := []struct {
+		body     string
+		assignee string
+		desc     string
+		ok       bool
+	}{
+		{"/task fix the login bug", "", "fix the login bug", true},
+		{"/task @agent-1 ship the feature", "agent-1", "ship the feature", true},
+		{"  /task   @bob   do it  ", "bob", "do it", true},
+		{"/task", "", "", true},
+		{"hello world", "", "", false},
+		{"/taskfoo", "", "", false},
+	}
+	for _, tc := range cases {
+		a, d, ok := parseTaskCommand(tc.body)
+		if ok != tc.ok || a != tc.assignee || d != tc.desc {
+			t.Errorf("parseTaskCommand(%q) = (%q,%q,%v), want (%q,%q,%v)", tc.body, a, d, ok, tc.assignee, tc.desc, tc.ok)
+		}
+	}
+}
+
+func TestRoomTaskCommandCreatesTicket(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	admin := roomLoginToken(t, handler, "admin", "password")
+
+	// A project to scope the room/ticket to.
+	projResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"prefix": "ROOM",
+		"title":  "Room Project",
+	}, admin)
+	if projResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d, body=%s", projResp.Code, projResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projResp, &project)
+
+	// A project-scoped room.
+	roomResp := doJSONRequest(t, handler, http.MethodPost, "/api/rooms", map[string]any{
+		"name":       "Build",
+		"project_id": project.ID,
+	}, admin)
+	var room store.Room
+	decodeResponse(t, roomResp, &room)
+	if room.ProjectID == nil {
+		t.Fatalf("project room missing project_id: %+v", room)
+	}
+
+	// /task creates a ticket and posts a task message linking it.
+	taskResp := doJSONRequest(t, handler, http.MethodPost, "/api/rooms/"+itoa(room.ID)+"/messages",
+		map[string]string{"body": "/task wire up the deploy script"}, admin)
+	if taskResp.Code != http.StatusCreated {
+		t.Fatalf("/task status = %d, body=%s", taskResp.Code, taskResp.Body.String())
+	}
+	var msg store.RoomMessage
+	decodeResponse(t, taskResp, &msg)
+	if msg.Kind != "task" {
+		t.Fatalf("task message kind = %q, want task", msg.Kind)
+	}
+	ticketKey := msg.Attrs.GetString("task_id")
+	if ticketKey == "" {
+		t.Fatalf("task message has no task_id: %+v", msg.Attrs)
+	}
+
+	// The ticket exists.
+	getTicket := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticketKey, nil, admin)
+	if getTicket.Code != http.StatusOK {
+		t.Fatalf("created ticket %s not found, status = %d", ticketKey, getTicket.Code)
+	}
+
+	// Tasking a global room is rejected.
+	globalResp := doJSONRequest(t, handler, http.MethodPost, "/api/rooms", map[string]any{"name": "Global"}, admin)
+	var global store.Room
+	decodeResponse(t, globalResp, &global)
+	badTask := doJSONRequest(t, handler, http.MethodPost, "/api/rooms/"+itoa(global.ID)+"/messages",
+		map[string]string{"body": "/task do something"}, admin)
+	if badTask.Code != http.StatusBadRequest {
+		t.Fatalf("/task in global room status = %d, want 400", badTask.Code)
+	}
+}

@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -131,7 +133,7 @@ func (r *router) registerRoomHandlers() {
 		case "members":
 			handleRoomMembers(w, req, db, roomID)
 		case "messages":
-			handleRoomMessages(w, req, db, user, roomID, r.live)
+			handleRoomMessages(w, req, db, user, room, r.live)
 		default:
 			writeError(w, http.StatusNotFound, "unknown room subresource")
 		}
@@ -218,7 +220,8 @@ func handleRoomMembers(w http.ResponseWriter, req *http.Request, db *sql.DB, roo
 	}
 }
 
-func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, user store.User, roomID int64, hub *liveHub) {
+func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, user store.User, room store.Room, hub *liveHub) {
+	roomID := room.ID
 	switch req.Method {
 	case http.MethodGet:
 		limit, _ := strconv.Atoi(req.URL.Query().Get("limit"))
@@ -241,6 +244,20 @@ func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, us
 			writeError(w, http.StatusBadRequest, "message body is required")
 			return
 		}
+		// "/task [@agent] <description>" creates a tracked ticket assigned to the
+		// agent and posts a task message linking it (S7).
+		if assignee, desc, isTask := parseTaskCommand(body.Body); isTask {
+			msg, terr := createRoomTask(req.Context(), db, room, user, assignee, desc)
+			if terr != nil {
+				writeError(w, http.StatusBadRequest, terr.Error())
+				return
+			}
+			if hub != nil {
+				hub.broadcastRoomMessage(roomID, msg)
+			}
+			writeJSON(w, http.StatusCreated, msg)
+			return
+		}
 		msg, err := store.PostRoomMessage(req.Context(), db, store.RoomMessage{
 			RoomID:   roomID,
 			SenderID: user.ID,
@@ -259,4 +276,64 @@ func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, us
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// parseTaskCommand parses "/task [@assignee] <description>". ok is false when the
+// body is not a /task command.
+func parseTaskCommand(body string) (assignee, description string, ok bool) {
+	s := strings.TrimSpace(body)
+	if s != "/task" && !strings.HasPrefix(s, "/task ") {
+		return "", "", false
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(s, "/task"))
+	if strings.HasPrefix(rest, "@") {
+		fields := strings.SplitN(rest, " ", 2)
+		assignee = strings.TrimPrefix(fields[0], "@")
+		if len(fields) > 1 {
+			rest = strings.TrimSpace(fields[1])
+		} else {
+			rest = ""
+		}
+	}
+	return assignee, rest, true
+}
+
+// createRoomTask creates a tracked ticket from a /task command and posts a task
+// message into the room linking it. The existing orchestrator/agent loop then
+// picks the ticket up.
+func createRoomTask(ctx context.Context, db *sql.DB, room store.Room, user store.User, assignee, description string) (store.RoomMessage, error) {
+	if room.ProjectID == nil {
+		return store.RoomMessage{}, fmt.Errorf("tasking requires a project or breakout room")
+	}
+	if strings.TrimSpace(description) == "" {
+		return store.RoomMessage{}, fmt.Errorf("describe the work after /task")
+	}
+	var parent *string
+	if strings.TrimSpace(room.TicketID) != "" {
+		tid := room.TicketID
+		parent = &tid
+	}
+	ticket, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
+		ProjectID: *room.ProjectID,
+		ParentID:  parent,
+		Type:      "task",
+		Title:     description,
+		Assignee:  assignee,
+		CreatedBy: user.ID,
+		Author:    user.Username,
+	})
+	if err != nil {
+		return store.RoomMessage{}, err
+	}
+	label := "📋 Created " + ticket.ID + ": " + description
+	if assignee != "" {
+		label += " — assigned @" + assignee
+	}
+	return store.PostRoomMessage(ctx, db, store.RoomMessage{
+		RoomID:   room.ID,
+		SenderID: user.ID,
+		Kind:     "task",
+		Body:     label,
+		Attrs:    store.Attrs{"task_id": ticket.ID, "assignee": assignee},
+	})
 }
