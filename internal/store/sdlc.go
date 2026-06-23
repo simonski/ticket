@@ -980,7 +980,7 @@ func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]Wo
 // given workflowID in a single query and returns them grouped by stage_id.
 func listWorkflowStageRolesBatch(ctx context.Context, db *sql.DB, workflowID int64) (map[int64][]Role, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT sr.stage_id, r.role_id, r.workflow_id, r.title, r.description, r.acceptance_criteria, r.dor_map, r.dod_map, r.ac_map, r.created_at, r.updated_at, r.attrs
+		SELECT sr.stage_id, r.role_id, r.workflow_id, r.title, r.created_at, r.updated_at, r.attrs
 		FROM workflow_stage_roles sr
 		JOIN roles r ON r.role_id = sr.role_id
 		WHERE sr.workflow_id = ?
