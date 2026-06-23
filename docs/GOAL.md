@@ -1,5 +1,11 @@
 # GOAL
 
+> **Status: product vision / north-star, not a feature reference.** "Goal" here is
+> the conceptual outcome a unit of work refines from. The earlier standalone *goal*
+> entity/command was removed; that concept is now realized through the
+> Feature → Epic → Story refinement model (see `docs/RELEASES.md`, `docs/FACTORY.md`,
+> `docs/DESIGN_ORCHESTRATOR.md`). There is no `tk goal` command.
+
 ## Vision
 
 `ticket` should be a general-purpose **software development** system where:

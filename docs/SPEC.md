@@ -83,6 +83,15 @@ modernc.org/sqlite v1.48.0
 
 ## 5. Core Entities
 
+> **Logical vs physical schema.** These tables enumerate each entity's *logical
+> fields* as exposed through the Go structs, JSON API, and CLI. They are not a
+> literal column list. The high-churn entities (Ticket, Project, Role, Workflow
+> Stage) physically store their soft, sparse, and per-type fields in a single
+> `attrs` TEXT-JSON column (schema version 12); fields marked **(attrs)** below are
+> hydrated from that bag rather than being dedicated columns. See
+> `docs/design/extensible-schema.md` for the column→`attrs` consolidation and the
+> promotion rules.
+
 ### 5.1 User
 
 Represents a human operator or service account.
@@ -133,6 +142,7 @@ Top-level namespace and container for tickets.
 | visibility | TEXT | `public` \| `private`, default `public` |
 | workflow_id | INTEGER | Nullable FK → workflows |
 | ticket_sequence | INTEGER | Auto-incrementing per project, default 0 |
+| attrs | TEXT | JSON attribute bag (default `{}`). Backs the agent-model config (`agent_model_provider`/`name`/`url`/`api_key`) and the `dor_map`/`dod_map`/`ac_map` guidance maps. |
 | created_by | TEXT | FK → users |
 | created_at | TEXT | Timestamp |
 | updated_at | TEXT | Timestamp |
@@ -184,8 +194,8 @@ The primary work artifact.
 | title | TEXT | Required |
 | description | TEXT | Default empty |
 | acceptance_criteria | TEXT | Default empty |
-| git_repository | TEXT | Default empty |
-| git_branch | TEXT | Default empty |
+| git_repository | TEXT | Default empty. **(attrs)** |
+| git_branch | TEXT | Default empty. **(attrs)** |
 | workflow_stage_id | INTEGER | Nullable FK → workflow_stages |
 | stage | TEXT | Default `design` |
 | state | TEXT | Default `idle` |
@@ -193,20 +203,22 @@ The primary work artifact.
 | priority | INTEGER | Default 3 |
 | sort_order | INTEGER | Default 0 |
 | estimate_effort | INTEGER | Default 0 |
-| estimate_complete | TEXT | Default empty |
-| health_score | INTEGER | Default 0 |
+| estimate_complete | TEXT | Default empty. **(attrs)** |
+| health_score | INTEGER | Default 0. **(attrs)** |
+| author | TEXT | Username of the creator. **(attrs)** |
 | assignee | TEXT | Default empty |
 | draft | INTEGER | Boolean, default 1. New tickets start as draft until explicitly readied for work. |
 | complete | INTEGER | Boolean, default 0. When true, ticket is finished (stage=done). |
 | archived | INTEGER | Boolean, default 0 |
 | deleted | INTEGER | Boolean, default 0. Soft-delete flag. |
 | recommended_ready | INTEGER | Boolean, default 0. Set when the refiner proposes the ticket is ready. |
-| dor_map / dod_map / ac_map | TEXT | JSON guidance maps (Definition of Ready / Done / Acceptance Criteria) keyed by stage with a `default` fallback. |
+| dor_map / dod_map / ac_map | JSON | Guidance maps (Definition of Ready / Done / Acceptance Criteria) keyed by stage with a `default` fallback. **(attrs)** |
 | workflow_id | INTEGER | Nullable FK → workflows. Explicit per-ticket workflow override. |
-| pr_url | TEXT | Pull-request URL recorded by agents. |
+| pr_url | TEXT | Pull-request URL recorded by agents. **(attrs)** |
 | role_id | INTEGER | FK → roles. Current active role within the stage. |
 | previous_workflow_stage_id | INTEGER | Saved stage for reopen after completion. |
 | previous_role_id | INTEGER | Saved role for reopen after completion. |
+| attrs | TEXT | JSON attribute bag (default `{}`). Backing store for the **(attrs)** fields above and any new optional/per-type fields. |
 | created_by | TEXT | FK → users |
 | created_at | TEXT | Timestamp |
 | updated_at | TEXT | Timestamp |
@@ -283,9 +295,12 @@ An individual stage within a workflow.
 | workflow_stage_id | INTEGER | Primary key, autoincrement |
 | workflow_id | INTEGER | FK → workflows |
 | stage_name | TEXT | Required, unique per workflow |
-| description | TEXT | Default empty |
+| description | TEXT | Default empty. **(attrs)** |
+| acceptance_criteria / definition_of_ready / definition_of_done | TEXT | Stage guidance text. **(attrs)** |
+| is_backlog_stage | INTEGER | Boolean, default 0 |
 | role_id | INTEGER | Nullable FK → roles |
 | sort_order | INTEGER | Default 0 |
+| attrs | TEXT | JSON attribute bag (default `{}`). Backs the stage's `description` and guidance text fields. |
 | created_at | TEXT | Timestamp |
 | updated_at | TEXT | Timestamp |
 
@@ -347,8 +362,9 @@ Custom role definition for workflow stages.
 | role_id | INTEGER | Primary key, autoincrement |
 | workflow_id | INTEGER | FK → workflows. Roles are scoped to an Workflow. |
 | title | TEXT | Unique per workflow_id, required |
-| description | TEXT | Default empty |
-| acceptance_criteria | TEXT | Default empty |
+| description | TEXT | Default empty. **(attrs)** |
+| acceptance_criteria | TEXT | Default empty. **(attrs)** |
+| attrs | TEXT | JSON attribute bag (default `{}`). Backs `description`, `acceptance_criteria`, and the `dor_map`/`dod_map`/`ac_map` guidance maps. |
 | created_at | TEXT | Timestamp |
 | updated_at | TEXT | Timestamp |
 

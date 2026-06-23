@@ -4,11 +4,11 @@ This is the single entrypoint for contributor and agent-facing implementation co
 
 ## Core references
 
-1. **Architecture / design**: `docs/DESIGN.md`
-2. **Workflow + SDLC method**: `docs/process/SDLC.md`
-3. **Contributor workflow**: `CONTRIBUTING.md`
-4. **Testing strategy**: `TESTING.md`
-5. **Agent execution rules**: `AGENTS.md`, `.github/copilot-instructions.md`, `CLAUDE.md`
+1. **Architecture / design**: `docs/DESIGN.md`, `docs/ENTITY_MODEL.md`
+2. **Workflow + SDLC method**: `docs/process/SDLC.md`, `docs/LIFECYCLE.md`
+3. **Contributor workflow**: `.github/CONTRIBUTING.md`
+4. **Testing strategy**: `docs/TESTING.md`
+5. **Agent execution rules**: `docs/Agents.md`, `.github/copilot-instructions.md`, `CLAUDE.md`
 
 ## Build and validation
 
@@ -27,7 +27,8 @@ make test-all
 
 The repository keeps user-facing and developer-facing docs intentionally compact:
 
-- User-facing docs: `README.md`, `docs/QUICKSTART.md`, `docs/TUTORIAL.md`, `USER_GUIDE.md`
-- Developer-facing docs: this file + architecture/process/instructions listed above
+- User-facing docs: `README.md`, `docs/QUICKSTART.md`, `docs/TUTORIAL.md`, `docs/ONBOARDING.md`
+- Developer-facing docs: this file + the architecture/process/instructions listed above
 
-Historical plans, old quickstarts, and superseded guidance are archived under `docs/archive/`.
+Superseded guidance is removed rather than archived; the authoritative current
+specs are `docs/SPEC.md`, `docs/api/openapi.yaml`, and the design docs above.

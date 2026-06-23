@@ -661,9 +661,9 @@ const roleUsage = `Usage: tk role <command> [flags]
 Commands:
   ls                                      List all roles
   get -id <id>                            Show full role details
-  new -title <t> [-motivation m] [-goals g]
+  new -title <t> [-description d] [-ac criteria] [-dor text] [-dod text]
                                           Create a role
-  update -id <id> -title <t> [-motivation m] [-goals g]
+  update -id <id> -title <t> [-description d] [-ac criteria] [-dor text] [-dod text]
                                           Update a role
   rm -id <id>                             Delete a role`
 

@@ -108,9 +108,9 @@ make lint
 make test
 ```
 
-> `make build` auto-increments the patch version in `cmd/tk/VERSION` on
-> every run. Use `make build-dev` when you want a local rebuild without
-> changing the version.
+> `make build` does **not** change the version. The patch version in
+> `cmd/tk/VERSION` is only bumped when publishing/releasing (`make publish` /
+> `make release`). `make build` and `make build-dev` both leave it untouched.
 
 ---
 
@@ -158,7 +158,7 @@ tk admin workflow add-stage -id 1 -name develop
 tk admin workflow add-stage -id 1 -name test
 
 # Create a role
-tk role create -title Engineer -d "Software engineer"
+tk admin role create -title Engineer -description "Software engineer"
 
 # Assign a role to a stage
 tk workflow stage-role-add -workflow_id 1 -stage_id 1 -role_id 1
@@ -208,7 +208,7 @@ threshold will fail both locally (`make test-go-cover`) and in CI.
 
 | Pitfall | Fix |
 |---------|-----|
-| `make build` bumped the version and you wanted a stable dev binary | Use `make build-dev` for development builds |
+| Wanted a local dev binary without touching tracked files | Use `make build-dev` (neither it nor `make build` changes the version) |
 | Playwright tests fail because Chromium is missing | Run `make setup` once, or `make setup-playwright` if only the browser install is missing |
 | `tk` command not found | Run `make build-dev` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
 | `tk` is talking to the wrong backend | Run `tk status` first. The CLI uses `TICKET_URL` plus stored credentials or environment variables; repo-local `.ticket/config.json` only provides project binding. |
