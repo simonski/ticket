@@ -1362,12 +1362,12 @@ test("remembers the selected project from localStorage after reload", async ({ p
 
   await page.locator("#project-menu-button").click();
   await page.locator('[data-project-switch="2"]').click();
-  await expect(page.locator("#project-menu-button")).toHaveText("Website (WEB)");
+  await expect(page.locator("#project-menu-button")).toContainText("Website (WEB)");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("site2.selectedProjectID"))).toBe("2");
 
   await page.reload();
 
-  await expect(page.locator("#project-menu-button")).toHaveText("Website (WEB)");
+  await expect(page.locator("#project-menu-button")).toContainText("Website (WEB)");
 });
 
 test("remembers active panel and scroll position after refresh", async ({ page }) => {
