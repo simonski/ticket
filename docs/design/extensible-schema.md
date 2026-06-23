@@ -245,6 +245,13 @@ Conservative bias: anything filtered / sorted / FK'd / aggregated stays **Keep**
 
 ### 9.1 `tickets`
 
+> **Status (TK-111):** the Move columns below (`git_repository`, `git_branch`,
+> `estimate_complete`, `health_score`, `author`, `pr_url`) and the dead `open`
+> column have been consolidated into `attrs` and physically dropped. They remain
+> typed `Ticket` fields, hydrated from the bag. The `dor_map`/`dod_map`/`ac_map`
+> **Fold** is tracked as a separate cross-cutting follow-up (it spans the guidance
+> resolution used by tickets, projects and roles).
+
 | Column | Decision | Rationale |
 |--------|----------|-----------|
 | ticket_id, project_id, parent_id, clone_of | Keep | PK / FKs |

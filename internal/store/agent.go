@@ -328,7 +328,7 @@ func ListAgentStatuses(ctx context.Context, db *sql.DB) ([]AgentStatus, error) {
 			LEFT JOIN projects p ON p.project_id = t.project_id
 			LEFT JOIN workflows w ON w.workflow_id = t.workflow_id
 			LEFT JOIN roles r ON r.role_id = t.role_id
-			WHERE t.state = 'active' AND t.open = 1 AND t.assignee IS NOT NULL AND TRIM(t.assignee) <> ''
+			WHERE t.state = 'active' AND t.archived = 0 AND t.assignee IS NOT NULL AND TRIM(t.assignee) <> ''
 		)
 		WHERE rn = 1
 	`)
