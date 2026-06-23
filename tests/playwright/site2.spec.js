@@ -193,6 +193,11 @@ function installSite2Mock(page, seed = {}) {
             },
           ],
       defaultPlanSlug: String(mockSeed.defaultPlanSlug || "starter"),
+      rooms: [{ room_id: 1, slug: "general", name: "General", topic: "Everything", visibility: "public", project_id: null, ticket_id: "", archived: 0, created_by: "admin" }],
+      roomMembers: [{ room_id: 1, member_id: "admin", role: "owner", joined_at: "now", last_read_at: "" }],
+      roomMessages: [{ message_id: 1, room_id: 1, sender_id: "admin", kind: "text", body: "welcome to the room", created_at: "now" }],
+      nextRoomID: 2,
+      nextRoomMessageID: 2,
       agents: [{ user_id: "agent-1", enabled: true }],
       teams: [{ team_id: 21, name: "Platform", parent_team_id: null }],
       myProjectAccessRequests: Array.isArray(mockSeed.myProjectAccessRequests)
@@ -1011,6 +1016,52 @@ function installSite2Mock(page, seed = {}) {
         const roleID = Number(parts[7]);
         stage.roles = (stage.roles || []).filter((item) => Number(item.role_id) !== roleID);
         return json({ status: "removed" });
+      }
+
+      if (path === "/api/rooms" && method === "GET") {
+        return json(db.rooms.filter((r) => !r.archived));
+      }
+      if (path === "/api/rooms" && method === "POST") {
+        const room = {
+          room_id: db.nextRoomID++, slug: String(body.name || "room").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+          name: body.name || "room", topic: body.topic || "", visibility: body.visibility === "private" ? "private" : "public",
+          project_id: body.project_id || null, ticket_id: body.ticket_id || "", archived: 0, created_by: "admin",
+        };
+        db.rooms.push(room);
+        db.roomMembers.push({ room_id: room.room_id, member_id: "admin", role: "owner", joined_at: "now", last_read_at: "" });
+        return json(room, 201);
+      }
+      {
+        const roomMatch = path.match(/^\/api\/rooms\/(\d+)(\/(join|leave|members|messages))?$/);
+        if (roomMatch) {
+          const roomID = Number(roomMatch[1]);
+          const sub = roomMatch[3] || "";
+          const room = db.rooms.find((r) => r.room_id === roomID);
+          if (!room) { return json({ error: "room not found" }, 404); }
+          if (sub === "" && method === "GET") { return json(room); }
+          if (sub === "" && method === "DELETE") { room.archived = 1; return json({ status: "archived" }); }
+          if (sub === "join" && method === "POST") {
+            if (!db.roomMembers.some((m) => m.room_id === roomID && m.member_id === "admin")) {
+              db.roomMembers.push({ room_id: roomID, member_id: "admin", role: "member", joined_at: "now", last_read_at: "" });
+            }
+            return json(room);
+          }
+          if (sub === "leave" && method === "POST") {
+            db.roomMembers = db.roomMembers.filter((m) => !(m.room_id === roomID && m.member_id === "admin"));
+            return json({ status: "left" });
+          }
+          if (sub === "members" && method === "GET") {
+            return json(db.roomMembers.filter((m) => m.room_id === roomID));
+          }
+          if (sub === "messages" && method === "GET") {
+            return json(db.roomMessages.filter((m) => m.room_id === roomID));
+          }
+          if (sub === "messages" && method === "POST") {
+            const msg = { message_id: db.nextRoomMessageID++, room_id: roomID, sender_id: "admin", kind: body.kind || "text", body: body.body || "", created_at: "now" };
+            db.roomMessages.push(msg);
+            return json(msg, 201);
+          }
+        }
       }
 
       return json({ error: `Unhandled ${method} ${path}` }, 500);
@@ -2032,4 +2083,31 @@ test("command palette: single-letter alias and /ticket-key quick-open", async ({
   await page.locator("#command-palette-input").press("Enter");
   await page.locator("#command-palette-input").press("1");
   await expect(page.locator("#ticket-modal")).toHaveClass(/open/);
+});
+
+test("chat: rooms list, messages, send, and create a room", async ({ page }) => {
+  // /chat (now registered) navigates to the chat view.
+  await page.keyboard.press("Shift");
+  await page.keyboard.press("Shift");
+  await page.locator("#command-palette-input").fill("chat");
+  await page.locator("#command-palette-input").press("Enter");
+  await expect(page.locator('#main-nav button[data-view="chat"]')).toHaveClass(/active/);
+
+  // Seeded room appears; selecting it shows its messages.
+  await expect(page.locator("#chat-rooms-list")).toContainText("General");
+  await page.locator('.chat-room-item[data-room-id="1"]').click();
+  await expect(page.locator("#chat-room-title")).toHaveText("General");
+  await expect(page.locator("#chat-messages")).toContainText("welcome to the room");
+
+  // Send a message.
+  await page.locator("#chat-composer-input").fill("hello there");
+  await page.locator("#chat-send-button").click();
+  await expect(page.locator("#chat-messages")).toContainText("hello there");
+
+  // Create a new room from the prompt.
+  await page.locator("#new-room-button").click();
+  await expect(page.locator("#dialog-input")).toBeVisible();
+  await page.locator("#dialog-input").fill("Engineering");
+  await page.locator("#dialog-ok").click();
+  await expect(page.locator("#chat-rooms-list")).toContainText("Engineering");
 });

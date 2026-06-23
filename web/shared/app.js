@@ -77,6 +77,8 @@
             dependencyIndex: {},
             drag: null,
             liveSocket: null,
+            activeRoomID: 0,
+            rooms: [],
             liveRefreshTimer: null,
             refinementSocket: null,
             refinementTicketId: null,
@@ -113,6 +115,7 @@
         const NAV_ITEMS = [
             { view: "tickets", label: "Board", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16\"></path><path d=\"M4 12h16\"></path><path d=\"M4 17h10\"></path></svg>" },
             { view: "projects", label: "Projects", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 7h18\"></path><path d=\"M6 7v10\"></path><path d=\"M12 7v10\"></path><path d=\"M18 7v10\"></path><path d=\"M3 17h18\"></path></svg>" },
+            { view: "chat", label: "Chat", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 5h16v11H7l-3 3z\"></path><path d=\"M8 9h8\"></path><path d=\"M8 12h5\"></path></svg>" },
             { view: "interventions", label: "Mailbox", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
             { view: "workflows", label: "Workflows", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
             { view: "roles", label: "Roles", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8a3 3 0 1 0 0.001 0\"></path><path d=\"M17 16a3 3 0 1 0 0.001 0\"></path><path d=\"M9.5 10.5l5 3\"></path></svg>" },
@@ -1629,6 +1632,9 @@
             if (viewName === "context") {
                 refreshContextView();
             }
+            if (viewName === "chat") {
+                refreshChatView();
+            }
             if (viewName === "settings") {
                 let tab = "organisation";
                 try { tab = localStorage.getItem("site2.settingsTab") || "organisation"; } catch (e) { /* ignore */ }
@@ -2193,6 +2199,142 @@
             }, 15000);
         }
 
+        // ── Chat / multiplayer rooms (TK-118 / S5) ───────────────────────
+        function roomScope(room) {
+            if (!room.project_id) { return "global"; }
+            return room.ticket_id ? "breakout" : "project";
+        }
+        function refreshChatView() {
+            loadRooms().then(() => {
+                renderRoomsList();
+                if (state.activeRoomID && state.rooms.some((r) => r.room_id === state.activeRoomID)) {
+                    selectRoom(state.activeRoomID);
+                }
+            });
+        }
+        function loadRooms() {
+            return api("/api/rooms").then((rooms) => {
+                state.rooms = Array.isArray(rooms) ? rooms : [];
+            }).catch(() => { state.rooms = []; });
+        }
+        function renderRoomsList() {
+            const list = document.getElementById("chat-rooms-list");
+            if (!list) { return; }
+            if (!state.rooms.length) {
+                list.innerHTML = "<div class=\"meta\" style=\"padding:10px\">No rooms yet — create one.</div>";
+                return;
+            }
+            const groups = [["global", "Global"], ["project", "Project"], ["breakout", "Breakouts"]];
+            let html = "";
+            groups.forEach((g) => {
+                const scoped = state.rooms.filter((r) => roomScope(r) === g[0]);
+                if (!scoped.length) { return; }
+                html += "<div class=\"chat-room-group\">" + escapeHTML(g[1]) + "</div>";
+                html += scoped.map((r) =>
+                    "<button type=\"button\" class=\"chat-room-item" + (r.room_id === state.activeRoomID ? " active" : "") + "\" data-room-id=\"" + r.room_id + "\">" +
+                    (r.visibility === "private" ? "🔒 " : "# ") + escapeHTML(r.name) + "</button>").join("");
+            });
+            list.innerHTML = html;
+        }
+        function selectRoom(roomID) {
+            state.activeRoomID = roomID;
+            const room = state.rooms.find((r) => r.room_id === roomID);
+            const titleEl = document.getElementById("chat-room-title");
+            const topicEl = document.getElementById("chat-room-topic");
+            if (titleEl) { titleEl.textContent = room ? room.name : "Room"; }
+            if (topicEl) { topicEl.textContent = room ? (room.topic || "") : ""; }
+            renderRoomsList();
+            const input = document.getElementById("chat-composer-input");
+            const sendBtn = document.getElementById("chat-send-button");
+            if (input) { input.disabled = false; }
+            if (sendBtn) { sendBtn.disabled = false; }
+            const joinBtn = document.getElementById("chat-join-button");
+            const leaveBtn = document.getElementById("chat-leave-button");
+            if (joinBtn) { joinBtn.hidden = false; }
+            if (leaveBtn) { leaveBtn.hidden = false; }
+            subscribeRoom(roomID);
+            loadRoomMessages(roomID);
+            loadRoomMembers(roomID);
+        }
+        function loadRoomMessages(roomID) {
+            return api("/api/rooms/" + roomID + "/messages").then((msgs) => {
+                if (state.activeRoomID !== roomID) { return; }
+                const box = document.getElementById("chat-messages");
+                if (!box) { return; }
+                box.innerHTML = (Array.isArray(msgs) ? msgs : []).map((m) =>
+                    "<div class=\"chat-msg chat-msg-" + escapeHTML(m.kind || "text") + "\" data-message-id=\"" + m.message_id + "\">" +
+                    "<span class=\"chat-msg-sender\">" + escapeHTML(m.sender_id) + "</span> " +
+                    "<span class=\"chat-msg-body\">" + escapeHTML(m.body) + "</span></div>").join("");
+                box.scrollTop = box.scrollHeight;
+            }).catch(() => {});
+        }
+        function loadRoomMembers(roomID) {
+            return api("/api/rooms/" + roomID + "/members").then((members) => {
+                if (state.activeRoomID !== roomID) { return; }
+                const box = document.getElementById("chat-members");
+                if (!box) { return; }
+                box.innerHTML = (Array.isArray(members) ? members : []).map((m) =>
+                    "<div class=\"chat-member\">" + escapeHTML(m.member_id) + (m.role === "owner" ? " <span class=\"meta\">owner</span>" : "") + "</div>").join("");
+            }).catch(() => {});
+        }
+        function sendRoomMessage() {
+            const input = document.getElementById("chat-composer-input");
+            if (!input || !state.activeRoomID) { return; }
+            const body = String(input.value || "").trim();
+            if (!body) { return; }
+            const roomID = state.activeRoomID;
+            input.value = "";
+            apiClient.post("/api/rooms/" + roomID + "/messages", { body: body })
+                .then(() => loadRoomMessages(roomID))
+                .catch((err) => setNotice("Send failed: " + err.message, true));
+        }
+        function createRoomFromPrompt() {
+            Promise.resolve(uiPrompt("New room name", "", "Create")).then((name) => {
+                const trimmed = String(name || "").trim();
+                if (!trimmed) { return; }
+                return apiClient.post("/api/rooms", { name: trimmed }).then((room) => {
+                    return loadRooms().then(() => {
+                        renderRoomsList();
+                        if (room && room.room_id) { selectRoom(room.room_id); }
+                    });
+                });
+            }).catch((err) => setNotice("Create room failed: " + err.message, true));
+        }
+        function subscribeRoom(roomID) {
+            try {
+                if (state.liveSocket && state.liveSocket.readyState === 1) {
+                    state.liveSocket.send(JSON.stringify({ type: "subscribe", room_id: roomID }));
+                }
+            } catch (e) { /* ignore */ }
+        }
+        function setupChat() {
+            const list = document.getElementById("chat-rooms-list");
+            if (list) {
+                list.addEventListener("click", (event) => {
+                    const item = event.target.closest("[data-room-id]");
+                    if (item) { selectRoom(Number(item.dataset.roomId)); }
+                });
+            }
+            const newBtn = document.getElementById("new-room-button");
+            if (newBtn) { newBtn.addEventListener("click", createRoomFromPrompt); }
+            const composer = document.getElementById("chat-composer");
+            if (composer) { composer.addEventListener("submit", (event) => { event.preventDefault(); sendRoomMessage(); }); }
+            const joinBtn = document.getElementById("chat-join-button");
+            if (joinBtn) {
+                joinBtn.addEventListener("click", () => {
+                    if (!state.activeRoomID) { return; }
+                    apiClient.post("/api/rooms/" + state.activeRoomID + "/join").then(() => loadRoomMembers(state.activeRoomID)).catch(() => {});
+                });
+            }
+            const leaveBtn = document.getElementById("chat-leave-button");
+            if (leaveBtn) {
+                leaveBtn.addEventListener("click", () => {
+                    if (!state.activeRoomID) { return; }
+                    apiClient.post("/api/rooms/" + state.activeRoomID + "/leave").then(() => loadRoomMembers(state.activeRoomID)).catch(() => {});
+                });
+            }
+        }
+
         function connectLiveUpdates() {
             if (window.__site2MockFetch || state.liveSocket) {
                 return;
@@ -2204,6 +2346,12 @@
                 try {
                     const payload = JSON.parse(event.data);
                     if (!payload || payload.type === "connected") {
+                        return;
+                    }
+                    if (payload.type === "room_message") {
+                        if (state.activeRoomID && Number(payload.room_id) === state.activeRoomID) {
+                            loadRoomMessages(state.activeRoomID);
+                        }
                         return;
                     }
                     scheduleLiveRefresh();
@@ -9135,6 +9283,7 @@
             }
         });
         setupCommandPalette();
+        setupChat();
         state.viewScrollByPanel = loadStoredViewScrollByPanel();
         state.currentView = loadStoredSelectedView() || state.currentView;
         switchView(state.currentView, { restoreScroll: false });
