@@ -45,7 +45,7 @@ make dev                  # Print env vars for local development mode
 
 Run a single test: `go test ./internal/store/ -run TestTicketLifecycle`
 
-Coverage thresholds enforced: cmd/tk 55%, libticket 65%, internal/client 55%, internal/store 66%, internal/server 57%, internal/config 70%.
+Coverage thresholds enforced (integration-aware — `scripts/coverage.sh` measures each package including the suites that drive it, e.g. the libticket HTTP contract suite covers internal/server + internal/client): cmd/tk 58%, libticket 67%, internal/client 65%, internal/store 70%, internal/server 60%, internal/config 80%.
 
 Docker: `make docker`, `make docker-up`, `make docker-down`.
 
