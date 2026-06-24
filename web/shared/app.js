@@ -119,7 +119,7 @@
         const NAV_ORDER_STORAGE_KEY = "site2.navOrder";
         const NAV_ITEMS = [
             { view: "tickets", label: "Board", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16\"></path><path d=\"M4 12h16\"></path><path d=\"M4 17h10\"></path></svg>" },
-            { view: "projects", label: "Projects", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 7h18\"></path><path d=\"M6 7v10\"></path><path d=\"M12 7v10\"></path><path d=\"M18 7v10\"></path><path d=\"M3 17h18\"></path></svg>" },
+            { view: "projects", label: "Project", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 7h18\"></path><path d=\"M6 7v10\"></path><path d=\"M12 7v10\"></path><path d=\"M18 7v10\"></path><path d=\"M3 17h18\"></path></svg>" },
             { view: "chat", label: "Chat", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 5h16v11H7l-3 3z\"></path><path d=\"M8 9h8\"></path><path d=\"M8 12h5\"></path></svg>" },
             { view: "interventions", label: "Mailbox", section: "general", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
             { view: "workflows", label: "Workflows", section: "process", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
@@ -3016,27 +3016,15 @@
         }
 
         function renderProjects() {
-            if (!state.projects.length) {
-                els.projectList.innerHTML = "<div class=\"empty\">No projects yet.</div>";
-                return;
+            // Single-project view (no list): the editor reflects the project chosen
+            // in the top-bar dropdown. Switching projects there re-syncs it.
+            const cur = getCurrentProject();
+            if (cur && (!state.selectedProjectDraft || state.selectedProjectDraft.id !== cur.id)) {
+                state.selectedProjectDraft = structuredClone(cur);
+            } else if (!state.selectedProjectDraft) {
+                state.selectedProjectDraft = emptyProject();
             }
-            const defaultProjectID = currentDefaultProjectID();
-            els.projectList.innerHTML = state.projects.map((project) => {
-                const active = project.id === state.selectedProjectID ? " active" : "";
-                const isDefault = project.id === defaultProjectID;
-                const defaultChip = isDefault ? "<span class=\"chip\">default</span>" : "";
-                const defaultButton = "<button type=\"button\" class=\"btn-ghost\" data-project-default-id=\"" + project.id + "\">" + (isDefault ? "Clear default" : "Set default") + "</button>";
-                return "<div class=\"entity-card" + active + "\" data-project-id=\"" + project.id + "\">" +
-                    "<h4>" + escapeHTML(project.title) + " <small>(" + escapeHTML(project.prefix) + ")</small></h4>" +
-                    "<p>" + escapeHTML(project.description || "No description") + "</p>" +
-                    "<div class=\"tag-row tag-row-spaced\">" +
-                    "<span class=\"chip\">" + escapeHTML(project.visibility || "public") + "</span>" +
-                    "<span class=\"chip\">requests " + (project.accepts_new_members ? "open" : "closed") + "</span>" +
-                    "<span class=\"chip\">draft " + String(Boolean(project.default_draft)) + "</span>" +
-                    defaultChip +
-                    defaultButton +
-                    "</div></div>";
-            }).join("");
+            renderProjectEditor();
         }
 
         function renderPlans() {
@@ -5625,6 +5613,7 @@
         }
 
         function bindProjectHandlers() {
+            if (els.projectList) {
             els.projectList.addEventListener("click", (event) => {
                 const defaultButton = event.target.closest("[data-project-default-id]");
                 if (defaultButton) {
@@ -5659,6 +5648,7 @@
                 populateTicketTypeAndStageSelects();
                 Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadReleases(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications(), loadProjectAgents()]).then(renderAll).catch((error) => setNotice(error.message, true));
             });
+            }
 
             document.getElementById("new-project-button").addEventListener("click", () => {
                 state.selectedProjectID = null;

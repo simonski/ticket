@@ -2094,3 +2094,21 @@ select {
 #view-chat button.chat-room-group:hover { opacity: 0.85; }
 #view-chat .chat-group-caret { font-size: 10px; opacity: 0.7; width: 12px; display: inline-block; }
 #view-chat .chat-room-group .chat-unread-badge { margin-left: auto; }
+
+/* Detail panels fill the panel space without a floating-card border (TK). */
+.view > .card,
+.view-split > .card,
+.view.split > .card:last-child,
+.settings-panel > .card {
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    background: transparent;
+}
+/* Single-detail views and split detail panes fill the available height. */
+#view-projects > .card,
+.view.split > .card:last-child,
+.view-split > .card:last-child {
+    flex: 1;
+    min-height: 0;
+}
