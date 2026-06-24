@@ -18,6 +18,28 @@ func (r *router) registerRoomHandlers() {
 	db := r.db
 	mux := r.mux
 
+	// The caller's personal agent (provisioned on first use) + its DM room (TK-142).
+	mux.HandleFunc("/api/me/agent", func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		user, err := requireUser(db, req)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		agent, dm, eerr := store.EnsurePersonalAgent(req.Context(), db, user)
+		if eerr != nil {
+			writeStoreError(w, eerr)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"room_id": dm.ID,
+			"agent":   map[string]any{"user_id": agent.ID, "username": agent.Username, "display_name": agent.DisplayName},
+		})
+	})
+
 	// Collection: list + create.
 	mux.HandleFunc("/api/rooms", func(w http.ResponseWriter, req *http.Request) {
 		user, err := requireUser(db, req)

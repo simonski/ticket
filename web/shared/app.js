@@ -2257,9 +2257,15 @@
             if (!room.project_id) { return "global"; }
             return room.ticket_id ? "breakout" : "project";
         }
-        // Display label for a room (DMs show the conversation, not the raw name).
+        // Display label for a room. DMs show the other participant(s), not "DM: me, them".
         function roomLabel(room) {
-            return String(room.name || "room");
+            const name = String(room.name || "room");
+            if (room.slug && room.slug.indexOf("dm-") === 0 && name.indexOf("DM: ") === 0) {
+                const me = (state.status && state.status.user && state.status.user.username) || "";
+                const others = name.slice(4).split(", ").filter((n) => n && n.toLowerCase() !== me.toLowerCase());
+                if (others.length) { return others.join(", "); }
+            }
+            return name;
         }
         // @name and #label become highlighted entities in the message feed (S6).
         function highlightRoomText(body) {
@@ -2297,6 +2303,10 @@
                 const proj = (state.projects || []).find((p) => p.id === state.selectedProjectID);
                 const pname = proj ? String(proj.prefix || proj.title || "project").toLowerCase() : "project";
                 tasks.push(apiClient.post("/api/rooms", { name: pname, visibility: "public", project_id: state.selectedProjectID }).catch(() => {}));
+            }
+            // Provision the user's personal agent + its DM (appears under People & Agents).
+            if (!state.rooms.some((r) => roomScope(r) === "people")) {
+                tasks.push(api("/api/me/agent").catch(() => {}));
             }
             if (!tasks.length) { return Promise.resolve(); }
             return Promise.all(tasks).then(() => loadRooms());
