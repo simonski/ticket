@@ -83,12 +83,16 @@ func postAgentReply(ctx context.Context, db *sql.DB, room store.Room, agent stor
 		postAgentNotice(ctx, db, room, agent, "returned an empty reply (the model produced no output).", hub)
 		return false
 	}
+	agentAttrs := store.Attrs{"agent": true}
+	if strings.TrimSpace(cfg.Model) != "" {
+		agentAttrs["model"] = cfg.Model
+	}
 	out, perr := store.PostRoomMessage(ctx, db, store.RoomMessage{
 		RoomID:   room.ID,
 		SenderID: agent.ID,
 		Kind:     "text",
 		Body:     reply,
-		Attrs:    store.Attrs{"agent": true},
+		Attrs:    agentAttrs,
 	})
 	if perr != nil {
 		return false
