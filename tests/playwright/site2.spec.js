@@ -2159,3 +2159,17 @@ test("board: arrow/wasd move card focus and Enter opens the ticket", async ({ pa
   await page.locator("body").press("Enter");
   await expect(page.locator("#ticket-modal")).toHaveClass(/open/);
 });
+
+test("Escape closes the ticket modal and the account modal (TK-49)", async ({ page }) => {
+  // Ticket modal: open via a board card, Escape dismisses it.
+  await page.locator('[data-ticket-id="OPS-101"]').click();
+  await expect(page.locator("#ticket-modal")).toHaveClass(/open/);
+  await page.locator("body").press("Escape");
+  await expect(page.locator("#ticket-modal")).not.toHaveClass(/open/);
+  // Account modal: open via the single account-menu item, Escape dismisses it.
+  await page.locator("#account-menu-button").click();
+  await page.locator('[data-account-action="account"]').click();
+  await expect(page.locator("#account-modal")).toHaveClass(/open/);
+  await page.locator("body").press("Escape");
+  await expect(page.locator("#account-modal")).not.toHaveClass(/open/);
+});
