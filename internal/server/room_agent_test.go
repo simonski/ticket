@@ -34,7 +34,7 @@ func TestReplyAsAgentsPostsAgentReply(t *testing.T) {
 
 	// Stub the responder so the test is deterministic and offline.
 	orig := roomAgentReply
-	roomAgentReply = func(_ context.Context, agentName, prompt string, _ []store.RoomMessage) (string, error) {
+	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, agentName, prompt string, _ []store.RoomMessage) (string, error) {
 		return "On it — " + agentName + " here", nil
 	}
 	defer func() { roomAgentReply = orig }()
@@ -78,7 +78,7 @@ func TestReplyAsAgentsPostsNoticeOnFailure(t *testing.T) {
 
 	// The agent command fails.
 	orig := roomAgentReply
-	roomAgentReply = func(_ context.Context, _, _ string, _ []store.RoomMessage) (string, error) {
+	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _, _ string, _ []store.RoomMessage) (string, error) {
 		return "", errors.New("exit status 1: model not supported")
 	}
 	defer func() { roomAgentReply = orig }()
@@ -106,7 +106,7 @@ func TestReplyAsAgentsIgnoresNonAgentAndNonMember(t *testing.T) {
 
 	called := false
 	orig := roomAgentReply
-	roomAgentReply = func(_ context.Context, _, _ string, _ []store.RoomMessage) (string, error) {
+	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _, _ string, _ []store.RoomMessage) (string, error) {
 		called = true
 		return "should not happen", nil
 	}

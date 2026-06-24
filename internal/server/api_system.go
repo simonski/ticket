@@ -351,6 +351,43 @@ func (r *router) registerSystemHandlers() {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 	})
+	// Per-user agent-model overrides (TK-149): GET returns the caller's overrides,
+	// PUT replaces them. These override the project and system config at resolve time.
+	mux.HandleFunc("/api/me/agent-model", func(w http.ResponseWriter, r *http.Request) {
+		user, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			cfg, gerr := store.UserAgentModelConfig(r.Context(), db, user.ID)
+			if gerr != nil {
+				writeStoreError(w, gerr)
+				return
+			}
+			writeJSON(w, http.StatusOK, cfg)
+		case http.MethodPut:
+			var payload agentModelConfigRequest
+			if derr := json.NewDecoder(r.Body).Decode(&payload); derr != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			if serr := store.SetUserAgentModelConfig(r.Context(), db, user.ID, store.AgentModelConfig{
+				Provider: payload.Provider,
+				Model:    payload.Model,
+				URL:      payload.URL,
+				APIKey:   payload.APIKey,
+			}); serr != nil {
+				writeStoreError(w, serr)
+				return
+			}
+			cfg, _ := store.UserAgentModelConfig(r.Context(), db, user.ID)
+			writeJSON(w, http.StatusOK, cfg)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
 	mux.HandleFunc("/api/config/settings", func(w http.ResponseWriter, r *http.Request) {
 		if _, err := requireAdmin(db, r); err != nil {
 			writeAuthError(w, err)

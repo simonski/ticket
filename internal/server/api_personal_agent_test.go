@@ -43,7 +43,7 @@ func TestPersonalAgentEndpointAndDMReply(t *testing.T) {
 
 	// In the DM, the agent replies to a message with NO @mention (stubbed responder).
 	orig := roomAgentReply
-	roomAgentReply = func(_ context.Context, agentName, _ string, _ []store.RoomMessage) (string, error) {
+	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, agentName, _ string, _ []store.RoomMessage) (string, error) {
 		return "hello from " + agentName, nil
 	}
 	defer func() { roomAgentReply = orig }()
@@ -63,5 +63,21 @@ func TestPersonalAgentEndpointAndDMReply(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("agent did not reply in the personal-agent DM")
+	}
+}
+
+func TestUserAgentModelEndpoint(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	tok := loginToken(t, handler, "admin", "password")
+
+	if r := doJSONRequest(t, handler, http.MethodPut, "/api/me/agent-model", map[string]any{"provider": "anthropic", "model": "claude-x"}, tok); r.Code != http.StatusOK {
+		t.Fatalf("PUT /api/me/agent-model = %d, body=%s", r.Code, r.Body.String())
+	}
+	g := doJSONRequest(t, handler, http.MethodGet, "/api/me/agent-model", nil, tok)
+	var cfg store.AgentModelConfig
+	decodeResponse(t, g, &cfg)
+	if cfg.Provider != "anthropic" || cfg.Model != "claude-x" {
+		t.Fatalf("per-user config not persisted: %+v", cfg)
 	}
 }

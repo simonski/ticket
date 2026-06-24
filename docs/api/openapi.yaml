@@ -1789,6 +1789,30 @@ paths:
                       username: { type: string }
                       display_name: { type: string }
 
+  /api/me/agent-model:
+    get:
+      tags: [Rooms]
+      summary: The caller's per-user agent-model overrides
+      operationId: getMyAgentModel
+      responses:
+        '200': { description: Per-user overrides (empty fields inherit project/system) }
+    put:
+      tags: [Rooms]
+      summary: Set the caller's per-user agent-model overrides
+      operationId: setMyAgentModel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider: { type: string }
+                model: { type: string }
+                url: { type: string }
+                api_key: { type: string }
+      responses:
+        '200': { description: Saved per-user overrides }
+
   # ── Email (SMTP) settings ────────────────────────────────────────────
   /api/email/settings:
     get:
