@@ -203,14 +203,14 @@ func DeleteAccessRole(ctx context.Context, db *sql.DB, id int64) error {
 	if role.Builtin {
 		return errors.New("the builtin access role cannot be deleted")
 	}
-	if _, err := db.ExecContext(ctx, `DELETE FROM access_role_panels WHERE access_role_id = ?`, id); err != nil {
-		return err
+	if _, derr := db.ExecContext(ctx, `DELETE FROM access_role_panels WHERE access_role_id = ?`, id); derr != nil {
+		return derr
 	}
-	if _, err := db.ExecContext(ctx, `DELETE FROM user_access_roles WHERE access_role_id = ?`, id); err != nil {
-		return err
+	if _, derr := db.ExecContext(ctx, `DELETE FROM user_access_roles WHERE access_role_id = ?`, id); derr != nil {
+		return derr
 	}
-	_, err = db.ExecContext(ctx, `DELETE FROM access_roles WHERE access_role_id = ?`, id)
-	return err
+	_, derr := db.ExecContext(ctx, `DELETE FROM access_roles WHERE access_role_id = ?`, id)
+	return derr
 }
 
 // GetAccessRole loads one access role with its panels.

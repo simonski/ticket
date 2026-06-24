@@ -72,9 +72,9 @@ func TestAccessRoleAPIAndEnforcement(t *testing.T) {
 		t.Fatalf("granting admin panel = %d, want 400", resp.Code)
 	}
 
-	// Before assignment bob is grandfathered to all grantable panels and can hit /api/workflows.
-	if resp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows", nil, bobToken); resp.Code == http.StatusForbidden {
-		t.Fatalf("ungated bob should reach /api/workflows, got 403")
+	// Before assignment bob is grandfathered to all grantable panels and can hit /api/documents.
+	if resp := doJSONRequest(t, handler, http.MethodGet, "/api/documents", nil, bobToken); resp.Code == http.StatusForbidden {
+		t.Fatalf("ungated bob should reach /api/documents, got 403")
 	}
 
 	// Assign bob the restrictive role.
@@ -102,11 +102,11 @@ func TestAccessRoleAPIAndEnforcement(t *testing.T) {
 		t.Fatalf("bob panels = %v, want [tickets]", me.Panels)
 	}
 
-	// Enforcement: bob can no longer reach the workflows panel API; admin still can.
-	if resp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows", nil, bobToken); resp.Code != http.StatusForbidden {
-		t.Fatalf("restricted bob GET /api/workflows = %d, want 403", resp.Code)
+	// Enforcement: bob can no longer reach the documents panel API; admin still can.
+	if resp := doJSONRequest(t, handler, http.MethodGet, "/api/documents", nil, bobToken); resp.Code != http.StatusForbidden {
+		t.Fatalf("restricted bob GET /api/documents = %d, want 403", resp.Code)
 	}
-	if resp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows", nil, adminToken); resp.Code == http.StatusForbidden {
+	if resp := doJSONRequest(t, handler, http.MethodGet, "/api/documents", nil, adminToken); resp.Code == http.StatusForbidden {
 		t.Fatalf("admin must bypass panel enforcement, got 403")
 	}
 }
