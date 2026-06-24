@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -271,6 +272,63 @@ func TestRoomMessageStoresMentions(t *testing.T) {
 	mentions, ok := msg.Attrs["mentions"].([]any)
 	if !ok || len(mentions) != 1 || mentions[0] != "agent-1" {
 		t.Fatalf("message mentions = %v (ok=%v)", msg.Attrs["mentions"], ok)
+	}
+}
+
+func TestRoomChatCommandsRenameStatusPing(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	ctx := context.Background()
+	admin := roomLoginToken(t, handler, "admin", "password")
+	registerUser(t, handler, "bob", "password123")
+	bob := roomLoginToken(t, handler, "bob", "password123")
+
+	var room store.Room
+	decodeResponse(t, doJSONRequest(t, handler, http.MethodPost, "/api/rooms", map[string]any{"name": "Ops"}, admin), &room)
+	msgPath := "/api/rooms/" + itoa(room.ID) + "/messages"
+	send := func(body, tok string) *httptest.ResponseRecorder {
+		return doJSONRequest(t, handler, http.MethodPost, msgPath, map[string]string{"body": body}, tok)
+	}
+
+	// /rename (owner) renames the room.
+	if r := send("/rename Operations", admin); r.Code != http.StatusCreated {
+		t.Fatalf("/rename status=%d body=%s", r.Code, r.Body.String())
+	}
+	if fresh, _ := store.GetRoom(ctx, db, room.ID); fresh.Name != "Operations" {
+		t.Fatalf("room name=%q, want Operations", fresh.Name)
+	}
+	// No-op when already named (case-insensitive).
+	send("/rename operations", admin)
+	if fresh, _ := store.GetRoom(ctx, db, room.ID); fresh.Name != "Operations" {
+		t.Fatalf("case-insensitive no-op changed name to %q", fresh.Name)
+	}
+	// Non-owner cannot rename.
+	if r := send("/rename Hijack", bob); r.Code != http.StatusForbidden {
+		t.Fatalf("non-owner /rename = %d, want 403", r.Code)
+	}
+
+	// /status sets and reads back the user's status.
+	if r := send("/status heads down", admin); r.Code != http.StatusCreated {
+		t.Fatalf("/status set = %d", r.Code)
+	}
+	if u, _ := store.GetUserByUsername(ctx, db, "admin"); u.Status != "heads down" {
+		t.Fatalf("status=%q, want 'heads down'", u.Status)
+	}
+	var statusMsg store.RoomMessage
+	decodeResponse(t, send("/status", admin), &statusMsg)
+	if !strings.Contains(statusMsg.Body, "heads down") {
+		t.Fatalf("/status read = %q, want it to include the status", statusMsg.Body)
+	}
+
+	// /ping notifies the target user.
+	if r := send("/ping bob", admin); r.Code != http.StatusCreated {
+		t.Fatalf("/ping = %d body=%s", r.Code, r.Body.String())
+	}
+	bobUser, _ := store.GetUserByUsername(ctx, db, "bob")
+	notifs, _ := store.ListUserNotifications(ctx, db, bobUser.ID, "", 10)
+	if len(notifs) == 0 {
+		t.Fatal("/ping should create a notification for bob")
 	}
 }
 

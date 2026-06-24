@@ -503,6 +503,50 @@ func handleRoomCommand(w http.ResponseWriter, req *http.Request, db *sql.DB, roo
 		return post("@"+user.Username+" left", "system", nil)
 	case "list":
 		return post(roomListText(ctx, db, user), "system", nil)
+	case "rename":
+		if arg == "" {
+			writeError(w, http.StatusBadRequest, "usage: /rename <new name>")
+			return true
+		}
+		if room.CreatedBy != user.ID && user.Role != "admin" {
+			writeError(w, http.StatusForbidden, "only the room owner can rename this room")
+			return true
+		}
+		if strings.EqualFold(strings.TrimSpace(room.Name), strings.TrimSpace(arg)) {
+			return post("room is already named #"+room.Name, "system", nil)
+		}
+		updated, uerr := store.UpdateRoom(ctx, db, room.ID, arg, room.Topic, room.Visibility)
+		if uerr != nil {
+			writeError(w, http.StatusBadRequest, uerr.Error())
+			return true
+		}
+		return post("renamed room to #"+updated.Name, "system", nil)
+	case "status":
+		if arg == "" {
+			current := strings.TrimSpace(user.Status)
+			if current == "" {
+				current = "(no status set)"
+			}
+			return post("your status: "+current, "system", nil)
+		}
+		if serr := store.SetUserStatus(ctx, db, user.ID, arg); serr != nil {
+			writeStoreError(w, serr)
+			return true
+		}
+		return post("@"+user.Username+" set status: "+arg, "system", nil)
+	case "ping":
+		target, perr := store.GetUserByUsername(ctx, db, strings.TrimPrefix(arg, "@"))
+		if perr != nil {
+			writeError(w, http.StatusBadRequest, "unknown user: "+arg)
+			return true
+		}
+		_, _ = store.CreateUserNotification(ctx, db, store.UserNotificationCreateParams{
+			UserID:  target.ID,
+			Kind:    "ping",
+			Title:   "Ping from @" + user.Username,
+			Message: "@" + user.Username + " pinged you in #" + room.Name,
+		})
+		return post("pinged @"+target.Username, "system", nil)
 	case "msg":
 		fields := strings.SplitN(strings.TrimSpace(arg), " ", 2)
 		if len(fields) < 2 || strings.TrimSpace(fields[1]) == "" {

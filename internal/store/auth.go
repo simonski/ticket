@@ -391,6 +391,13 @@ func GetUserDefaultProject(ctx context.Context, db *sql.DB, userID string) (Proj
 	return GetProjectByID(ctx, db, projectID.Int64)
 }
 
+// SetUserStatus sets a user's free-text status line.
+func SetUserStatus(ctx context.Context, db *sql.DB, userID, status string) error {
+	_, err := db.ExecContext(ctx, `UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
+		strings.TrimSpace(status), strings.TrimSpace(userID))
+	return err
+}
+
 func SetUserDefaultProject(ctx context.Context, db *sql.DB, userID string, projectID int64) error {
 	result, err := db.ExecContext(ctx, `UPDATE users SET default_project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`, projectID, strings.TrimSpace(userID))
 	if err != nil {
