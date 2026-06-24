@@ -138,6 +138,9 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 	if planErr := ensureDefaultPlans(ctx, db); planErr != nil {
 		return planErr
 	}
+	if arErr := EnsureDefaultAccessRoles(ctx, db); arErr != nil {
+		return arErr
+	}
 	adminUser, err := CreateUserWithParams(ctx, db, UserCreateParams{
 		Username:               adminUsername,
 		PlainPassword:          adminPassword,
@@ -828,6 +831,35 @@ CREATE INDEX IF NOT EXISTS idx_rooms_project_id ON rooms(project_id);
 CREATE INDEX IF NOT EXISTS idx_rooms_ticket_id ON rooms(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_member_id ON room_members(member_id);
 CREATE INDEX IF NOT EXISTS idx_room_messages_room_id ON room_messages(room_id, message_id);
+
+-- Access roles: per-panel feature flags. Each access role grants a set of UI
+-- panels; users are members of zero or more access roles (TK-135).
+CREATE TABLE IF NOT EXISTS access_roles (
+	access_role_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	builtin INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS access_role_panels (
+	access_role_id INTEGER NOT NULL,
+	panel_key TEXT NOT NULL,
+	PRIMARY KEY (access_role_id, panel_key),
+	FOREIGN KEY(access_role_id) REFERENCES access_roles(access_role_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_access_roles (
+	user_id TEXT NOT NULL,
+	access_role_id INTEGER NOT NULL,
+	PRIMARY KEY (user_id, access_role_id),
+	FOREIGN KEY(access_role_id) REFERENCES access_roles(access_role_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_access_roles_name ON access_roles(name);
+CREATE INDEX IF NOT EXISTS idx_access_role_panels_role ON access_role_panels(access_role_id);
+CREATE INDEX IF NOT EXISTS idx_user_access_roles_user ON user_access_roles(user_id);
 
 `
 
