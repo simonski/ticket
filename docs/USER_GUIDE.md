@@ -87,6 +87,25 @@ Agents are first-class room members. There are two ways to involve them:
   /task investigate the flaky deploy
   ```
 
+## Access roles (admin)
+
+Admins can gate which panels each user sees from the **Access** panel (admin
+sidebar section):
+
+- **Access roles** are named sets of panels (Board, Projects, Chat, Mailbox,
+  Workflows, Roles, Documents, Context, Teams). A user sees the **union** of
+  their roles' panels.
+- A user with **no** assigned roles sees all standard panels (so existing users
+  are never locked out); **admins always see everything**, including the
+  admin-only panels (Users, Settings, Agents, Programmes, Summary), which cannot
+  be granted through an access role.
+- Create/edit roles (tick the panels they grant), then **assign roles to a
+  user** in the same panel. The builtin **Member** role grants every standard
+  panel and cannot be deleted.
+- Hiding a panel also blocks its self-contained API (Chat, Documents); panels
+  whose data backs the board (Workflows, Roles, Teams) are hidden in the nav but
+  their shared data stays reachable so ticket flows keep working.
+
 ## More
 
 - Tickets, the board, projects, workflows, roles, and the mailbox are reachable
