@@ -2173,3 +2173,13 @@ test("Escape closes the ticket modal and the account modal (TK-49)", async ({ pa
   await page.locator("body").press("Escape");
   await expect(page.locator("#account-modal")).not.toHaveClass(/open/);
 });
+
+test("account menu is a single 'Account settings' entry (TK-50)", async ({ page }) => {
+  await page.locator("#account-menu-button").click();
+  const items = page.locator("#account-menu-dropdown [data-account-action]");
+  await expect(items).toHaveCount(1);
+  await expect(items.first()).toHaveText("Account settings");
+  await items.first().click();
+  await expect(page.locator("#account-modal")).toHaveClass(/open/);
+  await expect(page.locator("#account-modal-title")).toHaveText("Account settings");
+});
