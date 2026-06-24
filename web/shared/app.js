@@ -2404,6 +2404,8 @@
             if (!body) { return; }
             const roomID = state.activeRoomID;
             const isLeave = body.toLowerCase() === "/leave";
+            // /msg sends to a private chat WITHOUT moving the sender to it.
+            const isMsg = body.toLowerCase().indexOf("/msg ") === 0;
             input.value = "";
             apiClient.post("/api/rooms/" + roomID + "/messages", { body: body })
                 .then((msg) => loadRooms().then(() => {
@@ -2411,6 +2413,12 @@
                     if (isLeave) {
                         // After leaving, return to the previous room (or a default).
                         selectRoom(roomReturnTarget(roomID));
+                        return;
+                    }
+                    if (isMsg) {
+                        // Stay put; the DM was delivered to the other room.
+                        loadRoomMessages(roomID);
+                        setNotice("Message sent");
                         return;
                     }
                     // /msg routes to a DM room and /new + /join switch rooms — follow

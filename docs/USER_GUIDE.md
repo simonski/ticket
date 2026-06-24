@@ -61,7 +61,10 @@ Type these in the composer:
 | `/invite <username>` | Add a user to the room (and its project) |
 | `/kick <username>` | Remove a user from the room |
 | `/list` | List rooms alphabetically with member counts |
-| `/msg @username <message>` | Send a direct message |
+| `/rename <name>` | Rename the current room (owner/admin; no-op if already named that) |
+| `/status [words]` | Set your status, or print it with no argument |
+| `/ping <username>` | Send a ping notification to a user |
+| `/msg <username> <message>` | DM a user **without** switching to that chat |
 | `/task [@agent] <description>` | Create a tracked ticket (see below) |
 
 The **public room** and a **project's room** are permanent — you can't leave them
