@@ -98,7 +98,9 @@ func runPullRequestCreate(args []string) error {
 	}
 	ticketArg, rest, err := resolveIDFlag(*idFlag, positional)
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: tk pr create [-id] <ticket-id> [-repo R] [-from B] [-to B] [-title T] [-url U] [-provider none|github] [-m desc] [-gh]")
+		return errors.New("usage: tk pr create [-id] <ticket-id>\n" +
+			"  [-repo R] [-from B] [-to B] [-title T] [-url U]\n" +
+			"  [-provider none|github] [-m desc] [-gh]")
 	}
 
 	cfg, err := config.Load()

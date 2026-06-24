@@ -15,7 +15,9 @@ import (
 
 func runWorkItem(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		fmt.Println("usage: tk work-item <list|queue|start|create|reassign|cancel|retry|feedback|state-get|state-set> [flags]")
+		fmt.Println("usage: tk work-item <subcommand> [flags]\n" +
+			"  subcommands: list, queue, start, create, reassign,\n" +
+			"               cancel, retry, feedback, state-get, state-set")
 		return nil
 	}
 	cfg, err := config.Load()
@@ -69,7 +71,8 @@ func runWorkItem(args []string) error {
 		}
 		ticketID, rest, err := resolveIDFlag(*id, fs.Args())
 		if err != nil || len(rest) != 0 || strings.TrimSpace(ticketID) == "" || strings.TrimSpace(*workItemID) == "" {
-			return fmt.Errorf("usage: tk work-item %s [-id] <ticket-id> -work-item <work-item-id> [-assignee <username>] [-m message] [-commit_ref sha]", args[0])
+			return fmt.Errorf("usage: tk work-item %s [-id] <ticket-id> -work-item <work-item-id>\n"+
+				"  [-assignee <username>] [-m message] [-commit_ref sha]", args[0])
 		}
 		item, err := api.ActWorkItem(ctx, ticketID, strings.TrimSpace(*workItemID), args[0], client.WorkItemActionRequest{
 			Assignee:  strings.TrimSpace(*assignee),
@@ -114,7 +117,8 @@ func runWorkItem(args []string) error {
 		}
 		ticketID, rest, err := resolveIDFlag(*id, fs.Args())
 		if err != nil || len(rest) != 0 || strings.TrimSpace(ticketID) == "" || strings.TrimSpace(*stateValue) == "" {
-			return errors.New("usage: tk work-item state-set [-id] <ticket-id> -state <open|triaged|in_progress|resolved|wont_fix>")
+			return errors.New("usage: tk work-item state-set [-id] <ticket-id>\n" +
+				"  -state <open|triaged|in_progress|resolved|wont_fix>")
 		}
 		state, err := api.SetInterventionState(ctx, ticketID, strings.TrimSpace(*stateValue))
 		if err != nil {

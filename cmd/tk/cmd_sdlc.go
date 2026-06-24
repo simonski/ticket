@@ -373,7 +373,8 @@ func runWorkflow(args []string) error {
 			return err
 		}
 		if *workflowID == 0 || strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
-			return errors.New("usage: tk workflow role-add -workflow_id <id> -title <title> [-description <text>] [-ac <text>]")
+			return errors.New("usage: tk workflow role-add -workflow_id <id> -title <title>\n" +
+				"  [-description <text>] [-ac <text>]")
 		}
 		role, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
 			WorkflowID:         workflowID,

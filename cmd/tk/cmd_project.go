@@ -49,7 +49,8 @@ func runProject(args []string) error {
 			joined := strings.TrimSpace(strings.Join(fs.Args(), " "))
 			if joined != "" {
 				if strings.TrimSpace(*message) != "" {
-					return errors.New("usage: tk project request-access [-project_id <id|title|prefix|alias>] [-message <text>] [message words]")
+					return errors.New("usage: tk project request-access [-project_id <id|title|prefix|alias>]\n" +
+						"  [-message <text>] [message words]")
 				}
 				*message = joined
 			}
@@ -75,7 +76,8 @@ func runProject(args []string) error {
 			return parseErr
 		}
 		if fs.NArg() != 0 {
-			return errors.New("usage: tk project access-requests [-project_id <id|title|prefix|alias>] [-status <pending|approved|rejected>]")
+			return errors.New("usage: tk project access-requests [-project_id <id|title|prefix|alias>]\n" +
+				"  [-status <pending|approved|rejected>]")
 		}
 		if strings.TrimSpace(*projectRef) == "" {
 			return errors.New("project_id is required (set an active project or pass -project_id)")
@@ -122,7 +124,8 @@ func runProject(args []string) error {
 			joined := strings.TrimSpace(strings.Join(fs.Args(), " "))
 			if joined != "" {
 				if strings.TrimSpace(*message) != "" {
-					return fmt.Errorf("usage: tk project %s [-project_id <id|title|prefix|alias>] -request_id <id> [-message <text>] [message words]", action)
+					return fmt.Errorf("usage: tk project %s [-project_id <id|title|prefix|alias>] -request_id <id>\n"+
+						"  [-message <text>] [message words]", action)
 				}
 				*message = joined
 			}
