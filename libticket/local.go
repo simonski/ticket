@@ -114,6 +114,30 @@ func (s *LocalService) SetRegistrationEnabled(ctx context.Context, enabled bool)
 	return store.SetRegistrationEnabled(ctx, db, enabled)
 }
 
+func (s *LocalService) GetEmailConfig(ctx context.Context) (store.EmailConfig, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.EmailConfig{}, err
+	}
+	return store.GetEmailConfig(ctx, db)
+}
+
+func (s *LocalService) SetEmailConfig(ctx context.Context, cfg store.EmailConfig, updatePassword bool) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.SetEmailConfig(ctx, db, cfg, updatePassword)
+}
+
+func (s *LocalService) SetEmailEnabled(ctx context.Context, enabled bool) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.SetEmailEnabled(ctx, db, enabled)
+}
+
 func (s *LocalService) SetRegistrationAutoApprove(ctx context.Context, enabled bool) error {
 	db, err := s.openDB()
 	if err != nil {

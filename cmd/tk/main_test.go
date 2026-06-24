@@ -837,6 +837,45 @@ func TestRunInviteAddsUserToProject(t *testing.T) {
 	}
 }
 
+func TestRunEmailConfig(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"email", "set", "-host", "smtp.example.com", "-port", "465", "-username", "mailer", "-password", "secret", "-from", "noreply@example.com", "-security", "tls"}); err != nil {
+		t.Fatalf("email set error = %v", err)
+	}
+	out := captureStdout(t, func() {
+		if err := run([]string{"email", "show"}); err != nil {
+			t.Fatalf("email show error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "smtp.example.com") || !strings.Contains(out, "password      : set") {
+		t.Fatalf("email show missing config:\n%s", out)
+	}
+	if strings.Contains(out, "secret") {
+		t.Fatalf("password value must never be printed:\n%s", out)
+	}
+
+	if err := run([]string{"email", "enable"}); err != nil {
+		t.Fatalf("email enable error = %v", err)
+	}
+	// Partial update keeps the stored password and toggles state.
+	if err := run([]string{"email", "set", "-port", "587"}); err != nil {
+		t.Fatalf("email set port error = %v", err)
+	}
+	out = captureStdout(t, func() { _ = run([]string{"email", "show"}) })
+	if !strings.Contains(out, "email sending : enabled") || !strings.Contains(out, "smtp port     : 587") || !strings.Contains(out, "password      : set") {
+		t.Fatalf("email state after partial update wrong:\n%s", out)
+	}
+
+	if err := run([]string{"email", "disable"}); err != nil {
+		t.Fatalf("email disable error = %v", err)
+	}
+	out = captureStdout(t, func() { _ = run([]string{"email", "show"}) })
+	if !strings.Contains(out, "email sending : disabled") {
+		t.Fatalf("email should be disabled:\n%s", out)
+	}
+}
+
 func TestRunProjectRequestAccessRemote(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)

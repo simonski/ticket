@@ -239,6 +239,67 @@ func (c *Client) SetRegistrationAutoApprove(ctx context.Context, enabled bool) e
 	}, nil)
 }
 
+func (c *Client) GetEmailConfig(ctx context.Context) (store.EmailConfig, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.EmailConfig{}, err
+		}
+		return store.GetEmailConfig(ctx, db)
+	}
+	// The server masks the password (returns only has_password). Surface a
+	// non-empty sentinel so callers can tell a password is configured without
+	// ever receiving the secret; it is display-only and never sent back.
+	var resp struct {
+		store.EmailConfig
+		HasPassword bool `json:"has_password"`
+	}
+	if err := c.doJSON(ctx, http.MethodGet, "/api/email/settings", nil, &resp); err != nil {
+		return store.EmailConfig{}, err
+	}
+	cfg := resp.EmailConfig
+	if resp.HasPassword {
+		cfg.Password = "********"
+	}
+	return cfg, nil
+}
+
+func (c *Client) SetEmailConfig(ctx context.Context, cfg store.EmailConfig, updatePassword bool) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.SetEmailConfig(ctx, db, cfg, updatePassword)
+	}
+	body := map[string]any{
+		"enabled":      cfg.Enabled,
+		"host":         cfg.Host,
+		"port":         cfg.Port,
+		"username":     cfg.Username,
+		"from_address": cfg.FromAddress,
+		"from_name":    cfg.FromName,
+		"security":     cfg.Security,
+	}
+	// Only send the password when it should change; an empty password preserves
+	// the stored secret server-side.
+	if updatePassword {
+		body["password"] = cfg.Password
+	}
+	return c.doJSON(ctx, http.MethodPut, "/api/email/settings", body, nil)
+}
+
+func (c *Client) SetEmailEnabled(ctx context.Context, enabled bool) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.SetEmailEnabled(ctx, db, enabled)
+	}
+	return c.doJSON(ctx, http.MethodPut, "/api/email/enabled", map[string]any{"enabled": enabled}, nil)
+}
+
 func (c *Client) ListPlans(ctx context.Context) ([]store.Plan, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
