@@ -110,6 +110,9 @@ func TestRoomAPIJoinLeaveAndPrivateVisibility(t *testing.T) {
 	registerUser(t, handler, "bob", "password123")
 	bob := roomLoginToken(t, handler, "bob", "password123")
 
+	// The first public room in a scope is permanent (non-leavable); seed it so the
+	// "Public" room below is an ordinary, leavable room.
+	doJSONRequest(t, handler, http.MethodPost, "/api/rooms", map[string]any{"name": "general"}, admin)
 	// Public room: bob can see and join.
 	pubResp := doJSONRequest(t, handler, http.MethodPost, "/api/rooms", map[string]any{"name": "Public"}, admin)
 	var pub store.Room
