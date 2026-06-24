@@ -98,6 +98,38 @@ func TestReplyAsAgentsPostsNoticeOnFailure(t *testing.T) {
 	}
 }
 
+func TestReplyAsAgentsPostsNoticeOnEmptyReply(t *testing.T) {
+	_, db := testHandler(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	agent, _, _ := store.CreateAgent(ctx, db, "")
+	uname := "helper"
+	_, _ = store.UpdateAgent(ctx, db, agent.ID, store.AgentUpdateParams{Username: &uname})
+	room, _ := store.CreateRoom(ctx, db, store.Room{Name: "Help", CreatedBy: "admin"})
+	_ = store.JoinRoom(ctx, db, room.ID, agent.ID, "member")
+
+	orig := roomAgentReply
+	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _, _ string, _ []store.RoomMessage) (string, error) {
+		return "   ", nil // empty after trim, no error
+	}
+	defer func() { roomAgentReply = orig }()
+
+	msg, _ := store.PostRoomMessage(ctx, db, store.RoomMessage{RoomID: room.ID, SenderID: "u1", Body: "hey @helper?"})
+	replyAsAgents(ctx, db, room, msg, nil)
+
+	msgs, _ := store.ListRoomMessages(ctx, db, room.ID, 50, 0)
+	notice := false
+	for _, m := range msgs {
+		if m.SenderID == agent.ID && m.Kind == "agent_event" && strings.Contains(m.Body, "empty reply") {
+			notice = true
+		}
+	}
+	if !notice {
+		t.Fatalf("an empty agent reply should post a notice; messages=%+v", msgs)
+	}
+}
+
 func TestReplyAsAgentsIgnoresNonAgentAndNonMember(t *testing.T) {
 	_, db := testHandler(t)
 	defer db.Close()
