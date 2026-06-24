@@ -322,17 +322,24 @@ func startChatBridgeWithDuration(send func(chatOutboundMessage), logf func(strin
 }
 
 func resolveChatCommandArgs() []string {
-	if raw := strings.TrimSpace(os.Getenv("TICKET_CHAT_CMD")); raw != "" {
-		parts := strings.Fields(raw)
-		if len(parts) == 0 {
-			return []string{"codex", "exec"}
-		}
-		if strings.EqualFold(parts[0], "codex") && (len(parts) == 1 || strings.HasPrefix(parts[1], "-")) {
-			return append([]string{parts[0], "exec"}, parts[1:]...)
-		}
-		return parts
+	return chatCommandArgsFrom(os.Getenv("TICKET_CHAT_CMD"))
+}
+
+// chatCommandArgsFrom tokenizes a chat-command string into argv, defaulting to
+// "codex exec" when empty and inserting "exec" after a bare "codex".
+func chatCommandArgsFrom(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []string{"codex", "exec"}
 	}
-	return []string{"codex", "exec"}
+	parts := strings.Fields(raw)
+	if len(parts) == 0 {
+		return []string{"codex", "exec"}
+	}
+	if strings.EqualFold(parts[0], "codex") && (len(parts) == 1 || strings.HasPrefix(parts[1], "-")) {
+		return append([]string{parts[0], "exec"}, parts[1:]...)
+	}
+	return parts
 }
 
 func (b *chatProcessBridge) streamOutput(reader io.Reader, stream string, send func(chatOutboundMessage), logf func(string)) {

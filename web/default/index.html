@@ -278,7 +278,12 @@
                                     <input id="system-agent-url" autocomplete="off" placeholder="defaults to the provider's URL">
                                 </div>
                             </div>
-                            <p class="meta">Resolved: <span id="resolved-agent-provider"></span> / <span id="resolved-agent-model"></span>. Without an API key, replies fall back to the CLI command.</p>
+                            <p class="meta">Resolved: <span id="resolved-agent-provider"></span> / <span id="resolved-agent-model"></span>. Without an API key, replies fall back to the CLI command below.</p>
+                            <div class="field">
+                                <label for="system-chat-command">CLI command (fallback)</label>
+                                <input id="system-chat-command" autocomplete="off" placeholder="e.g. claude -p {prompt}  (or leave blank for codex exec)">
+                                <p class="meta">Used when no API key is set. Use <code>{prompt}</code> to pass the prompt as an argument; otherwise it is piped to stdin. The TICKET_CHAT_CMD env var overrides this.</p>
+                            </div>
                             <div class="form-actions">
                                 <button id="save-system-agent-model" class="btn btn-primary" type="button">Save default model</button>
                             </div>

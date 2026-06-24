@@ -34,7 +34,7 @@ func TestReplyAsAgentsPostsAgentReply(t *testing.T) {
 
 	// Stub the responder so the test is deterministic and offline.
 	orig := roomAgentReply
-	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, agentName, prompt string, _ []store.RoomMessage) (string, error) {
+	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _ []string, agentName, prompt string, _ []store.RoomMessage) (string, error) {
 		return "On it — " + agentName + " here", nil
 	}
 	defer func() { roomAgentReply = orig }()
@@ -78,7 +78,7 @@ func TestReplyAsAgentsPostsNoticeOnFailure(t *testing.T) {
 
 	// The agent command fails.
 	orig := roomAgentReply
-	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _, _ string, _ []store.RoomMessage) (string, error) {
+	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _ []string, _, _ string, _ []store.RoomMessage) (string, error) {
 		return "", errors.New("exit status 1: model not supported")
 	}
 	defer func() { roomAgentReply = orig }()
@@ -110,7 +110,7 @@ func TestReplyAsAgentsPostsNoticeOnEmptyReply(t *testing.T) {
 	_ = store.JoinRoom(ctx, db, room.ID, agent.ID, "member")
 
 	orig := roomAgentReply
-	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _, _ string, _ []store.RoomMessage) (string, error) {
+	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _ []string, _, _ string, _ []store.RoomMessage) (string, error) {
 		return "   ", nil // empty after trim, no error
 	}
 	defer func() { roomAgentReply = orig }()
@@ -138,7 +138,7 @@ func TestReplyAsAgentsIgnoresNonAgentAndNonMember(t *testing.T) {
 
 	called := false
 	orig := roomAgentReply
-	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _, _ string, _ []store.RoomMessage) (string, error) {
+	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _ []string, _, _ string, _ []store.RoomMessage) (string, error) {
 		called = true
 		return "should not happen", nil
 	}
@@ -148,5 +148,25 @@ func TestReplyAsAgentsIgnoresNonAgentAndNonMember(t *testing.T) {
 	msg, _ := store.PostRoomMessage(ctx, db, store.RoomMessage{RoomID: room.ID, SenderID: "u1", Body: "ping @admin and @ghost"})
 	if n := replyAsAgents(ctx, db, room, msg, nil); n != 0 || called {
 		t.Fatalf("replyAsAgents should not respond for non-agents/non-members (n=%d called=%v)", n, called)
+	}
+}
+
+func TestDefaultRoomAgentReplyPromptPlaceholder(t *testing.T) {
+	ctx := context.Background()
+	// {prompt} placeholder: substituted as an argument (echo prints it back).
+	out, err := defaultRoomAgentReply(ctx, store.AgentModelConfig{}, []string{"echo", "{prompt}"}, "helper", "ping me", nil)
+	if err != nil {
+		t.Fatalf("echo placeholder: %v", err)
+	}
+	if !strings.Contains(out, "helper") || !strings.Contains(out, "ping me") {
+		t.Fatalf("placeholder output missing prompt: %q", out)
+	}
+	// No placeholder: prompt is piped to stdin (cat echoes it).
+	out2, err := defaultRoomAgentReply(ctx, store.AgentModelConfig{}, []string{"cat"}, "helper", "ping me", nil)
+	if err != nil {
+		t.Fatalf("cat stdin: %v", err)
+	}
+	if !strings.Contains(out2, "ping me") {
+		t.Fatalf("stdin output missing prompt: %q", out2)
 	}
 }
