@@ -10,21 +10,20 @@ make build-dev          # build ./bin/tk (does NOT bump cmd/tk/VERSION)
 make build              # build + bump patch version + sync openapi.yaml version
 make lint               # golangci-lint + gosec
 make test               # ultra-fast default: unit tests
-make test-fast          # recommended developer loop: unit + JS API + Go API smoke
+make test-fast          # recommended developer loop: unit + Go API smoke
 make test-api-smoke     # fast Go API smoke packages (internal/client + internal/server)
 make test-cli           # heavier CLI package tests
 make test-contract      # heavier libticket contract tests
 make test-all           # full suite: unit + api + browser + quickstart + docs/harness
-make test-api-js        # JavaScript API client-library tests (web/site2/api.test.js)
 make test-api-cli       # CLI/API interface tests (cmd + client + server + contract)
-make test-api           # both API interface suites (js + cli)
+make test-api           # alias for test-api-cli
 make test-browser       # fast browser smoke suite (Playwright)
 make test-browser-full  # full browser E2E suite (Playwright)
 make test-quickstart    # executable QUICKSTART/TUTORIAL docs tests
 make test-go            # all Go tests
 make test-go-cover      # package coverage gates (cmd/tk, libticket, client, store, server, config)
 make ci-bootstrap       # install deps for the same verify/browser flow used by GitHub Actions
-make ci-verify          # validate-openapi + coverage + JS API + build-dev + lint + vulncheck
+make ci-verify          # validate-openapi + coverage + build-dev + lint + vulncheck
 make ci-browser         # full browser E2E suite used by GitHub Actions
 make ci                 # ci-verify + ci-browser
 ```
@@ -96,4 +95,4 @@ make validate-openapi     # structural OpenAPI check
   - run `make test-browser` while iterating on web UX, then `make test-browser-full`
   - run `make test-all` before completion/PR
 
-- `tk server` serves **site2 by default**; use `tk server -site default` only when explicitly testing the legacy site.
+- `tk server` serves the embedded web UI from `web/default` + `web/shared` (the only site).

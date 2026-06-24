@@ -5,7 +5,7 @@ Design
 
 Compile
 - `make test` on every run (ultra-fast default: unit tests).
-- `make test-fast` for the normal developer loop (unit + JS API + Go API smoke).
+- `make test-fast` for the normal developer loop (unit + Go API smoke).
 - `make test-all` before completion/PR - full suite must pass.
 - `make lint` - on every turn - no lint failures.
 
@@ -31,7 +31,7 @@ make test-unit            # Unit tests only (config, password, web)
 make test-integration     # Integration tests (cmd, internal/client, server, store, libticket)
 make test-go-cover        # Tests with per-package coverage thresholds
 make ci-bootstrap         # Install deps for the same verify/browser flow used by GitHub Actions
-make ci-verify            # Validate OpenAPI + coverage + JS API + build-dev + lint + vulncheck
+make ci-verify            # Validate OpenAPI + coverage + build-dev + lint + vulncheck
 make ci-browser           # Full Playwright browser job used by GitHub Actions
 make ci                   # ci-verify + ci-browser
 make lint                 # Run golangci-lint on all packages
