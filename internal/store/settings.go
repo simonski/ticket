@@ -397,3 +397,17 @@ func parsePositiveInt(raw string) int {
 	}
 	return n
 }
+
+// GetChatCommand returns the persisted chat/agent CLI command (TK-157), or "".
+func GetChatCommand(ctx context.Context, db *sql.DB) string {
+	var v string
+	if err := db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'chat_command'`).Scan(&v); err != nil {
+		return ""
+	}
+	return v
+}
+
+// SetChatCommand persists the chat/agent CLI command.
+func SetChatCommand(ctx context.Context, db *sql.DB, command string) error {
+	return SetAppSetting(ctx, db, "chat_command", strings.TrimSpace(command))
+}

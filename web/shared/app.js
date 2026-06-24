@@ -1806,6 +1806,14 @@
             } catch (error) {
                 state.systemAgentModelConfig = emptyAgentModelConfig();
             }
+            // Load the persisted CLI fallback command into its field.
+            const cmdEl = document.getElementById("system-chat-command");
+            if (cmdEl) {
+                try {
+                    const res = await api("/api/config/chat-command");
+                    cmdEl.value = (res && res.command) || "";
+                } catch (e) { /* non-admins / unset: leave blank */ }
+            }
         }
 
         async function loadProjectAgentModelConfig() {
@@ -6257,6 +6265,10 @@
                             method: "PUT",
                             body: JSON.stringify(buildAgentModelPayload("system")),
                         });
+                        const cmdEl = document.getElementById("system-chat-command");
+                        if (cmdEl) {
+                            await api("/api/config/chat-command", { method: "PUT", body: JSON.stringify({ command: cmdEl.value.trim() }) });
+                        }
                         await Promise.all([loadSystemAgentModelConfig()]);
                         renderAll();
                         setNotice("System agent model configuration saved.");

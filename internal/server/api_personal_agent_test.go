@@ -43,7 +43,7 @@ func TestPersonalAgentEndpointAndDMReply(t *testing.T) {
 
 	// In the DM, the agent replies to a message with NO @mention (stubbed responder).
 	orig := roomAgentReply
-	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, agentName, _ string, _ []store.RoomMessage) (string, error) {
+	roomAgentReply = func(_ context.Context, _ store.AgentModelConfig, _ []string, agentName, _ string, _ []store.RoomMessage) (string, error) {
 		return "hello from " + agentName, nil
 	}
 	defer func() { roomAgentReply = orig }()

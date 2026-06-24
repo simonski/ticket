@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -16,7 +17,17 @@ import (
 // roomAgentResponder generates an agent's reply to a room prompt. It is a
 // package var so tests can inject a deterministic stub; the default runs the
 // configured chat/agent command one-shot (TK-131).
-type roomAgentResponder func(ctx context.Context, cfg store.AgentModelConfig, agentName, prompt string, history []store.RoomMessage) (string, error)
+type roomAgentResponder func(ctx context.Context, cfg store.AgentModelConfig, cmdArgs []string, agentName, prompt string, history []store.RoomMessage) (string, error)
+
+// resolveAgentChatCommand resolves the CLI chat command: TICKET_CHAT_CMD env
+// overrides the persisted chat_command setting, which overrides the default
+// (codex exec). The args may contain a {prompt} placeholder (TK-157).
+func resolveAgentChatCommand(ctx context.Context, db *sql.DB) []string {
+	if env := strings.TrimSpace(os.Getenv("TICKET_CHAT_CMD")); env != "" {
+		return chatCommandArgsFrom(env)
+	}
+	return chatCommandArgsFrom(store.GetChatCommand(ctx, db))
+}
 
 var roomAgentReply roomAgentResponder = defaultRoomAgentReply
 
@@ -67,8 +78,9 @@ func replyAsAgents(ctx context.Context, db *sql.DB, room store.Room, msg store.R
 // model is resolved for the requesting user in the room's project (TK-149).
 func postAgentReply(ctx context.Context, db *sql.DB, room store.Room, agent store.User, requesterID, trigger string, hub *liveHub) bool {
 	cfg, _ := store.ResolveAgentModelConfig(ctx, db, requesterID, room.ProjectID)
+	cmdArgs := resolveAgentChatCommand(ctx, db)
 	history, _ := store.ListRoomMessages(ctx, db, room.ID, 20, 0)
-	reply, rerr := roomAgentReply(ctx, cfg, agent.Username, trigger, history)
+	reply, rerr := roomAgentReply(ctx, cfg, cmdArgs, agent.Username, trigger, history)
 	if rerr != nil {
 		log.Printf("server: room agent %s reply failed: %v", agent.Username, rerr)
 		// Surface the failure in the room so the user isn't left wondering why
@@ -125,7 +137,7 @@ func postAgentNotice(ctx context.Context, db *sql.DB, room store.Room, agent sto
 // it a prompt built from the room transcript, and returns its stdout. Requires
 // the agent runtime to be configured; otherwise it returns an error and no reply
 // is posted.
-func defaultRoomAgentReply(ctx context.Context, cfg store.AgentModelConfig, agentName, prompt string, history []store.RoomMessage) (string, error) {
+func defaultRoomAgentReply(ctx context.Context, cfg store.AgentModelConfig, cmdArgs []string, agentName, prompt string, history []store.RoomMessage) (string, error) {
 	full := buildRoomAgentPrompt(agentName, prompt, history)
 	// When a provider API is configured (resolved per user/project/system), call
 	// it directly; otherwise fall back to the configured CLI command (TK-149).
@@ -133,34 +145,52 @@ func defaultRoomAgentReply(ctx context.Context, cfg store.AgentModelConfig, agen
 		log.Printf("server: agent %s replying via %s model %q (api)", agentName, cfg.Provider, cfg.Model)
 		return callAgentModelAPI(ctx, cfg, full)
 	}
-	commandArgs := resolveChatCommandArgs()
-	if len(commandArgs) == 0 {
+	if len(cmdArgs) == 0 {
+		cmdArgs = resolveChatCommandArgs()
+	}
+	if len(cmdArgs) == 0 {
 		return "", errors.New("chat agent command is empty")
 	}
+	// {prompt} placeholder: substitute the prompt as an argument (e.g. claude -p
+	// {prompt}); without it, pipe the prompt to stdin (e.g. codex exec).
+	args := make([]string, len(cmdArgs))
+	usePlaceholder := false
+	for i, a := range cmdArgs {
+		if strings.Contains(a, "{prompt}") {
+			usePlaceholder = true
+			args[i] = strings.ReplaceAll(a, "{prompt}", full)
+		} else {
+			args[i] = a
+		}
+	}
 	if strings.TrimSpace(cfg.Provider) != "" {
-		log.Printf("server: agent %s — no API key/URL resolved for provider %q, falling back to CLI %v (set the provider/system API key to use the API)", agentName, cfg.Provider, commandArgs)
+		log.Printf("server: agent %s — no API key/URL resolved for provider %q, falling back to CLI %v (set the provider/system API key to use the API)", agentName, cfg.Provider, cmdArgs)
 	} else {
-		log.Printf("server: agent %s replying via CLI %v", agentName, commandArgs)
+		log.Printf("server: agent %s replying via CLI %v", agentName, cmdArgs)
 	}
 	cctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, commandArgs[0], commandArgs[1:]...) // #nosec G204 -- commandArgs resolved from trusted server configuration
+	cmd := exec.CommandContext(cctx, args[0], args[1:]...) // #nosec G204 -- args resolved from trusted server configuration
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return "", err
-	}
-	if err := cmd.Start(); err != nil {
-		return "", err
-	}
-	if _, werr := stdin.Write([]byte(full + "\n")); werr != nil {
-		_ = stdin.Close()
-		return "", werr
-	}
-	if cerr := stdin.Close(); cerr != nil {
-		return "", cerr
+	if !usePlaceholder {
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			return "", err
+		}
+		if serr := cmd.Start(); serr != nil {
+			return "", serr
+		}
+		if _, werr := stdin.Write([]byte(full + "\n")); werr != nil {
+			_ = stdin.Close()
+			return "", werr
+		}
+		if cerr := stdin.Close(); cerr != nil {
+			return "", cerr
+		}
+	} else if serr := cmd.Start(); serr != nil {
+		return "", serr
 	}
 	if werr := cmd.Wait(); werr != nil {
 		return "", errors.Join(werr, errors.New(strings.TrimSpace(stderr.String())))

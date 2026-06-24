@@ -353,6 +353,37 @@ func (r *router) registerSystemHandlers() {
 	})
 	// Per-user agent-model overrides (TK-149): GET returns the caller's overrides,
 	// PUT replaces them. These override the project and system config at resolve time.
+	// Persisted CLI chat command (TK-157). GET (any user) returns it; PUT (admin)
+	// stores it. A {prompt} placeholder is substituted as an argument at run time.
+	mux.HandleFunc("/api/config/chat-command", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if _, err := requireUser(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"command": store.GetChatCommand(r.Context(), db)})
+		case http.MethodPut:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var body struct {
+				Command string `json:"command"`
+			}
+			if derr := json.NewDecoder(r.Body).Decode(&body); derr != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			if serr := store.SetChatCommand(r.Context(), db, body.Command); serr != nil {
+				writeStoreError(w, serr)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"command": store.GetChatCommand(r.Context(), db)})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
 	mux.HandleFunc("/api/me/agent-model", func(w http.ResponseWriter, r *http.Request) {
 		user, err := requireUser(db, r)
 		if err != nil {
