@@ -278,7 +278,9 @@ func handleRoomMessages(w http.ResponseWriter, req *http.Request, db *sql.DB, us
 			hub.broadcastRoomMessage(roomID, msg)
 		}
 		// If an agent member was @mentioned, let it reply asynchronously (TK-131).
-		go replyAsAgents(context.Background(), db, room, msg, hub)
+		// Detach from the request's cancellation (the reply must outlive the HTTP
+		// response) while still propagating its context values.
+		go replyAsAgents(context.WithoutCancel(req.Context()), db, room, msg, hub)
 		writeJSON(w, http.StatusCreated, msg)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")

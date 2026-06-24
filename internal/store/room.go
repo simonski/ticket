@@ -184,6 +184,7 @@ func ListRooms(ctx context.Context, db *sql.DB, filter RoomFilter) ([]Room, erro
 	} else {
 		clauses = append(clauses, "visibility = 'public'")
 	}
+	// #nosec G202 -- roomColumns is a fixed column list; clauses are constant predicate strings and all values are bound via ? placeholders.
 	query := `SELECT ` + roomColumns + ` FROM rooms WHERE ` + strings.Join(clauses, " AND ") + ` ORDER BY updated_at DESC, room_id DESC`
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -329,6 +330,7 @@ func ListRoomMessages(ctx context.Context, db *sql.DB, roomID int64, limit int, 
 	}
 	args = append(args, limit)
 	// Fetch newest-first with the limit, then reverse to chronological order.
+	// #nosec G202 -- the SELECT column list is static; `where` is built from constant predicates and all values are bound via ? placeholders.
 	rows, err := db.QueryContext(ctx, `SELECT m.message_id, m.room_id, m.sender_id, COALESCE(u.username, m.sender_id), m.kind, m.body, m.attrs, m.created_at FROM room_messages m LEFT JOIN users u ON u.user_id = m.sender_id WHERE `+strings.ReplaceAll(where, "room_id", "m.room_id")+` ORDER BY m.message_id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
