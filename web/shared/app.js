@@ -2409,13 +2409,55 @@
                 if (state.activeRoomID !== roomID) { return; }
                 const box = document.getElementById("chat-messages");
                 if (!box) { return; }
-                box.innerHTML = (Array.isArray(msgs) ? msgs : []).map((m) =>
-                    "<div class=\"chat-msg chat-msg-" + escapeHTML(m.kind || "text") + "\" data-message-id=\"" + m.message_id + "\">" +
-                    "<span class=\"chat-msg-sender\">" + escapeHTML(m.sender_name || m.sender_id) + "</span> " +
-                    "<span class=\"chat-msg-body\">" + highlightRoomText(m.body) + "</span></div>").join("");
+                const me = currentUserID();
+                box.innerHTML = (Array.isArray(msgs) ? msgs : []).map((m) => renderChatMessage(m, me)).join("");
                 box.scrollTop = box.scrollHeight;
             }).catch(() => {});
         }
+        // Render one chat message. Self (the current user) aligns left; the
+        // responder — an agent or another person — aligns right with an avatar
+        // (robot for agents, initial for people) and, for agents, the model used.
+        function renderChatMessage(m, me) {
+            const kind = m.kind || "text";
+            if (kind === "system" || kind === "agent_event") {
+                return "<div class=\"chat-msg chat-msg-" + escapeHTML(kind) + "\">" + highlightRoomText(m.body) + "</div>";
+            }
+            const attrs = m.attrs || {};
+            const isSelf = m.sender_id === me;
+            const isAgent = Boolean(attrs.agent);
+            const name = escapeHTML(m.sender_name || m.sender_id || "?");
+            const initial = escapeHTML(String(m.sender_name || "?").slice(0, 1).toUpperCase());
+            const avatar = isAgent
+                ? "<span class=\"chat-avatar chat-avatar-agent\" title=\"agent\">🤖</span>"
+                : "<span class=\"chat-avatar chat-avatar-person\">" + initial + "</span>";
+            const model = (isAgent && attrs.model) ? "<span class=\"chat-msg-model\">via " + escapeHTML(String(attrs.model)) + "</span>" : "";
+            const bubble = "<div class=\"chat-bubble\">" +
+                (isSelf ? "" : "<div class=\"chat-msg-meta\">" + name + model + "</div>") +
+                "<div class=\"chat-msg-body\">" + highlightRoomText(m.body) + "</div></div>";
+            const side = isSelf ? "chat-msg-self" : "chat-msg-other";
+            return "<div class=\"chat-msg chat-bubble-row " + side + "\" data-message-id=\"" + m.message_id + "\">" +
+                (isSelf ? bubble : bubble + avatar) + "</div>";
+        }
+
+        // After sending, show an animated typing bubble while an agent reply is
+        // pending (a DM, or a message that @mentions someone). It is transient: the
+        // next message render (the reply, via the live socket) rebuilds the list.
+        function maybeShowAgentTyping(roomID, body) {
+            const room = (state.rooms || []).find((r) => r.room_id === roomID);
+            const isDM = room && room.slug && room.slug.indexOf("dm-") === 0;
+            const mentions = body.indexOf("/") !== 0 && /@[A-Za-z0-9]/.test(body);
+            if (!isDM && !mentions) { return; }
+            const box = document.getElementById("chat-messages");
+            if (!box || box.querySelector(".chat-typing")) { return; }
+            const el = document.createElement("div");
+            el.className = "chat-msg chat-bubble-row chat-msg-other chat-typing";
+            el.innerHTML = "<div class=\"chat-bubble\"><span class=\"chat-typing-dots\"><span></span><span></span><span></span></span></div>" +
+                "<span class=\"chat-avatar chat-avatar-agent\">🤖</span>";
+            box.appendChild(el);
+            box.scrollTop = box.scrollHeight;
+            setTimeout(() => { if (el.parentNode) { el.remove(); } }, 90000);
+        }
+
         // Shell-style composer history: Up/Down recall sent messages, Esc clears.
         let chatHistory = [];
         let chatHistoryIdx = 0;
@@ -2448,7 +2490,7 @@
                     // /msg routes to a DM room and /new + /join switch rooms — follow
                     // the message if the server placed it somewhere other than here.
                     const target = (msg && msg.room_id && msg.room_id !== roomID) ? msg.room_id : roomID;
-                    if (target !== roomID) { selectRoom(target); } else { loadRoomMessages(roomID); }
+                    if (target !== roomID) { selectRoom(target); } else { loadRoomMessages(roomID).then(() => maybeShowAgentTyping(roomID, body)); }
                 }))
                 .catch((err) => setNotice("Send failed: " + err.message, true));
         }
