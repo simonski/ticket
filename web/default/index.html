@@ -555,7 +555,10 @@
                                     <h2>Rooms</h2>
                                     <p class="meta">Chat with your team and agents.</p>
                                 </div>
-                                <button id="new-room-button" class="btn btn-primary" type="button">New room</button>
+                                <div class="view-actions">
+                                    <button id="chat-sort-button" class="btn btn-ghost" type="button" title="Sort rooms">↕ Recent</button>
+                                    <button id="new-room-button" class="btn btn-primary" type="button">New room</button>
+                                </div>
                             </div>
                             <div id="chat-rooms-list" class="item-list"></div>
                         </div>
@@ -566,6 +569,7 @@
                                     <p class="meta" id="chat-room-topic"></p>
                                 </div>
                                 <div class="view-actions">
+                                    <button id="chat-rename-button" class="btn btn-ghost" type="button" hidden>Rename</button>
                                     <button id="chat-join-button" class="btn" type="button" hidden>Join</button>
                                     <button id="chat-leave-button" class="btn btn-ghost" type="button" hidden>Leave</button>
                                 </div>
