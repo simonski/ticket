@@ -263,6 +263,8 @@ func run(args []string) error {
 		return runComment(trimmedArgs[1:])
 	case "pr", "pull-request":
 		return runPullRequest(trimmedArgs[1:])
+	case "invite":
+		return runInvite(trimmedArgs[1:])
 	case "clone", "cp":
 		return runClone(trimmedArgs[1:])
 	case "merge":
