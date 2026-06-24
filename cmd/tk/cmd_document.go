@@ -44,7 +44,8 @@ func runDocument(args []string) error {
 			return err
 		}
 		if strings.TrimSpace(*title) == "" {
-			return errors.New("usage: tk document create -title <title> [-d <description>] [-notes <notes>] [-content <text>]")
+			return errors.New("usage: tk document create -title <title>\n" +
+				"  [-d <description>] [-notes <notes>] [-content <text>]")
 		}
 		document, err := svc.CreateDocument(context.Background(), project.ID, libticket.DocumentRequest{
 			Title:       *title,
@@ -104,7 +105,8 @@ func runDocument(args []string) error {
 		return nil
 	case "update":
 		if len(args) < 2 {
-			return errors.New("usage: tk document update <id> [-title <title>] [-d <description>] [-notes <notes>] [-content <text>]")
+			return errors.New("usage: tk document update <id>\n" +
+				"  [-title <title>] [-d <description>] [-notes <notes>] [-content <text>]")
 		}
 		documentID, err := parseDocumentID(args[1])
 		if err != nil {

@@ -131,7 +131,8 @@ func runTeam(args []string) error {
 			return err
 		}
 		if *teamID == 0 || *userID == "" || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
-			return errors.New("usage: tk team add-user -team_id <id> -user_id <id> -role <member|owner> [-job_title <title>]")
+			return errors.New("usage: tk team add-user -team_id <id> -user_id <id> -role <member|owner>\n" +
+				"  [-job_title <title>]")
 		}
 		member, err := svc.AddTeamMember(context.Background(), *teamID, libticket.TeamMemberRequest{
 			UserID:   *userID,
