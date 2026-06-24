@@ -133,7 +133,11 @@ func defaultRoomAgentReply(ctx context.Context, cfg store.AgentModelConfig, agen
 	if len(commandArgs) == 0 {
 		return "", errors.New("chat agent command is empty")
 	}
-	log.Printf("server: agent %s replying via CLI %v", agentName, commandArgs)
+	if strings.TrimSpace(cfg.Provider) != "" {
+		log.Printf("server: agent %s — no API key/URL resolved for provider %q, falling back to CLI %v (set the provider/system API key to use the API)", agentName, cfg.Provider, commandArgs)
+	} else {
+		log.Printf("server: agent %s replying via CLI %v", agentName, commandArgs)
+	}
 	cctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, commandArgs[0], commandArgs[1:]...) // #nosec G204 -- commandArgs resolved from trusted server configuration

@@ -268,7 +268,17 @@
                                     <select id="system-agent-model"></select>
                                 </div>
                             </div>
-                            <p class="meta">Resolved: <span id="resolved-agent-provider"></span> / <span id="resolved-agent-model"></span></p>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="system-agent-api-key">API key</label>
+                                    <input id="system-agent-api-key" type="password" autocomplete="off" placeholder="required to call the provider API">
+                                </div>
+                                <div class="field">
+                                    <label for="system-agent-url">Base URL (optional)</label>
+                                    <input id="system-agent-url" autocomplete="off" placeholder="defaults to the provider's URL">
+                                </div>
+                            </div>
+                            <p class="meta">Resolved: <span id="resolved-agent-provider"></span> / <span id="resolved-agent-model"></span>. Without an API key, replies fall back to the CLI command.</p>
                             <div class="form-actions">
                                 <button id="save-system-agent-model" class="btn btn-primary" type="button">Save default model</button>
                             </div>
@@ -711,6 +721,16 @@
                                     <div class="field">
                                         <label for="project-agent-model">Default model</label>
                                         <select id="project-agent-model"></select>
+                                    </div>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="project-agent-api-key">API key (optional)</label>
+                                        <input id="project-agent-api-key" type="password" autocomplete="off" placeholder="inherits the provider/system key if blank">
+                                    </div>
+                                    <div class="field">
+                                        <label for="project-agent-url">Base URL (optional)</label>
+                                        <input id="project-agent-url" autocomplete="off" placeholder="defaults to the provider's URL">
                                     </div>
                                 </div>
                                 <div class="form-actions">
