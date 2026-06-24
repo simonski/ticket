@@ -132,3 +132,81 @@ func callOpenAICompatible(ctx context.Context, cfg store.AgentModelConfig, promp
 	}
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
 }
+
+// claudeJSONEvent is one line of Claude CLI --output-format (stream-)json output.
+type claudeJSONEvent struct {
+	Type    string `json:"type"`
+	Result  string `json:"result"`
+	Message struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"message"`
+}
+
+// extractAgentReply turns a CLI command's stdout into the assistant text. For a
+// command using Claude's --output-format stream-json it parses the NDJSON events
+// line by line (preferring the final result, else concatenated assistant text);
+// for --output-format json it parses the single result object; otherwise it
+// returns the raw stdout (TK-158).
+func extractAgentReply(cmdArgs []string, raw string) string {
+	joined := strings.ToLower(strings.Join(cmdArgs, " "))
+	if strings.Contains(joined, "stream-json") {
+		if text := parseClaudeStreamJSON(raw); text != "" {
+			return text
+		}
+		return strings.TrimSpace(raw)
+	}
+	if strings.Contains(joined, "output-format json") {
+		var ev claudeJSONEvent
+		if json.Unmarshal([]byte(strings.TrimSpace(raw)), &ev) == nil {
+			if t := claudeEventText(ev); t != "" {
+				return t
+			}
+		}
+		return strings.TrimSpace(raw)
+	}
+	return strings.TrimSpace(raw)
+}
+
+func parseClaudeStreamJSON(raw string) string {
+	var result string
+	var acc strings.Builder
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || line[0] != '{' {
+			continue
+		}
+		var ev claudeJSONEvent
+		if json.Unmarshal([]byte(line), &ev) != nil {
+			continue
+		}
+		if ev.Type == "result" && strings.TrimSpace(ev.Result) != "" {
+			result = ev.Result
+		} else if ev.Type == "assistant" {
+			for _, c := range ev.Message.Content {
+				if c.Type == "text" {
+					acc.WriteString(c.Text)
+				}
+			}
+		}
+	}
+	if strings.TrimSpace(result) != "" {
+		return strings.TrimSpace(result)
+	}
+	return strings.TrimSpace(acc.String())
+}
+
+func claudeEventText(ev claudeJSONEvent) string {
+	if strings.TrimSpace(ev.Result) != "" {
+		return strings.TrimSpace(ev.Result)
+	}
+	var acc strings.Builder
+	for _, c := range ev.Message.Content {
+		if c.Type == "text" {
+			acc.WriteString(c.Text)
+		}
+	}
+	return strings.TrimSpace(acc.String())
+}

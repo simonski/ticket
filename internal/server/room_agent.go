@@ -195,7 +195,9 @@ func defaultRoomAgentReply(ctx context.Context, cfg store.AgentModelConfig, cmdA
 	if werr := cmd.Wait(); werr != nil {
 		return "", errors.Join(werr, errors.New(strings.TrimSpace(stderr.String())))
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	// Parse Claude --output-format (stream-)json into plain text when configured;
+	// otherwise return raw stdout (TK-158).
+	return extractAgentReply(cmdArgs, stdout.String()), nil
 }
 
 func buildRoomAgentPrompt(agentName, latest string, history []store.RoomMessage) string {
