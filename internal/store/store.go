@@ -218,6 +218,7 @@ CREATE TABLE IF NOT EXISTS users (
 	description TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT '',
 	last_seen TEXT NOT NULL DEFAULT '',
+	owner_id TEXT NOT NULL DEFAULT '',
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -1691,6 +1692,12 @@ CREATE TABLE user_notifications (
 		}
 	}
 
+	// Add owner_id to users — set on personal agents to link them to their owner (TK-142).
+	if !columnExists(ctx, db, "users", "owner_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
 	// Add agent_role to users (refiner, developer, tester etc.).
 	if !columnExists(ctx, db, "users", "agent_role") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN agent_role TEXT NOT NULL DEFAULT ''`); err != nil {
