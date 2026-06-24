@@ -191,7 +191,7 @@ Use this as the short newcomer checklist before you open a PR:
 make test-unit          # Fast unit tests (config, password, web)
 make test-integration   # Integration tests (store, server, libticket, client)
 make test-go-cover      # Go tests with enforced coverage thresholds
-make test-playwright    # End-to-end browser tests (requires Chromium)
+make test-browser    # End-to-end browser tests (requires Chromium)
 make test               # All of the above
 ```
 
@@ -214,7 +214,7 @@ threshold will fail both locally (`make test-go-cover`) and in CI.
 | `tk` is talking to the wrong backend | Run `tk status` first. The CLI uses `TICKET_URL` plus stored credentials or environment variables; repo-local `.ticket/config.json` only provides project binding. |
 | API or lifecycle behavior changed but the docs/spec now disagree | Update `SPEC.md`, `openapi.yaml`, and the relevant guide in the same PR; if you are using the repo Workflow commands, run the `spec` workflow |
 | `.ticket/config.json` blocks a rebase or pull | If you do not need your local Ticket routing state, restore that file before rebasing; otherwise copy it aside first and restore it after the rebase |
-| `make test` times out | Playwright starts its own local static server automatically. If it still fails, rerun `make test-playwright` to isolate the browser step and check the printed startup error |
+| `make test` times out | Playwright starts its own local static server automatically. If it still fails, rerun `make test-browser` to isolate the browser step and check the printed startup error |
 | Different repos hit different servers | Read `tk status` before debugging. `.ticket/config.json` controls the active remote + project binding per repo |
 | Import cycle errors | The dependency flow must be `cmd -> libticket -> internal/store`. Nothing in `internal/` may import `cmd/` |
 | Coverage threshold failure | Run `make test-go-cover` to see which package is below threshold; add tests or adjust the threshold in the Makefile with a comment explaining why |

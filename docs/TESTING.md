@@ -21,7 +21,7 @@
 | `make ci-verify`      | Same verify sequence as the GitHub verify job       | varies   |
 | `make ci-browser`     | Same browser sequence as the GitHub browser job     | ~12-15s  |
 | `make ci`             | Same verify + browser flow as GitHub Actions        | varies   |
-| `make test-playwright`| Full browser tests against the web UI               | ~12s     |
+| `make test-browser`| Full browser tests against the web UI               | ~12s     |
 | `make test-quickstart`| Executable QUICKSTART/TUTORIAL tests (see below)    | ~6s      |
 | `make test-todo-example` | Reproducible todo tutorial seed + verification  | ~6s      |
 | `make testscripts`    | Shell-based CLI harness scenarios                   | ~3s      |
@@ -194,12 +194,12 @@ ticket management, projects, stories, workflows, labels, time tracking,
 dependencies, hierarchy, and chat. Run with:
 
 ```bash
-make test-playwright
+make test-browser
 ```
 
 Requires Node and Chromium (`make setup-playwright` installs both).
 
-`make test-playwright` now skips browser installation when Chromium is already
+`make test-browser` now skips browser installation when Chromium is already
 present in the local Playwright cache, so repeated browser runs stay focused on
 test execution instead of setup.
 

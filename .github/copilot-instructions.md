@@ -51,7 +51,7 @@ make validate-openapi     # structural OpenAPI check
 - The product is a **single Go binary** (`cmd/tk/main.go`) exposing four interfaces over one domain model:
   1. CLI commands (`tk ...`)
   2. HTTP API (`internal/server`, routes registered via `internal/server/api.go`)
-  3. Embedded web UIs (`web/static` + `web/site2`, served by server)
+  3. Embedded web UIs (`web/default` + `web/shared`, served by server)
   4. BubbleTea TUI (`internal/tui`)
 
 - Runtime is client/server behind one service contract:

@@ -22,7 +22,7 @@ The JavaScript Code Reviewer evaluates all client-side JavaScript within the emb
 
 ## How This Role Operates
 
-1. Inventory all `<script>` blocks and external JS files in `web/static/`.
+1. Inventory all `<script>` blocks and external JS files in `web/shared/`.
 2. Trace each fetch/HTMX call to its server endpoint and verify request/response contract.
 3. Search for innerHTML assignments and validate data provenance.
 4. Check CSRF token flow from server rendering to client-side attachment.

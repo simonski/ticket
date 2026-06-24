@@ -1053,7 +1053,7 @@ The repository should provide at least these checks:
 make build
 make test
 make test-go
-make test-playwright
+make test-browser
 ```
 
 `make build` must increment the patch component of the semantic version stored in `VERSION` before running the Go build.

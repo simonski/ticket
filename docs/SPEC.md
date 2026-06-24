@@ -1478,7 +1478,7 @@ docker run -p 8080:8080 tk server
 | `make test` | Run all tests (unit + integration + Playwright) |
 | `make test-unit` | Unit tests only |
 | `make test-integration` | Integration tests only |
-| `make test-playwright` | Playwright E2E tests |
+| `make test-browser` | Playwright E2E tests |
 | `make release` | Cross-compile for all platforms |
 | `make release-publish` | Upload to GitHub releases |
 | `make homebrew` | Push the generated formula to the Homebrew tap |
