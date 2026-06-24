@@ -73,6 +73,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 	r.registerProjectHandlers()
 	r.registerDocumentHandlers()
 	r.registerRoomHandlers()
+	r.registerAccessRoleHandlers()
 	r.registerTicketHandlers()
 	r.registerReleaseHandlers()
 	r.registerOrgHandlers()
