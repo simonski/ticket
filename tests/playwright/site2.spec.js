@@ -2144,3 +2144,18 @@ test("login boots even when an admin-only load (roles) returns 403", async ({ pa
   await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
   await expect(page.locator("#app-shell")).not.toHaveClass(/hidden/);
 });
+
+test("board: arrow/wasd move card focus and Enter opens the ticket", async ({ page }) => {
+  // Seeded board has OPS-101 ("Move me") in the design lane.
+  await expect(page.locator('[data-lane-stage="design"] [data-ticket-id="OPS-101"]')).toBeVisible();
+  // No card focused yet; the first nav keypress focuses the first card.
+  await page.locator("body").press("ArrowDown");
+  await expect(page.locator(".ticket-card.kbd-focus")).toHaveCount(1);
+  // wasd also navigates (focus stays on a card, page does not lose the focus ring).
+  await page.locator("body").press("d");
+  await page.locator("body").press("s");
+  await expect(page.locator(".ticket-card.kbd-focus")).toHaveCount(1);
+  // Enter opens the focused ticket's modal.
+  await page.locator("body").press("Enter");
+  await expect(page.locator("#ticket-modal")).toHaveClass(/open/);
+});

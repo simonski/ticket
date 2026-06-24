@@ -18,6 +18,10 @@ The web UI is keyboard-driveable through a **command palette**.
 - **Esc** pops one level back (action menu → command list → closed); **↑/↓** move,
   **Enter** selects, click also works.
 
+On the **board**, the **arrow keys** or **w/a/s/d** move focus between ticket
+cards (left/right across lanes, up/down within a lane) and **Enter** opens the
+focused ticket — instead of scrolling the page.
+
 ## Chat & rooms
 
 Open **Chat** from the sidebar (or `/chat`, which also focuses the message box).
