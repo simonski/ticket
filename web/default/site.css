@@ -2054,3 +2054,6 @@ select {
 .chat-room-item .chat-room-count { float: right; opacity: .5; font-size: 11px; }
 .chat-room-item.unread { font-weight: 700; }
 .chat-unread-dot { color: var(--accent, #ff7a1a); font-weight: 800; }
+
+/* Board keyboard navigation focus ring (TK-128). */
+.ticket-card.kbd-focus { outline: 2px solid var(--accent, #ff7a1a); outline-offset: 1px; }

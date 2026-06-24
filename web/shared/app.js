@@ -2382,6 +2382,97 @@
             }
         }
 
+        // ── Board keyboard navigation (TK-128) ───────────────────────────
+        // Arrow keys and w/a/s/d move focus between ticket cards on the board
+        // (and Enter opens the focused ticket) instead of scrolling the page.
+        let focusedBoardTicketID = "";
+        function boardLanesWithCards() {
+            if (!els.ticketBoard) { return []; }
+            return Array.from(els.ticketBoard.querySelectorAll("[data-lane-stage]"))
+                .map((lane) => Array.from(lane.querySelectorAll("[data-ticket-id]")))
+                .filter((cards) => cards.length > 0);
+        }
+        function focusBoardCard(el) {
+            if (!els.ticketBoard) { return; }
+            els.ticketBoard.querySelectorAll(".ticket-card.kbd-focus").forEach((c) => c.classList.remove("kbd-focus"));
+            if (!el) { return; }
+            el.classList.add("kbd-focus");
+            el.scrollIntoView({ block: "nearest", inline: "nearest" });
+            focusedBoardTicketID = el.dataset.ticketId;
+        }
+        function moveBoardFocus(dir) {
+            const lanes = boardLanesWithCards();
+            if (!lanes.length) { return; }
+            let li = -1;
+            let ci = -1;
+            for (let i = 0; i < lanes.length && li < 0; i += 1) {
+                for (let j = 0; j < lanes[i].length; j += 1) {
+                    if (lanes[i][j].dataset.ticketId === focusedBoardTicketID) {
+                        li = i;
+                        ci = j;
+                        break;
+                    }
+                }
+            }
+            if (li < 0) {
+                focusBoardCard(lanes[0][0]);
+                return;
+            }
+            if (dir === "up") {
+                ci = Math.max(0, ci - 1);
+            } else if (dir === "down") {
+                ci = Math.min(lanes[li].length - 1, ci + 1);
+            } else if (dir === "left") {
+                li = Math.max(0, li - 1);
+                ci = Math.min(ci, lanes[li].length - 1);
+            } else if (dir === "right") {
+                li = Math.min(lanes.length - 1, li + 1);
+                ci = Math.min(ci, lanes[li].length - 1);
+            }
+            focusBoardCard(lanes[li][ci]);
+        }
+        function openFocusedBoardCard() {
+            if (!focusedBoardTicketID) { return false; }
+            const ticket = (state.tickets || []).find((t) => String(t.id) === focusedBoardTicketID);
+            if (ticket) {
+                openTicketModal(ticket);
+                return true;
+            }
+            return false;
+        }
+        function boardKeyboardNavActive() {
+            if (state.currentView !== "tickets") { return false; }
+            if (paletteEls.overlay && !paletteEls.overlay.classList.contains("hidden")) { return false; }
+            if (els.dialogOverlay && !els.dialogOverlay.classList.contains("hidden")) { return false; }
+            if (els.ticketModal && els.ticketModal.classList.contains("open")) { return false; }
+            if (state.accountModalOpen) { return false; }
+            const a = document.activeElement;
+            if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable)) { return false; }
+            return true;
+        }
+        function setupBoardKeyboardNav() {
+            document.addEventListener("keydown", (event) => {
+                if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) { return; }
+                if (!boardKeyboardNavActive()) { return; }
+                let dir = null;
+                switch (event.key) {
+                    case "ArrowUp": case "w": case "W": dir = "up"; break;
+                    case "ArrowDown": case "s": case "S": dir = "down"; break;
+                    case "ArrowLeft": case "a": case "A": dir = "left"; break;
+                    case "ArrowRight": case "d": case "D": dir = "right"; break;
+                    default: break;
+                }
+                if (dir) {
+                    event.preventDefault();
+                    moveBoardFocus(dir);
+                    return;
+                }
+                if (event.key === "Enter" && openFocusedBoardCard()) {
+                    event.preventDefault();
+                }
+            });
+        }
+
         function connectLiveUpdates() {
             if (window.__site2MockFetch || state.liveSocket) {
                 return;
@@ -9331,6 +9422,7 @@
         });
         setupCommandPalette();
         setupChat();
+        setupBoardKeyboardNav();
         state.viewScrollByPanel = loadStoredViewScrollByPanel();
         state.currentView = loadStoredSelectedView() || state.currentView;
         switchView(state.currentView, { restoreScroll: false });
