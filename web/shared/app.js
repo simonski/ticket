@@ -2416,11 +2416,16 @@
                 box.scrollTop = box.scrollHeight;
             }).catch(() => {});
         }
+        // Shell-style composer history: Up/Down recall sent messages, Esc clears.
+        let chatHistory = [];
+        let chatHistoryIdx = 0;
         function sendRoomMessage() {
             const input = document.getElementById("chat-composer-input");
             if (!input || !state.activeRoomID) { return; }
             const body = String(input.value || "").trim();
             if (!body) { return; }
+            if (chatHistory[chatHistory.length - 1] !== body) { chatHistory.push(body); }
+            chatHistoryIdx = chatHistory.length;
             const roomID = state.activeRoomID;
             const isLeave = body.toLowerCase() === "/leave";
             // /msg sends to a private chat WITHOUT moving the sender to it.
@@ -2537,6 +2542,29 @@
             }
             const composer = document.getElementById("chat-composer");
             if (composer) { composer.addEventListener("submit", (event) => { event.preventDefault(); sendRoomMessage(); }); }
+            const composerInput = document.getElementById("chat-composer-input");
+            if (composerInput) {
+                composerInput.addEventListener("keydown", (event) => {
+                    if (event.key === "ArrowUp") {
+                        if (!chatHistory.length) { return; }
+                        event.preventDefault();
+                        chatHistoryIdx = Math.max(0, chatHistoryIdx - 1);
+                        composerInput.value = chatHistory[chatHistoryIdx] || "";
+                        composerInput.setSelectionRange(composerInput.value.length, composerInput.value.length);
+                    } else if (event.key === "ArrowDown") {
+                        if (!chatHistory.length) { return; }
+                        event.preventDefault();
+                        chatHistoryIdx = Math.min(chatHistory.length, chatHistoryIdx + 1);
+                        composerInput.value = chatHistoryIdx >= chatHistory.length ? "" : (chatHistory[chatHistoryIdx] || "");
+                    } else if (event.key === "Escape" && composerInput.value) {
+                        // Clear the composer; don't let it bubble to the global Esc handler.
+                        event.preventDefault();
+                        event.stopPropagation();
+                        composerInput.value = "";
+                        chatHistoryIdx = chatHistory.length;
+                    }
+                });
+            }
             const joinBtn = document.getElementById("chat-join-button");
             if (joinBtn) {
                 joinBtn.addEventListener("click", () => {
