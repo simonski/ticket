@@ -57,6 +57,9 @@ func replyAsAgents(ctx context.Context, db *sql.DB, room store.Room, msg store.R
 			}
 		}
 	}
+	if posted == 0 {
+		log.Printf("server: no agent reply in room %d (slug=%q): no agent @mentioned and not a personal-agent DM with an agent member", room.ID, room.Slug)
+	}
 	return posted
 }
 
@@ -76,6 +79,8 @@ func postAgentReply(ctx context.Context, db *sql.DB, room store.Room, agent stor
 	}
 	reply = strings.TrimSpace(reply)
 	if reply == "" {
+		log.Printf("server: room agent %s returned an empty reply", agent.Username)
+		postAgentNotice(ctx, db, room, agent, "returned an empty reply (the model produced no output).", hub)
 		return false
 	}
 	out, perr := store.PostRoomMessage(ctx, db, store.RoomMessage{
