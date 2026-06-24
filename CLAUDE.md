@@ -49,7 +49,7 @@ Coverage thresholds enforced (integration-aware — `scripts/coverage.sh` measur
 
 Docker: `make docker`, `make docker-up`, `make docker-down`.
 
-Playwright browser tests are in `tests/playwright/` (12 spec files). Run with `make test-playwright`.
+Playwright browser tests live in `tests/playwright/site2.spec.js` (the live-UI suite over web/default+shared via serve-site.py). Run with `make test-browser`.
 
 ### Staged test policy
 
@@ -64,7 +64,7 @@ Single Go binary (`cmd/tk/main.go`) providing four interfaces to the same data:
 
 1. **CLI** — 60+ commands routed via a switch statement in `run()`
 2. **HTTP API** — REST endpoints under `/api/`, registered in `internal/server/api.go`
-3. **Web UI** — Embedded SPA served from `web/static/`
+3. **Web UI** — Embedded SPA served from `web/default/` + `web/shared/` (overlay)
 4. **TUI** — BubbleTea terminal UI in `internal/tui/`
 
 ### Runtime model

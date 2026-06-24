@@ -1,4 +1,4 @@
-.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-cli test-browser test-browser-smoke test-browser-full test-browser-site2 test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint vulncheck ci-bootstrap ci-bootstrap-verify ci-bootstrap-browser ci-bootstrap-publish ci ci-verify ci-browser ci-publish clean release release-prepare release-build release-checksums release-formula homebrew release-sbom release-publish release-commit release-clean docker docker-push publish docker-up docker-down deploy
+.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-cli test-browser test-browser-full test-browser-site2 test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint vulncheck ci-bootstrap ci-bootstrap-verify ci-bootstrap-browser ci-bootstrap-publish ci ci-verify ci-browser ci-publish clean release release-prepare release-build release-checksums release-formula homebrew release-sbom release-publish release-commit release-clean docker docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -48,12 +48,10 @@ help:
 	@printf "  make test-store      Run store package tests.\n"
 	@printf "  make test-api-cli    Run CLI/API interface tests (cmd + client + server + contract).\n"
 	@printf "  make test-api        Alias for test-api-cli.\n"
-	@printf "  make test-browser    Run the fast browser smoke suite.\n"
-	@printf "  make test-browser-full Run the full browser end-to-end suite.\n"
-	@printf "  make test-browser-smoke Alias for make test-browser.\n"
+	@printf "  make test-browser    Run the browser suite (site2, live UI).\n"
+	@printf "  make test-browser-full Run the full browser end-to-end suite (site2).\n"
 	@printf "  make test-integration Run integration-oriented Go test packages.\n"
 	@printf "  make test-go-cover   Run Go tests with package coverage thresholds.\n"
-	@printf "  make test-playwright Run browser/frontend smoke checks.\n"
 	@printf "  make test-quickstart Run executable QUICKSTART/TUTORIAL docs tests.\n"
 	@printf "  make test-tk-test    Alias for make test-quickstart.\n"
 	@printf "  make test-todo-example Validate the seeded todo tutorial scenario.\n"
@@ -161,7 +159,6 @@ API_SMOKE_TEST_PKGS := ./internal/client ./internal/server
 CLI_TEST_PKGS := ./cmd/tk
 CONTRACT_TEST_PKGS := ./libticket
 STORE_TEST_PKGS := ./internal/store
-PLAYWRIGHT_SMOKE_SPECS := tests/playwright/auth.spec.js tests/playwright/home.spec.js tests/playwright/navigation.spec.js tests/playwright/tickets.spec.js
 
 test: test-unit
 
@@ -224,25 +221,18 @@ playwright-ready:
 	@if [ ! -d node_modules ]; then $(MAKE) setup-node; fi
 	@if ! npx playwright install --list 2>/dev/null | grep -q '/chromium-'; then npx playwright install chromium; fi
 
-test-playwright: playwright-ready
-	@PLAYWRIGHT_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
-	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test -c tests/playwright.config.js
+test-browser-full: test-browser-site2
 
-test-browser-smoke: playwright-ready
-	@PLAYWRIGHT_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
-	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test -c tests/playwright.config.js $(PLAYWRIGHT_SMOKE_SPECS)
-
-test-browser-full: test-playwright test-browser-site2
-
-# Mock-API browser tests for the live SPA (web/default + web/shared). The harness
-# (tests/serve-site.py) serves web/default + web/shared. Revived against the
-# current SPA in TK-117 and wired into test-browser-full (and thus test-all /
-# ci-browser); runs fully parallel. Run specific tests with PLAYWRIGHT_GREP.
+# Browser tests for the live SPA (web/default + web/shared). The harness
+# (tests/serve-site.py) serves web/default + web/shared — the same assets the
+# server embeds — so this suite exercises the UI users actually get. Runs fully
+# parallel. Run specific tests with PLAYWRIGHT_GREP. (TK-134 retired the older
+# web/static suite, which tested a stale bundle the server no longer served.)
 test-browser-site2: playwright-ready
 	@PLAYWRIGHT_SITE2_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
 	PLAYWRIGHT_SITE2_PORT=$$PLAYWRIGHT_SITE2_PORT npx playwright test -c tests/playwright.site2.config.js $(if $(PLAYWRIGHT_GREP),-g "$(PLAYWRIGHT_GREP)",)
 
-test-browser: test-browser-smoke
+test-browser: test-browser-site2
 
 test-quickstart: build-bin
 	@$(MAKE) test-quickstart-bin

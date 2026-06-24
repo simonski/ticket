@@ -107,7 +107,7 @@ strategy. Short version:
 | Unit (Go) | `*_test.go` alongside source | `make test-unit` |
 | Integration (Go) | `libticket/`, `internal/client/`, `internal/server/` | `make test-integration` |
 | Contract | `libticket/contract_test.go` | included in integration |
-| E2E (Playwright) | `tests/playwright/` | `make test-playwright` |
+| E2E (Playwright) | `tests/playwright/` | `make test-browser` |
 
 **Golden rule**: the contract tests in `libticket/contract_test.go` run the same
 suite against both `LocalService` and `HTTPService`. If you add a `Service`
