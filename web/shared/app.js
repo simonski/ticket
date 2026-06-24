@@ -275,7 +275,9 @@
             addTicketTimeButton: document.getElementById("add-ticket-time-button"),
             agentHarnessSummary: document.getElementById("agent-harness-summary"),
             systemAgentProvider: document.getElementById("system-agent-provider"),
+            systemAgentModel: document.getElementById("system-agent-model"),
             projectAgentProvider: document.getElementById("project-agent-provider"),
+            projectAgentModel: document.getElementById("project-agent-model"),
             resolvedAgentProvider: document.getElementById("resolved-agent-provider"),
             resolvedAgentModel: document.getElementById("resolved-agent-model"),
             resolvedAgentURL: document.getElementById("resolved-agent-url"),
@@ -5958,17 +5960,19 @@
                 };
             }
 
+            // On provider change, repopulate that scope's model dropdown from the
+            // SELECTED provider (not the saved state, which would clobber the choice).
+            const onProviderChange = (scope, providerEl, modelEl, includeInherit) => {
+                const pid = String(providerEl.value || "").trim();
+                const provider = providerByID(pid);
+                renderModelSelect(modelEl, pid, provider ? provider.default_model : "", includeInherit);
+                applyHarnessRequirements(scope);
+            };
             if (els.systemAgentProvider) {
-                els.systemAgentProvider.addEventListener("change", () => {
-                    applyProviderSelectionDefaults("system");
-                    renderAgentHarnessEditor();
-                });
+                els.systemAgentProvider.addEventListener("change", () => onProviderChange("system", els.systemAgentProvider, els.systemAgentModel, false));
             }
             if (els.projectAgentProvider) {
-                els.projectAgentProvider.addEventListener("change", () => {
-                    applyProviderSelectionDefaults("project");
-                    renderAgentHarnessEditor();
-                });
+                els.projectAgentProvider.addEventListener("change", () => onProviderChange("project", els.projectAgentProvider, els.projectAgentModel, true));
             }
             if (els.providerConfigSelect) {
                 els.providerConfigSelect.addEventListener("change", () => {

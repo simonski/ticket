@@ -251,6 +251,28 @@
                                 </div>
                             </form>
                         </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <div>
+                                    <h2>Default model</h2>
+                                    <p class="meta">The system-wide default AI provider and model. Projects and users can override it.</p>
+                                </div>
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="system-agent-provider">AI provider</label>
+                                    <select id="system-agent-provider"></select>
+                                </div>
+                                <div class="field">
+                                    <label for="system-agent-model">Default model</label>
+                                    <select id="system-agent-model"></select>
+                                </div>
+                            </div>
+                            <p class="meta">Resolved: <span id="resolved-agent-provider"></span> / <span id="resolved-agent-model"></span></p>
+                            <div class="form-actions">
+                                <button id="save-system-agent-model" class="btn btn-primary" type="button">Save default model</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="settings-panel" data-settings-panel="plans">
@@ -671,7 +693,7 @@
                                     </select>
                                 </div>
                                 <div class="field">
-                                    <label for="project-default-draft">Default draft</label>
+                                    <label for="project-default-draft">New tickets start in draft</label>
                                     <select id="project-default-draft">
                                         <option value="false">false</option>
                                         <option value="true">true</option>
@@ -680,6 +702,20 @@
                                 <div class="field">
                                     <label for="project-workflow">Default workflow</label>
                                     <select id="project-workflow"></select>
+                                </div>
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="project-agent-provider">AI provider (default model)</label>
+                                        <select id="project-agent-provider"></select>
+                                    </div>
+                                    <div class="field">
+                                        <label for="project-agent-model">Default model</label>
+                                        <select id="project-agent-model"></select>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button id="save-project-agent-model" class="btn" type="button">Save model</button>
+                                    <button id="clear-project-agent-model" class="btn btn-ghost" type="button">Use system default</button>
                                 </div>
                                 <div class="field">
                                     <label for="project-orchestrator-enabled">Orchestrator</label>
