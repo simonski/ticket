@@ -170,3 +170,29 @@ func TestDefaultRoomAgentReplyPromptPlaceholder(t *testing.T) {
 		t.Fatalf("stdin output missing prompt: %q", out2)
 	}
 }
+
+func TestExtractAgentReplyStreamJSON(t *testing.T) {
+	// Claude stream-json: NDJSON events; prefer the final result.
+	nd := `{"type":"system","subtype":"init"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Hello "}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"there"}]}}
+{"type":"result","subtype":"success","result":"Hello there"}`
+	if got := extractAgentReply([]string{"claude", "-p", "{prompt}", "--output-format", "stream-json", "--verbose"}, nd); got != "Hello there" {
+		t.Fatalf("stream-json = %q, want 'Hello there'", got)
+	}
+	// stream-json with no result event falls back to concatenated assistant text.
+	nd2 := `{"type":"assistant","message":{"content":[{"type":"text","text":"part1 "}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"part2"}]}}`
+	if got := extractAgentReply([]string{"claude", "--output-format", "stream-json"}, nd2); got != "part1 part2" {
+		t.Fatalf("stream-json accum = %q, want 'part1 part2'", got)
+	}
+	// --output-format json: single result object.
+	single := `{"type":"result","subtype":"success","result":"single answer"}`
+	if got := extractAgentReply([]string{"claude", "-p", "{prompt}", "--output-format", "json"}, single); got != "single answer" {
+		t.Fatalf("json = %q, want 'single answer'", got)
+	}
+	// Plain command: raw stdout passthrough.
+	if got := extractAgentReply([]string{"codex", "exec"}, "raw reply text"); got != "raw reply text" {
+		t.Fatalf("raw = %q", got)
+	}
+}
