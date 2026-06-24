@@ -37,7 +37,7 @@ help:
 	@printf "  make setup-node      Install Node dependencies.\n"
 	@printf "  make setup-playwright Install Chromium for Playwright.\n"
 	@printf "  make test            Run fast default tests (unit).\n"
-	@printf "  make test-fast       Run the fast developer loop (unit + API smoke + JS API).\n"
+	@printf "  make test-fast       Run the fast developer loop (unit + API smoke).\n"
 	@printf "  make test-all        Run all tests (unit + api + browser + docs/harness).\n"
 	@printf "  make test-go         Run Go tests.\n"
 	@printf "  make test-go-race    Run Go tests with the race detector.\n"
