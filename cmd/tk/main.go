@@ -265,6 +265,8 @@ func run(args []string) error {
 		return runPullRequest(trimmedArgs[1:])
 	case "invite":
 		return runInvite(trimmedArgs[1:])
+	case "email":
+		return runEmail(trimmedArgs[1:])
 	case "clone", "cp":
 		return runClone(trimmedArgs[1:])
 	case "merge":

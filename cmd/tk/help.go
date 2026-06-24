@@ -74,6 +74,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Adds a user — resolved by email or username — to a project, joining them to that project's set of users.", "The project comes from -project/-project_id (or the configured project); -role defaults to member.", "A friendly front door over `tk project add-user`, which requires an exact user id."},
 		example: "tk invite alice@example.com -project WEB -role member",
 	},
+	"email": {
+		usage:   "tk email <show|set|enable|disable>",
+		details: []string{"Configures the SMTP email sender (admin). `set` updates host/port/username/password/from/from-name/security; `show` displays the config with the password masked; `enable`/`disable` toggle whether email is sent.", "A `set` without -password keeps the stored password. Actually sending mail is a separate capability."},
+		example: "tk email set -host smtp.example.com -port 587 -username mailer -password secret -from noreply@acme.com",
+	},
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password> | -token <token> | --passkey] [-url <server-url>]",
 		details: []string{"Logs into the configured server and stores the session token in `~/.config/ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password`, `-token`, or `--passkey`, then prompts.", "`--passkey` starts a browser-assisted passkey flow for the resolved username. Enroll a passkey first with `tk user passkey enroll`."},

@@ -29,6 +29,9 @@ type AuthService interface {
 	Status(ctx context.Context) (StatusResponse, error)
 	SetRegistrationEnabled(ctx context.Context, enabled bool) error
 	SetRegistrationAutoApprove(ctx context.Context, enabled bool) error
+	GetEmailConfig(ctx context.Context) (store.EmailConfig, error)
+	SetEmailConfig(ctx context.Context, cfg store.EmailConfig, updatePassword bool) error
+	SetEmailEnabled(ctx context.Context, enabled bool) error
 	ListPlans(ctx context.Context) ([]store.Plan, error)
 	DefaultPlan(ctx context.Context) (store.Plan, error)
 	SetDefaultPlan(ctx context.Context, slug string) error

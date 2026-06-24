@@ -38,6 +38,18 @@ func (s *HTTPService) SetRegistrationAutoApprove(ctx context.Context, enabled bo
 	return s.client.SetRegistrationAutoApprove(ctx, enabled)
 }
 
+func (s *HTTPService) GetEmailConfig(ctx context.Context) (store.EmailConfig, error) {
+	return s.client.GetEmailConfig(ctx)
+}
+
+func (s *HTTPService) SetEmailConfig(ctx context.Context, cfg store.EmailConfig, updatePassword bool) error {
+	return s.client.SetEmailConfig(ctx, cfg, updatePassword)
+}
+
+func (s *HTTPService) SetEmailEnabled(ctx context.Context, enabled bool) error {
+	return s.client.SetEmailEnabled(ctx, enabled)
+}
+
 func (s *HTTPService) ListPlans(ctx context.Context) ([]store.Plan, error) {
 	return s.client.ListPlans(ctx)
 }
