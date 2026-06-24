@@ -50,9 +50,14 @@ func (r *router) registerRoomHandlers() {
 			}
 			counts, _ := store.RoomMemberCounts(req.Context(), db)
 			unread, _ := store.UnreadRoomIDs(req.Context(), db, user.ID)
+			unreadCounts, _ := store.RoomUnreadCounts(req.Context(), db, user.ID)
 			for i := range rooms {
 				rooms[i].MemberCount = counts[rooms[i].ID]
 				rooms[i].Unread = unread[rooms[i].ID]
+				rooms[i].UnreadCount = unreadCounts[rooms[i].ID]
+				if perm, perr := store.RoomIsPermanent(req.Context(), db, rooms[i]); perr == nil {
+					rooms[i].Permanent = perm
+				}
 			}
 			writeJSON(w, http.StatusOK, rooms)
 		case http.MethodPost:
@@ -406,6 +411,20 @@ func handleRoomCommand(w http.ResponseWriter, req *http.Request, db *sql.DB, roo
 		writeJSON(w, http.StatusCreated, msg)
 		return true
 	}
+	// postTo posts a system line into a DIFFERENT room and returns that message,
+	// so the web client follows the message and switches into the target room.
+	postTo := func(targetRoomID int64, text, kind string, extra store.Attrs) bool {
+		msg, err := store.PostRoomMessage(ctx, db, store.RoomMessage{RoomID: targetRoomID, SenderID: user.ID, Kind: kind, Body: text, Attrs: extra})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return true
+		}
+		if hub != nil {
+			hub.broadcastRoomMessage(targetRoomID, msg)
+		}
+		writeJSON(w, http.StatusCreated, msg)
+		return true
+	}
 
 	switch cmd {
 	case "task":
@@ -430,7 +449,9 @@ func handleRoomCommand(w http.ResponseWriter, req *http.Request, db *sql.DB, roo
 			writeError(w, http.StatusBadRequest, cerr.Error())
 			return true
 		}
-		return post("created room #"+created.Name, "system", store.Attrs{"new_room_id": created.ID})
+		_ = store.JoinRoom(ctx, db, created.ID, user.ID, "owner")
+		// Post the confirmation into the new room so the client switches into it.
+		return postTo(created.ID, "created room #"+created.Name, "system", store.Attrs{"new_room_id": created.ID})
 	case "invite":
 		target, err := store.GetUserByUsername(ctx, db, strings.TrimPrefix(arg, "@"))
 		if err != nil {
@@ -457,11 +478,23 @@ func handleRoomCommand(w http.ResponseWriter, req *http.Request, db *sql.DB, roo
 		}
 		return post("removed @"+target.Username, "system", nil)
 	case "join":
-		if jerr := store.JoinRoom(ctx, db, room.ID, user.ID, "member"); jerr != nil {
+		// "/join <name>" joins (or just switches to) a room by name; "/join" with
+		// no argument joins the current room.
+		target := room
+		if arg != "" {
+			found, ferr := store.FindRoomByName(ctx, db, strings.TrimPrefix(arg, "#"), user.ID, room.ProjectID)
+			if ferr != nil {
+				writeError(w, http.StatusBadRequest, ferr.Error())
+				return true
+			}
+			target = found
+		}
+		if jerr := store.JoinRoom(ctx, db, target.ID, user.ID, "member"); jerr != nil {
 			writeStoreError(w, jerr)
 			return true
 		}
-		return post("@"+user.Username+" joined", "system", nil)
+		// Post into the target room so the client follows and switches into it.
+		return postTo(target.ID, "@"+user.Username+" joined", "system", nil)
 	case "leave":
 		if lerr := store.LeaveRoom(ctx, db, room.ID, user.ID); lerr != nil {
 			writeStoreError(w, lerr)
