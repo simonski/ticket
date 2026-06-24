@@ -2057,3 +2057,8 @@ select {
 
 /* Board keyboard navigation focus ring (TK-128). */
 .ticket-card.kbd-focus { outline: 2px solid var(--accent, #ff7a1a); outline-offset: 1px; }
+
+/* Access-roles admin panel (TK-135). */
+#view-access .access-role-item { display: block; width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 6px; background: var(--surface, #fff); border: 1px solid var(--border, #ddd); border-radius: 6px; cursor: pointer; }
+#view-access .access-role-item.active { border-color: var(--accent, #ff7a1a); }
+#view-access .access-check-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
