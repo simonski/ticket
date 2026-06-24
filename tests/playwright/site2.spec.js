@@ -1457,7 +1457,7 @@ test("remembers active panel and scroll position after refresh", async ({ page }
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Projects" }).click();
+  await page.locator('#main-nav button[data-view="projects"]').click();
   await page.evaluate(() => {
     document.body.style.minHeight = "3000px";
     window.scrollTo(0, 420);
@@ -1492,7 +1492,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("creates a project and persists default draft settings through the existing API", async ({ page }) => {
-  await page.getByRole("button", { name: "Projects" }).click();
+  await page.locator('#main-nav button[data-view="projects"]').click();
   await page.getByRole("button", { name: "New project" }).click();
   await expect(page.locator("#project-prefix")).toHaveAttribute("maxlength", "5");
   await page.locator("#project-prefix").fill("WEB");
@@ -1500,7 +1500,7 @@ test("creates a project and persists default draft settings through the existing
   await page.locator("#project-default-draft").selectOption("true");
   await page.getByRole("button", { name: "Save project" }).click();
 
-  await expect(page.locator("#project-list")).toContainText("Website");
+  await expect(page.locator("#project-title")).toHaveValue("Website");
 
   const requests = await page.evaluate(() => window.__site2Requests);
   expect(requests).toEqual(
@@ -1512,7 +1512,7 @@ test("creates a project and persists default draft settings through the existing
 });
 
 test("submits a project access request from the Projects view", async ({ page }) => {
-  await page.getByRole("button", { name: "Projects" }).click();
+  await page.locator('#main-nav button[data-view="projects"]').click();
   await page.locator("#project-request-access-ref").fill("GATE");
   await page.locator("#project-request-access-message").fill("please add me");
   await page.getByRole("button", { name: "Request access" }).click();
@@ -1583,7 +1583,7 @@ test("shows recent project history in the Projects view", async ({ page }) => {
   await page.locator("#login-password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
-  await page.getByRole("button", { name: "Projects" }).click();
+  await page.locator('#main-nav button[data-view="projects"]').click();
 
   await expect(page.locator("#project-history-list")).toContainText("alice requested access to OPS");
   await expect(page.locator("#project-history-list")).toContainText("approved access request #7 for alice on OPS");
@@ -1623,7 +1623,7 @@ test("marks notifications as read from the Projects view", async ({ page }) => {
   await page.locator("#login-password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
-  await page.getByRole("button", { name: "Projects" }).click();
+  await page.locator('#main-nav button[data-view="projects"]').click();
 
   await expect(page.locator("#project-notifications-list")).toContainText("Project access approved");
   await page.getByRole("button", { name: "Mark read" }).click();
