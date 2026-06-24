@@ -69,6 +69,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Manages pull requests, which live inside ticket and are linked to a ticket and project (VCS-host-agnostic).", "`create` opens a PR, inferring the repository (from the project's repos or the cwd git origin), source branch (current git branch), target branch (main), and provider (github when the repo host is github.com, otherwise none). Add `-gh` to open a real GitHub PR via the gh CLI and store its url (github repos only).", "`ls [[-id] <ticket-id>] [-open|-closed|-all]` lists PRs (project-wide when no ticket); `get <pr-id>` shows one. `tk get <ticket>` also shows linked PRs.", "`merge`/`close`/`reopen <pr-id>` transition status. Non-GitHub repositories get a native PR record inside ticket."},
 		example: "tk pr create TK-42 -url https://github.com/acme/widget/pull/7",
 	},
+	"invite": {
+		usage:   "tk invite <email|username> -project <id|title|prefix|alias> [-role <observer|commenter|member|admin>]",
+		details: []string{"Adds a user — resolved by email or username — to a project, joining them to that project's set of users.", "The project comes from -project/-project_id (or the configured project); -role defaults to member.", "A friendly front door over `tk project add-user`, which requires an exact user id."},
+		example: "tk invite alice@example.com -project WEB -role member",
+	},
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password> | -token <token> | --passkey] [-url <server-url>]",
 		details: []string{"Logs into the configured server and stores the session token in `~/.config/ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password`, `-token`, or `--passkey`, then prompts.", "`--passkey` starts a browser-assisted passkey flow for the resolved username. Enroll a passkey first with `tk user passkey enroll`."},
@@ -517,6 +522,7 @@ func renderRootUsage() string {
 		{"project", "Manage projects (ls, new, get, use, rm, repo)"},
 		{"dep", "Manage dependency links (add, remove)"},
 		{"pr", "Manage pull requests (create, ls, get, merge, close)"},
+		{"invite", "Invite a user (by email/username) to a project in a role"},
 		{"label", "Manage labels (ls, new, rm, add, remove, show)"},
 		{"time", "Log and view time entries (log, ls, total, rm)"},
 		{"story", "Manage stories (ls, new, get, update, rm)"},

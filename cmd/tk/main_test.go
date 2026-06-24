@@ -769,6 +769,74 @@ func TestRunAdminHelpUsesFormattedNamespaceUsage(t *testing.T) {
 	}
 }
 
+func TestRunInviteAddsUserToProject(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	testutil.CloneSeededDB(t, dbPath, "adminpass")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	handler, err := server.Handler(db, "test", false, nil, "", "")
+	if err != nil {
+		t.Fatalf("server.Handler() error = %v", err)
+	}
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+	setTestLocation(t, ts.URL)
+
+	alice, err := store.CreateUser(context.Background(), db, "alice", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+
+	captureStdout(t, func() {
+		if err := run([]string{"login", "-username", "admin", "-password", "adminpass"}); err != nil {
+			t.Fatalf("admin login error = %v", err)
+		}
+	})
+
+	projectIDText := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "INV", "-title", "Invite Project", "-printid"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	}))
+	projectID, err := strconv.ParseInt(projectIDText, 10, 64)
+	if err != nil {
+		t.Fatalf("ParseInt(project id) error = %v", err)
+	}
+
+	// Invite by username adds the user to the project in the given role.
+	out := captureStdout(t, func() {
+		if err := run([]string{"invite", "alice", "-project", "INV", "-role", "member"}); err != nil {
+			t.Fatalf("invite error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "invited alice") {
+		t.Fatalf("invite output = %q, want it to confirm alice", out)
+	}
+	member, err := store.GetProjectMember(context.Background(), db, projectID, alice.ID)
+	if err != nil {
+		t.Fatalf("GetProjectMember() error = %v (alice was not added)", err)
+	}
+	if member.Role != "member" {
+		t.Fatalf("alice role = %q, want member", member.Role)
+	}
+
+	// Inviting an unknown user fails clearly.
+	if err := run([]string{"invite", "nobody-here", "-project", "INV"}); err == nil {
+		t.Fatal("invite of unknown user should fail")
+	}
+	// Missing project ref shows usage (error).
+	if err := run([]string{"invite", "alice"}); err == nil {
+		t.Fatal("invite without -project should fail")
+	}
+}
+
 func TestRunProjectRequestAccessRemote(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
