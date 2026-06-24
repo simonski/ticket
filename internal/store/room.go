@@ -258,6 +258,14 @@ func LeaveRoom(ctx context.Context, db *sql.DB, roomID int64, memberID string) e
 	return derr
 }
 
+// RemoveRoomMember removes a member without the permanence guard. Used for
+// administrative removal (kick), which is allowed even on permanent rooms —
+// unlike voluntarily leaving via LeaveRoom.
+func RemoveRoomMember(ctx context.Context, db *sql.DB, roomID int64, memberID string) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM room_members WHERE room_id = ? AND member_id = ?`, roomID, strings.TrimSpace(memberID))
+	return err
+}
+
 // RoomIsPermanent reports whether a room is the primary (non-leavable) room for
 // its scope: the lowest-id public global room, or a project's lowest-id public
 // room. Breakout (ticket) and private rooms are always leavable.

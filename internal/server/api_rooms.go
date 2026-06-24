@@ -472,7 +472,7 @@ func handleRoomCommand(w http.ResponseWriter, req *http.Request, db *sql.DB, roo
 			writeError(w, http.StatusBadRequest, "unknown user: "+arg)
 			return true
 		}
-		if lerr := store.LeaveRoom(ctx, db, room.ID, target.ID); lerr != nil {
+		if lerr := store.RemoveRoomMember(ctx, db, room.ID, target.ID); lerr != nil {
 			writeStoreError(w, lerr)
 			return true
 		}
