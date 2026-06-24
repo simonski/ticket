@@ -66,6 +66,10 @@ func postAgentReply(ctx context.Context, db *sql.DB, room store.Room, agent stor
 	reply, rerr := roomAgentReply(ctx, agent.Username, trigger, history)
 	if rerr != nil {
 		log.Printf("server: room agent %s reply failed: %v", agent.Username, rerr)
+		// Surface the failure in the room so the user isn't left wondering why
+		// nothing happened; the detailed error stays in the server log.
+		postAgentNotice(ctx, db, room, agent,
+			"couldn't reply — the agent command failed. Check the server's chat command / model (TICKET_CHAT_CMD) and the server logs.", hub)
 		return false
 	}
 	reply = strings.TrimSpace(reply)
@@ -86,6 +90,24 @@ func postAgentReply(ctx context.Context, db *sql.DB, room store.Room, agent stor
 		hub.broadcastRoomMessage(room.ID, out)
 	}
 	return true
+}
+
+// postAgentNotice posts a muted agent_event line (e.g. a reply failure) into the
+// room from the agent, so failures are visible rather than silent.
+func postAgentNotice(ctx context.Context, db *sql.DB, room store.Room, agent store.User, text string, hub *liveHub) {
+	out, err := store.PostRoomMessage(ctx, db, store.RoomMessage{
+		RoomID:   room.ID,
+		SenderID: agent.ID,
+		Kind:     "agent_event",
+		Body:     "⚠️ " + text,
+		Attrs:    store.Attrs{"agent": true},
+	})
+	if err != nil {
+		return
+	}
+	if hub != nil {
+		hub.broadcastRoomMessage(room.ID, out)
+	}
 }
 
 // defaultRoomAgentReply runs the configured chat/agent command one-shot, feeding

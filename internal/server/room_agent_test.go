@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -56,6 +57,44 @@ func TestReplyAsAgentsPostsAgentReply(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("agent reply not posted into the room; messages=%+v", msgs)
+	}
+}
+
+func TestReplyAsAgentsPostsNoticeOnFailure(t *testing.T) {
+	_, db := testHandler(t)
+	defer db.Close()
+	ctx := context.Background()
+
+	agent, _, err := store.CreateAgent(ctx, db, "")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	uname := "helper"
+	if _, uerr := store.UpdateAgent(ctx, db, agent.ID, store.AgentUpdateParams{Username: &uname}); uerr != nil {
+		t.Fatalf("rename agent: %v", uerr)
+	}
+	room, _ := store.CreateRoom(ctx, db, store.Room{Name: "Help", CreatedBy: "admin"})
+	_ = store.JoinRoom(ctx, db, room.ID, agent.ID, "member")
+
+	// The agent command fails.
+	orig := roomAgentReply
+	roomAgentReply = func(_ context.Context, _, _ string, _ []store.RoomMessage) (string, error) {
+		return "", errors.New("exit status 1: model not supported")
+	}
+	defer func() { roomAgentReply = orig }()
+
+	msg, _ := store.PostRoomMessage(ctx, db, store.RoomMessage{RoomID: room.ID, SenderID: "u1", Body: "hey @helper?"})
+	replyAsAgents(ctx, db, room, msg, nil)
+
+	msgs, _ := store.ListRoomMessages(ctx, db, room.ID, 50, 0)
+	notice := false
+	for _, m := range msgs {
+		if m.SenderID == agent.ID && m.Kind == "agent_event" && strings.Contains(m.Body, "couldn't reply") {
+			notice = true
+		}
+	}
+	if !notice {
+		t.Fatalf("a failed agent reply should post an in-room notice; messages=%+v", msgs)
 	}
 }
 
