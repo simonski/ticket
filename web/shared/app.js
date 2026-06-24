@@ -2275,9 +2275,12 @@
         }
         // @name and #label become highlighted entities in the message feed (S6).
         function highlightRoomText(body) {
+            // Escape first, then highlight @mentions / #labels — but a # preceded by
+            // & belongs to a numeric HTML entity (e.g. &#39; for an apostrophe), so
+            // the negative lookbehind keeps the highlighter out of escaped entities.
             return escapeHTML(String(body || ""))
-                .replace(/@([A-Za-z0-9][A-Za-z0-9_-]*)/g, "<span class=\"chat-mention\">@$1</span>")
-                .replace(/#([A-Za-z0-9][A-Za-z0-9_-]*)/g, "<span class=\"chat-label\">#$1</span>");
+                .replace(/(^|[^&])@([A-Za-z0-9][A-Za-z0-9_-]*)/g, "$1<span class=\"chat-mention\">@$2</span>")
+                .replace(/(^|[^&])#([A-Za-z0-9][A-Za-z0-9_-]*)/g, "$1<span class=\"chat-label\">#$2</span>");
         }
         function refreshChatView() {
             loadRooms().then(() => ensureDefaultRooms()).then(() => {
