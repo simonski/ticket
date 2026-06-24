@@ -11,19 +11,19 @@ import (
 )
 
 // gatedPanelPrefixes maps API path prefixes to the panel that guards them.
-// Only clearly panel-scoped, non-foundational endpoints are server-enforced;
-// foundational data (projects, tickets, status) stays ungated so restricting a
-// panel never breaks the board. Admin-tier panels keep their own requireAdmin
-// checks. The web nav additionally hides panels a user cannot access.
+// Only SELF-CONTAINED panels are server-enforced — their data backs only that
+// panel. Panels whose data is shared with the board/ticket flows (workflows,
+// roles, teams) and foundational endpoints (projects, tickets, status) stay
+// ungated so restricting a panel never breaks ticket creation; those panels are
+// hidden in the nav (UI gating) only. Admin-tier panels keep their own
+// requireAdmin checks. The map is data-driven, so more panels can be enforced
+// once their endpoints are decoupled from the shared flows.
 var gatedPanelPrefixes = []struct {
 	prefix string
 	panel  string
 }{
 	{"/api/rooms", store.PanelChat},
-	{"/api/workflows", store.PanelWorkflows},
-	{"/api/roles", store.PanelRoles},
 	{"/api/documents", store.PanelDocuments},
-	{"/api/teams", store.PanelTeams},
 }
 
 func panelForPath(path string) (string, bool) {
