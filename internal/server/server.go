@@ -233,6 +233,7 @@ func handlerWithPasskeyFactory(db *sql.DB, version string, verbose bool, output 
 	mux.Handle("/", spaHandler(fileServer, staticFS, version))
 
 	var handler http.Handler = mux
+	handler = panelAccessMiddleware(handler, db)
 	handler = csrfMiddleware(handler)
 	handler = writeThrottleMiddleware(handler, db, newRateLimiter(writeRateLimitFromEnv(), time.Minute))
 	handler = requestTimeoutMiddleware(handler, requestTimeoutFromEnv())
