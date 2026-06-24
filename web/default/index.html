@@ -168,6 +168,7 @@
                                 <button type="button" class="seg-btn active" data-settings-tab="organisation">Organisation</button>
                                 <button type="button" class="seg-btn" data-settings-tab="providers">AI Providers</button>
                                 <button type="button" class="seg-btn" data-settings-tab="plans">Plans</button>
+                                <button type="button" class="seg-btn" data-settings-tab="email">Email</button>
                                 <button type="button" class="seg-btn" data-settings-tab="settings">Settings</button>
                             </div>
                         </div>
@@ -384,6 +385,37 @@
                                     </div>
                                 </form>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-panel" data-settings-panel="email">
+                        <div class="card" style="max-width:600px">
+                            <div class="card-header">
+                                <div>
+                                    <h2>Email (SMTP)</h2>
+                                    <p class="meta">Configure the outbound email sender. Sending is governed by the enable toggle.</p>
+                                </div>
+                            </div>
+                            <form id="email-form" class="form-stack">
+                                <label class="check-row"><input type="checkbox" id="email-enabled"> Enable email sending</label>
+                                <div class="field"><label for="email-host">SMTP host</label><input id="email-host" placeholder="smtp.example.com"></div>
+                                <div class="field"><label for="email-port">Port</label><input id="email-port" type="number" value="587"></div>
+                                <div class="field"><label for="email-security">Security</label>
+                                    <select id="email-security">
+                                        <option value="starttls">STARTTLS</option>
+                                        <option value="tls">TLS/SSL</option>
+                                        <option value="none">None</option>
+                                    </select>
+                                </div>
+                                <div class="field"><label for="email-username">Username</label><input id="email-username" autocomplete="off"></div>
+                                <div class="field"><label for="email-password">Password</label><input id="email-password" type="password" autocomplete="new-password" placeholder="leave blank to keep current"></div>
+                                <div class="field"><label for="email-from-address">From address</label><input id="email-from-address" placeholder="noreply@example.com"></div>
+                                <div class="field"><label for="email-from-name">From name</label><input id="email-from-name" placeholder="Ticket"></div>
+                                <div class="form-actions">
+                                    <button id="email-save-button" class="btn btn-primary" type="submit">Save</button>
+                                    <span id="email-password-state" class="meta"></span>
+                                </div>
+                            </form>
                         </div>
                     </div>
 
