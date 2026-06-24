@@ -78,6 +78,29 @@ components:
         description: { type: string }
         builtin: { type: boolean }
         panels: { type: array, items: { type: string } }
+    EmailConfig:
+      type: object
+      description: SMTP sender config. The password is never returned; has_password indicates whether one is stored.
+      properties:
+        enabled: { type: boolean }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        from_address: { type: string }
+        from_name: { type: string }
+        security: { type: string, enum: [none, starttls, tls] }
+        has_password: { type: boolean }
+    EmailConfigInput:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        password: { type: string, description: "Omit or leave empty to keep the stored password." }
+        from_address: { type: string }
+        from_name: { type: string }
+        security: { type: string, enum: [none, starttls, tls] }
     AccessRoleInput:
       type: object
       required: [name]
@@ -1744,6 +1767,48 @@ paths:
       operationId: deleteAccessRole
       responses:
         '200': { description: Deleted }
+
+  # ── Email (SMTP) settings ────────────────────────────────────────────
+  /api/email/settings:
+    get:
+      tags: [Email]
+      summary: Get the SMTP email-sender config (admin); password is masked
+      operationId: getEmailSettings
+      responses:
+        '200':
+          description: Email config (password never returned; has_password only)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailConfig' }
+    put:
+      tags: [Email]
+      summary: Update the SMTP email-sender config (admin)
+      operationId: updateEmailSettings
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailConfigInput' }
+      responses:
+        '200':
+          description: Saved config (masked)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailConfig' }
+  /api/email/enabled:
+    put:
+      tags: [Email]
+      summary: Enable or disable email sending (admin)
+      operationId: setEmailEnabled
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { enabled: { type: boolean } } }
+      responses:
+        '200':
+          description: Saved config (masked)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailConfig' }
 
   # ── Chat rooms ───────────────────────────────────────────────────────
   /api/rooms:

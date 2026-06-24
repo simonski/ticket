@@ -87,6 +87,19 @@ Agents are first-class room members. There are two ways to involve them:
   /task investigate the flaky deploy
   ```
 
+## Email / SMTP (admin)
+
+Configure the outbound email sender under **Settings → Email** (or via the CLI):
+
+- Set the SMTP **host, port, security** (none/STARTTLS/TLS), **username/password**,
+  and **from address/name**, then toggle **Enable email sending**.
+- The password is **never shown back** — the form/`tk email show` only indicate
+  whether one is stored; saving without re-entering it keeps the stored secret.
+- CLI: `tk email show`, `tk email set -host … -port … -password …`,
+  `tk email enable`, `tk email disable`.
+- This only *configures* the sender; actually sending mail is a separate
+  capability.
+
 ## Access roles (admin)
 
 Admins can gate which panels each user sees from the **Access** panel (admin

@@ -1673,6 +1673,7 @@
             document.querySelectorAll("#view-settings .settings-panel").forEach((panel) => {
                 panel.classList.toggle("active", panel.dataset.settingsPanel === name);
             });
+            if (name === "email") { loadEmailSettings(); }
             try { localStorage.setItem("site2.settingsTab", name); } catch (e) { /* ignore */ }
         }
 
@@ -2697,6 +2698,56 @@
             } catch (error) {
                 setNotice(error.message || "Failed to assign roles", true);
             }
+        }
+
+        // ── Email (SMTP) settings (TK-132) ───────────────────────────────
+        async function loadEmailSettings() {
+            try {
+                const cfg = await api("/api/email/settings");
+                renderEmailForm(cfg || {});
+            } catch (error) {
+                /* non-admins never see this tab; ignore */
+            }
+        }
+        function renderEmailForm(cfg) {
+            const set = (id, val) => { const el = document.getElementById(id); if (el) { el.value = val == null ? "" : val; } };
+            const enabled = document.getElementById("email-enabled");
+            if (enabled) { enabled.checked = Boolean(cfg.enabled); }
+            set("email-host", cfg.host);
+            set("email-port", cfg.port || 587);
+            set("email-security", cfg.security || "starttls");
+            set("email-username", cfg.username);
+            set("email-from-address", cfg.from_address);
+            set("email-from-name", cfg.from_name);
+            const pw = document.getElementById("email-password");
+            if (pw) { pw.value = ""; }
+            const state = document.getElementById("email-password-state");
+            if (state) { state.textContent = cfg.has_password ? "A password is set — leave blank to keep it." : "No password set."; }
+        }
+        async function saveEmailSettings(event) {
+            event.preventDefault();
+            const val = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+            const body = {
+                enabled: Boolean((document.getElementById("email-enabled") || {}).checked),
+                host: val("email-host"),
+                port: parseInt(val("email-port"), 10) || 587,
+                security: val("email-security") || "starttls",
+                username: val("email-username"),
+                from_address: val("email-from-address"),
+                from_name: val("email-from-name"),
+                password: val("email-password"),
+            };
+            try {
+                await api("/api/email/settings", { method: "PUT", body: JSON.stringify(body) });
+                setNotice("Email settings saved");
+                await loadEmailSettings();
+            } catch (error) {
+                setNotice(error.message || "Failed to save email settings", true);
+            }
+        }
+        function setupEmailSettings() {
+            const form = document.getElementById("email-form");
+            if (form) { form.addEventListener("submit", saveEmailSettings); }
         }
 
         function setupAccessView() {
@@ -9665,6 +9716,7 @@
         setupChat();
         setupBoardKeyboardNav();
         setupAccessView();
+        setupEmailSettings();
         state.viewScrollByPanel = loadStoredViewScrollByPanel();
         state.currentView = loadStoredSelectedView() || state.currentView;
         switchView(state.currentView, { restoreScroll: false });
