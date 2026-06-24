@@ -2258,10 +2258,21 @@
         function refreshChatView() {
             loadRooms().then(() => ensureDefaultRooms()).then(() => {
                 renderRoomsList();
-                if (state.activeRoomID && state.rooms.some((r) => r.room_id === state.activeRoomID)) {
-                    selectRoom(state.activeRoomID);
+                // Always land the user in a room so they can start chatting. Keep
+                // the current room if it's still present; otherwise pick a sensible
+                // default (the public global room, else the first available).
+                const roomID = (state.activeRoomID && state.rooms.some((r) => r.room_id === state.activeRoomID))
+                    ? state.activeRoomID
+                    : pickDefaultRoomID();
+                if (roomID) {
+                    selectRoom(roomID);
                 }
             });
+        }
+        function pickDefaultRoomID() {
+            if (!state.rooms.length) { return 0; }
+            const general = state.rooms.find((r) => roomScope(r) === "global" && r.visibility === "public");
+            return (general || state.rooms[0]).room_id;
         }
         // Automatically create a public global room and a project room the first
         // time chat is opened without them.
@@ -2314,7 +2325,11 @@
             renderRoomsList();
             const input = document.getElementById("chat-composer-input");
             const sendBtn = document.getElementById("chat-send-button");
-            if (input) { input.disabled = false; }
+            if (input) {
+                input.disabled = false;
+                // Focus the composer so the user can type immediately on entering a room.
+                input.focus();
+            }
             if (sendBtn) { sendBtn.disabled = false; }
             const joinBtn = document.getElementById("chat-join-button");
             const leaveBtn = document.getElementById("chat-leave-button");

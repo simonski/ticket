@@ -2187,3 +2187,11 @@ test("account menu is a single 'Account settings' entry (TK-50)", async ({ page 
 test("admin sees the Access (access-roles) nav entry (TK-135)", async ({ page }) => {
   await expect(page.locator('#admin-nav button[data-view="access"]')).toBeVisible();
 });
+
+test("chat: opening the panel auto-selects a room and focuses the composer", async ({ page }) => {
+  await page.locator('#main-nav button[data-view="chat"]').click();
+  // A room is selected automatically — the user can chat without clicking one.
+  await expect(page.locator("#chat-room-title")).toHaveText("General");
+  await expect(page.locator("#chat-composer-input")).toBeEnabled();
+  await expect(page.locator("#chat-composer-input")).toBeFocused();
+});
