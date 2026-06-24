@@ -13,6 +13,8 @@
             passkeyStatus: "",
             passkeyStatusError: false,
             accountModalOpen: false,
+            panels: null,
+            accessRoles: [],
             currentView: "tickets",
             viewScrollByPanel: {},
             scrollPersistenceReady: false,
@@ -126,6 +128,7 @@
             { view: "settings", label: "Settings", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M12 17v4\"></path><path d=\"M4.9 6.3l2.8 2\"></path><path d=\"M16.3 15.7l2.8 2\"></path><path d=\"M3 12h4\"></path><path d=\"M17 12h4\"></path><path d=\"M4.9 17.7l2.8-2\"></path><path d=\"M16.3 8.3l2.8-2\"></path><circle cx=\"12\" cy=\"12\" r=\"3.5\"></circle></svg>" },
             { view: "agents", label: "Agents", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M8 8a4 4 0 1 1 8 0\"></path><path d=\"M7 13h10v7H7z\"></path></svg>" },
             { view: "users", label: "Users", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"></path><circle cx=\"9\" cy=\"7\" r=\"4\"></circle><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"></path><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"></path></svg>" },
+            { view: "access", label: "Access", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"5\" y=\"11\" width=\"14\" height=\"9\" rx=\"2\"></rect><path d=\"M8 11V8a4 4 0 0 1 8 0v3\"></path></svg>" },
             { view: "admin-summary", label: "Summary", section: "admin", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\"/></svg>" },
         ];
         let navDragView = "";
@@ -598,14 +601,31 @@
             return Boolean(state.status && state.status.user && state.status.user.role === "admin");
         }
 
+        // canAccessPanel gates a nav view by the user's effective panel set
+        // (TK-135). Admins see everything. Before the panel set loads
+        // (state.panels === null) we stay optimistic so the nav doesn't flash
+        // empty. Admin-only items are gated by isAdmin() separately.
+        function canAccessPanel(view) {
+            if (isAdmin()) {
+                return true;
+            }
+            if (!Array.isArray(state.panels)) {
+                return true;
+            }
+            return state.panels.includes(view);
+        }
+        function navItemVisible(item) {
+            return item.adminOnly ? isAdmin() : canAccessPanel(item.view);
+        }
+
         function visibleNavItems() {
-            return NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin());
+            return NAV_ITEMS.filter(navItemVisible);
         }
         function visibleGeneralNavItems() {
-            return NAV_ITEMS.filter((item) => item.section === "general" && (!item.adminOnly || isAdmin()));
+            return NAV_ITEMS.filter((item) => item.section === "general" && navItemVisible(item));
         }
         function visibleProcessNavItems() {
-            return NAV_ITEMS.filter((item) => item.section === "process" && (!item.adminOnly || isAdmin()));
+            return NAV_ITEMS.filter((item) => item.section === "process" && navItemVisible(item));
         }
         function visibleAdminNavItems() {
             return NAV_ITEMS.filter((item) => item.section === "admin" && isAdmin());
@@ -1635,6 +1655,9 @@
             if (viewName === "chat") {
                 refreshChatView();
             }
+            if (viewName === "access") {
+                refreshAccessView();
+            }
             if (viewName === "settings") {
                 let tab = "organisation";
                 try { tab = localStorage.getItem("site2.settingsTab") || "organisation"; } catch (e) { /* ignore */ }
@@ -1946,6 +1969,11 @@
         }
 
         async function loadDocuments() {
+            if (!canAccessPanel("documents")) {
+                state.documents = [];
+                state.selectedDocumentID = null;
+                return;
+            }
             if (!state.selectedProjectID) {
                 state.documents = [];
                 state.selectedDocumentID = null;
@@ -2103,9 +2131,20 @@
             }
         }
 
+        async function loadMyPanels() {
+            try {
+                const res = await api("/api/me/panels");
+                state.panels = Array.isArray(res && res.panels) ? res.panels : [];
+            } catch (error) {
+                // If the panel set can't be loaded, stay optimistic (null) so the
+                // nav isn't hidden; server-side enforcement still applies.
+                state.panels = null;
+            }
+        }
+
         async function refreshAll() {
             await loadStatus();
-            await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans(), loadPasskeys(), fetchUsers(), loadOrg(), loadProgrammes()]);
+            await Promise.all([loadMyPanels(), loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans(), loadPasskeys(), fetchUsers(), loadOrg(), loadProgrammes()]);
             await loadConfigSettings();
             try {
                 await loadOrchestratorConfig();
@@ -2471,6 +2510,193 @@
                     event.preventDefault();
                 }
             });
+        }
+
+        // ── Access roles admin panel (TK-135) ────────────────────────────
+        let selectedAccessRoleID = 0;
+        let accessGrantablePanels = [];
+
+        function panelLabel(view) {
+            const item = NAV_ITEMS.find((n) => n.view === view);
+            return item ? item.label : view;
+        }
+
+        async function refreshAccessView() {
+            if (!isAdmin()) { return; }
+            try {
+                const [rolesRes, panelsRes] = await Promise.all([api("/api/access-roles"), api("/api/panels")]);
+                state.accessRoles = Array.isArray(rolesRes) ? rolesRes : [];
+                accessGrantablePanels = (panelsRes && Array.isArray(panelsRes.grantable)) ? panelsRes.grantable : [];
+            } catch (error) {
+                state.accessRoles = [];
+                accessGrantablePanels = [];
+            }
+            if (!state.users || !state.users.length) {
+                try { await fetchUsers(); } catch (e) { /* ignore */ }
+            }
+            renderAccessView();
+        }
+
+        function renderAccessView() {
+            renderAccessRoleList();
+            renderAccessPanelCheckboxes();
+            renderAccessAssignUserOptions();
+            renderAccessAssignRoles();
+        }
+
+        function renderAccessRoleList() {
+            const list = document.getElementById("access-role-list");
+            if (!list) { return; }
+            if (!state.accessRoles.length) {
+                list.innerHTML = "<div class=\"meta\">No access roles yet.</div>";
+                return;
+            }
+            list.innerHTML = state.accessRoles.map((role) => {
+                const panels = (role.panels || []).map(panelLabel).join(", ") || "no panels";
+                const builtin = role.builtin ? " <span class=\"chip\">builtin</span>" : "";
+                const active = role.id === selectedAccessRoleID ? " active" : "";
+                return "<button type=\"button\" class=\"access-role-item" + active + "\" data-access-role-id=\"" + role.id + "\">"
+                    + "<strong>" + escapeHTML(role.name) + "</strong>" + builtin
+                    + "<div class=\"meta\">" + escapeHTML(panels) + "</div></button>";
+            }).join("");
+            list.querySelectorAll("[data-access-role-id]").forEach((el) => {
+                el.addEventListener("click", () => selectAccessRole(Number(el.dataset.accessRoleId)));
+            });
+        }
+
+        function renderAccessPanelCheckboxes() {
+            const box = document.getElementById("access-role-panels");
+            if (!box) { return; }
+            const role = state.accessRoles.find((r) => r.id === selectedAccessRoleID);
+            // A brand-new role defaults to all panels checked.
+            const granted = new Set(role ? (role.panels || []) : accessGrantablePanels);
+            box.innerHTML = accessGrantablePanels.map((p) =>
+                "<label class=\"access-check-row\"><input type=\"checkbox\" data-access-panel=\"" + p + "\""
+                + (granted.has(p) ? " checked" : "") + "> " + escapeHTML(panelLabel(p)) + "</label>"
+            ).join("");
+        }
+
+        function selectAccessRole(id) {
+            selectedAccessRoleID = id;
+            const role = state.accessRoles.find((r) => r.id === id);
+            document.getElementById("access-role-name").value = role ? role.name : "";
+            document.getElementById("access-role-description").value = role ? (role.description || "") : "";
+            const title = document.getElementById("access-role-editor-title");
+            if (title) { title.textContent = role ? ("Edit: " + role.name) : "Role editor"; }
+            const del = document.getElementById("delete-access-role-button");
+            if (del) { del.style.display = (role && !role.builtin) ? "" : "none"; }
+            renderAccessRoleList();
+            renderAccessPanelCheckboxes();
+        }
+
+        function clearAccessRoleForm() {
+            selectedAccessRoleID = 0;
+            const nameEl = document.getElementById("access-role-name");
+            const descEl = document.getElementById("access-role-description");
+            if (nameEl) { nameEl.value = ""; }
+            if (descEl) { descEl.value = ""; }
+            const title = document.getElementById("access-role-editor-title");
+            if (title) { title.textContent = "New role"; }
+            renderAccessRoleList();
+            renderAccessPanelCheckboxes();
+        }
+
+        function selectedAccessPanelKeys() {
+            return Array.from(document.querySelectorAll("#access-role-panels [data-access-panel]:checked"))
+                .map((el) => el.dataset.accessPanel);
+        }
+
+        async function saveAccessRole(event) {
+            event.preventDefault();
+            const body = {
+                name: document.getElementById("access-role-name").value.trim(),
+                description: document.getElementById("access-role-description").value.trim(),
+                panels: selectedAccessPanelKeys(),
+            };
+            if (!body.name) { setNotice("Role name is required", true); return; }
+            try {
+                if (selectedAccessRoleID) {
+                    await api("/api/access-roles/" + selectedAccessRoleID, { method: "PUT", body: JSON.stringify(body) });
+                } else {
+                    await api("/api/access-roles", { method: "POST", body: JSON.stringify(body) });
+                }
+                setNotice("Access role saved");
+                clearAccessRoleForm();
+                await refreshAccessView();
+            } catch (error) {
+                setNotice(error.message || "Failed to save role", true);
+            }
+        }
+
+        async function deleteAccessRoleAction() {
+            if (!selectedAccessRoleID) { return; }
+            try {
+                await api("/api/access-roles/" + selectedAccessRoleID, { method: "DELETE" });
+                setNotice("Access role deleted");
+                clearAccessRoleForm();
+                await refreshAccessView();
+            } catch (error) {
+                setNotice(error.message || "Failed to delete role", true);
+            }
+        }
+
+        function renderAccessAssignUserOptions() {
+            const sel = document.getElementById("access-assign-user");
+            if (!sel) { return; }
+            const users = (state.users || []).filter((u) => (u.user_type || "user") !== "agent");
+            const current = sel.value;
+            sel.innerHTML = "<option value=\"\">Select a user…</option>" + users.map((u) =>
+                "<option value=\"" + escapeHTML(u.user_id || u.id) + "\">" + escapeHTML(u.username || u.user_id) + "</option>"
+            ).join("");
+            if (current) { sel.value = current; }
+        }
+
+        async function renderAccessAssignRoles() {
+            const box = document.getElementById("access-assign-roles");
+            const sel = document.getElementById("access-assign-user");
+            if (!box || !sel) { return; }
+            const userID = sel.value;
+            const assigned = new Set();
+            if (userID) {
+                try {
+                    const res = await api("/api/access-roles/memberships?user_id=" + encodeURIComponent(userID));
+                    (res && res.role_ids ? res.role_ids : []).forEach((id) => assigned.add(id));
+                } catch (e) { /* ignore */ }
+            }
+            box.innerHTML = state.accessRoles.map((role) =>
+                "<label class=\"access-check-row\"><input type=\"checkbox\" data-assign-role=\"" + role.id + "\""
+                + (assigned.has(role.id) ? " checked" : "") + "> " + escapeHTML(role.name) + "</label>"
+            ).join("") || "<div class=\"meta\">No roles to assign.</div>";
+        }
+
+        async function saveAccessAssignment(event) {
+            event.preventDefault();
+            const sel = document.getElementById("access-assign-user");
+            const userID = sel ? sel.value : "";
+            if (!userID) { setNotice("Select a user first", true); return; }
+            const roleIDs = Array.from(document.querySelectorAll("#access-assign-roles [data-assign-role]:checked"))
+                .map((el) => Number(el.dataset.assignRole));
+            try {
+                await api("/api/access-roles/memberships", { method: "PUT", body: JSON.stringify({ user_id: userID, role_ids: roleIDs }) });
+                setNotice("Roles assigned");
+            } catch (error) {
+                setNotice(error.message || "Failed to assign roles", true);
+            }
+        }
+
+        function setupAccessView() {
+            const form = document.getElementById("access-role-form");
+            if (form) { form.addEventListener("submit", saveAccessRole); }
+            const newBtn = document.getElementById("new-access-role-button");
+            if (newBtn) { newBtn.addEventListener("click", clearAccessRoleForm); }
+            const resetBtn = document.getElementById("reset-access-role-button");
+            if (resetBtn) { resetBtn.addEventListener("click", clearAccessRoleForm); }
+            const delBtn = document.getElementById("delete-access-role-button");
+            if (delBtn) { delBtn.addEventListener("click", deleteAccessRoleAction); }
+            const assignForm = document.getElementById("access-assign-form");
+            if (assignForm) { assignForm.addEventListener("submit", saveAccessAssignment); }
+            const userSel = document.getElementById("access-assign-user");
+            if (userSel) { userSel.addEventListener("change", renderAccessAssignRoles); }
         }
 
         function connectLiveUpdates() {
@@ -9423,6 +9649,7 @@
         setupCommandPalette();
         setupChat();
         setupBoardKeyboardNav();
+        setupAccessView();
         state.viewScrollByPanel = loadStoredViewScrollByPanel();
         state.currentView = loadStoredSelectedView() || state.currentView;
         switchView(state.currentView, { restoreScroll: false });

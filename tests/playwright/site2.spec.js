@@ -2183,3 +2183,7 @@ test("account menu is a single 'Account settings' entry (TK-50)", async ({ page 
   await expect(page.locator("#account-modal")).toHaveClass(/open/);
   await expect(page.locator("#account-modal-title")).toHaveText("Account settings");
 });
+
+test("admin sees the Access (access-roles) nav entry (TK-135)", async ({ page }) => {
+  await expect(page.locator('#admin-nav button[data-view="access"]')).toBeVisible();
+});

@@ -859,6 +859,42 @@
                     </div>
                 </section>
 
+                <!-- Access roles (TK-135): per-panel feature flags -->
+                <section id="view-access" class="view">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Access roles</h2>
+                            <button id="new-access-role-button" class="btn btn-primary" type="button">New role</button>
+                        </div>
+                        <p class="meta">Each access role grants a set of panels. A user sees the union of their roles' panels; a user with no roles sees all standard panels. Admins always see everything.</p>
+                        <div id="access-role-list" class="item-list"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h2 id="access-role-editor-title">Role editor</h2></div>
+                        <form id="access-role-form" class="form-stack">
+                            <div class="field"><label for="access-role-name">Name</label><input id="access-role-name" required></div>
+                            <div class="field"><label for="access-role-description">Description</label><textarea id="access-role-description"></textarea></div>
+                            <div class="field">
+                                <label>Panels this role grants</label>
+                                <div id="access-role-panels" class="item-list"></div>
+                            </div>
+                            <div class="form-actions">
+                                <button id="save-access-role-button" class="btn btn-primary" type="submit">Save</button>
+                                <button id="delete-access-role-button" class="btn btn-danger" type="button">Delete</button>
+                                <button id="reset-access-role-button" class="btn btn-ghost" type="button">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h2>Assign roles to a user</h2></div>
+                        <form id="access-assign-form" class="form-stack">
+                            <div class="field"><label for="access-assign-user">User</label><select id="access-assign-user"></select></div>
+                            <div class="field"><label>Roles</label><div id="access-assign-roles" class="item-list"></div></div>
+                            <div class="form-actions"><button id="save-access-assign-button" class="btn btn-primary" type="submit">Save assignment</button></div>
+                        </form>
+                    </div>
+                </section>
+
                 <!-- Roles -->
                 <section id="view-roles" class="view split">
                     <div class="card">
