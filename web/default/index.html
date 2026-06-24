@@ -515,33 +515,35 @@
                 </section>
 
                 <!-- Chat / multiplayer rooms -->
-                <section id="view-chat" class="view split">
-                    <div class="card">
-                        <div class="card-header">
-                            <div>
-                                <h2>Rooms</h2>
-                                <p class="meta">Chat with your team and agents.</p>
+                <section id="view-chat" class="view">
+                    <div class="chat-shell">
+                        <div class="chat-pane chat-sidebar">
+                            <div class="card-header">
+                                <div>
+                                    <h2>Rooms</h2>
+                                    <p class="meta">Chat with your team and agents.</p>
+                                </div>
+                                <button id="new-room-button" class="btn btn-primary" type="button">New room</button>
                             </div>
-                            <button id="new-room-button" class="btn btn-primary" type="button">New room</button>
+                            <div id="chat-rooms-list" class="item-list"></div>
                         </div>
-                        <div id="chat-rooms-list" class="item-list"></div>
-                    </div>
-                    <div class="card" id="chat-room-view">
-                        <div class="card-header">
-                            <div>
-                                <h2 id="chat-room-title">Select a room</h2>
-                                <p class="meta" id="chat-room-topic"></p>
+                        <div class="chat-pane chat-main" id="chat-room-view">
+                            <div class="card-header">
+                                <div>
+                                    <h2 id="chat-room-title">Select a room</h2>
+                                    <p class="meta" id="chat-room-topic"></p>
+                                </div>
+                                <div class="view-actions">
+                                    <button id="chat-join-button" class="btn" type="button" hidden>Join</button>
+                                    <button id="chat-leave-button" class="btn btn-ghost" type="button" hidden>Leave</button>
+                                </div>
                             </div>
-                            <div class="view-actions">
-                                <button id="chat-join-button" class="btn" type="button" hidden>Join</button>
-                                <button id="chat-leave-button" class="btn btn-ghost" type="button" hidden>Leave</button>
-                            </div>
+                            <div id="chat-messages" class="chat-messages"></div>
+                            <form id="chat-composer" class="chat-composer">
+                                <input id="chat-composer-input" type="text" autocomplete="off" placeholder="Message — @name, #label, or /task /new /invite /kick /join /leave /list /msg" disabled>
+                                <button id="chat-send-button" class="btn btn-primary" type="submit" disabled>Send</button>
+                            </form>
                         </div>
-                        <div id="chat-messages" class="chat-messages"></div>
-                        <form id="chat-composer" class="chat-composer">
-                            <input id="chat-composer-input" type="text" autocomplete="off" placeholder="Message — @name, #label, or /task /new /invite /kick /join /leave /list /msg" disabled>
-                            <button id="chat-send-button" class="btn btn-primary" type="submit" disabled>Send</button>
-                        </form>
                     </div>
                 </section>
 
