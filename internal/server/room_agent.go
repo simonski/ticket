@@ -34,32 +34,58 @@ func replyAsAgents(ctx context.Context, db *sql.DB, room store.Room, msg store.R
 		if merr != nil || !member {
 			continue
 		}
-		history, _ := store.ListRoomMessages(ctx, db, room.ID, 20, 0)
-		reply, rerr := roomAgentReply(ctx, agent.Username, msg.Body, history)
-		if rerr != nil {
-			log.Printf("server: room agent %s reply failed: %v", agent.Username, rerr)
-			continue
+		if postAgentReply(ctx, db, room, agent, msg.Body, hub) {
+			posted++
 		}
-		reply = strings.TrimSpace(reply)
-		if reply == "" {
-			continue
-		}
-		out, perr := store.PostRoomMessage(ctx, db, store.RoomMessage{
-			RoomID:   room.ID,
-			SenderID: agent.ID,
-			Kind:     "text",
-			Body:     reply,
-			Attrs:    store.Attrs{"agent": true},
-		})
-		if perr != nil {
-			continue
-		}
-		posted++
-		if hub != nil {
-			hub.broadcastRoomMessage(room.ID, out)
+	}
+	// In a DM (e.g. a user's personal agent), the agent answers every message from
+	// a human — no @mention required (TK-142).
+	if posted == 0 && strings.HasPrefix(room.Slug, "dm-") {
+		if sender, serr := store.GetUserByID(ctx, db, msg.SenderID); serr == nil && sender.UserType != "agent" {
+			members, _ := store.ListRoomMembers(ctx, db, room.ID)
+			for _, m := range members {
+				if m.MemberID == msg.SenderID {
+					continue
+				}
+				agent, gerr := store.GetUserByID(ctx, db, m.MemberID)
+				if gerr != nil || agent.UserType != "agent" {
+					continue
+				}
+				if postAgentReply(ctx, db, room, agent, msg.Body, hub) {
+					posted++
+				}
+			}
 		}
 	}
 	return posted
+}
+
+// postAgentReply generates and posts a single agent reply into the room.
+func postAgentReply(ctx context.Context, db *sql.DB, room store.Room, agent store.User, trigger string, hub *liveHub) bool {
+	history, _ := store.ListRoomMessages(ctx, db, room.ID, 20, 0)
+	reply, rerr := roomAgentReply(ctx, agent.Username, trigger, history)
+	if rerr != nil {
+		log.Printf("server: room agent %s reply failed: %v", agent.Username, rerr)
+		return false
+	}
+	reply = strings.TrimSpace(reply)
+	if reply == "" {
+		return false
+	}
+	out, perr := store.PostRoomMessage(ctx, db, store.RoomMessage{
+		RoomID:   room.ID,
+		SenderID: agent.ID,
+		Kind:     "text",
+		Body:     reply,
+		Attrs:    store.Attrs{"agent": true},
+	})
+	if perr != nil {
+		return false
+	}
+	if hub != nil {
+		hub.broadcastRoomMessage(room.ID, out)
+	}
+	return true
 }
 
 // defaultRoomAgentReply runs the configured chat/agent command one-shot, feeding

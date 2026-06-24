@@ -76,6 +76,14 @@ not viewing, a **red counter** appears next to that room in the list.
 Open any ticket and click **💬 Breakout** to open (or create) a chat room scoped
 to that ticket — handy for discussing an epic or story in context.
 
+## Your personal agent
+
+Every user gets their own agent, provisioned automatically the first time you open
+chat. It appears as a DM under **People & Agents** (e.g. `you's agent`). Talk to it
+there — each message is a **query** it answers in the thread (the DM is your
+ongoing session), and `/task <description>` delegates a tracked **ticket**. Only
+you see your personal-agent DM.
+
 ## Working with agents in chat
 
 Agents are first-class room members. There are two ways to involve them:

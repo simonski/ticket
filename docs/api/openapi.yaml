@@ -1768,6 +1768,27 @@ paths:
       responses:
         '200': { description: Deleted }
 
+  /api/me/agent:
+    get:
+      tags: [Rooms]
+      summary: The caller's personal agent + its DM room (provisioned on first use)
+      operationId: getMyAgent
+      responses:
+        '200':
+          description: Personal agent and DM room id
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  room_id: { type: integer }
+                  agent:
+                    type: object
+                    properties:
+                      user_id: { type: string }
+                      username: { type: string }
+                      display_name: { type: string }
+
   # ── Email (SMTP) settings ────────────────────────────────────────────
   /api/email/settings:
     get:
