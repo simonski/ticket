@@ -2084,3 +2084,6 @@ select {
 #view-access .access-role-item { display: block; width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 6px; background: var(--surface, #fff); border: 1px solid var(--border, #ddd); border-radius: 6px; cursor: pointer; }
 #view-access .access-role-item.active { border-color: var(--accent, #ff7a1a); }
 #view-access .access-check-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+
+/* Red unread counter near a room in the chat list (TK-139). */
+.chat-unread-badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 6px; border-radius: 9px; background: #e5484d; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; vertical-align: middle; }
