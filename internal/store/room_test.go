@@ -50,6 +50,11 @@ func TestRoomScopeAndCreate(t *testing.T) {
 func TestRoomJoinLeaveAndMembership(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
+	// The first public room in a scope is the permanent (non-leavable) room, so
+	// seed a primary "general" first; "team" is then an ordinary leavable room.
+	if _, err := CreateRoom(ctx, db, Room{Name: "general", CreatedBy: "alice"}); err != nil {
+		t.Fatalf("seed general: %v", err)
+	}
 	room, err := CreateRoom(ctx, db, Room{Name: "team", CreatedBy: "alice"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -73,6 +78,59 @@ func TestRoomJoinLeaveAndMembership(t *testing.T) {
 	}
 	if ok, _ := IsRoomMember(ctx, db, room.ID, "bob"); ok {
 		t.Fatalf("bob should have left")
+	}
+}
+
+func TestRoomPermanenceAndUnreadCounts(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	// First public global room is permanent; a second public room is leavable.
+	general, _ := CreateRoom(ctx, db, Room{Name: "general", CreatedBy: "admin"})
+	team, _ := CreateRoom(ctx, db, Room{Name: "team", CreatedBy: "admin"})
+	priv, _ := CreateRoom(ctx, db, Room{Name: "secret", Visibility: "private", CreatedBy: "admin"})
+
+	if p, _ := RoomIsPermanent(ctx, db, general); !p {
+		t.Fatal("the primary public room should be permanent")
+	}
+	if p, _ := RoomIsPermanent(ctx, db, team); p {
+		t.Fatal("a secondary public room should be leavable")
+	}
+	if p, _ := RoomIsPermanent(ctx, db, priv); p {
+		t.Fatal("a private room should be leavable")
+	}
+
+	// Leaving the permanent room is rejected.
+	_ = JoinRoom(ctx, db, general.ID, "bob", "member")
+	if err := LeaveRoom(ctx, db, general.ID, "bob"); err != ErrRoomPermanent {
+		t.Fatalf("leave permanent = %v, want ErrRoomPermanent", err)
+	}
+
+	// Unread counts: bob is a member of team; two messages arrive unread.
+	_ = JoinRoom(ctx, db, team.ID, "bob", "member")
+	_, _ = PostRoomMessage(ctx, db, RoomMessage{RoomID: team.ID, SenderID: "admin", Body: "hi"})
+	_, _ = PostRoomMessage(ctx, db, RoomMessage{RoomID: team.ID, SenderID: "admin", Body: "again"})
+	counts, err := RoomUnreadCounts(ctx, db, "bob")
+	if err != nil {
+		t.Fatalf("unread counts: %v", err)
+	}
+	if counts[team.ID] != 2 {
+		t.Fatalf("team unread = %d, want 2", counts[team.ID])
+	}
+	// After marking read, the count clears.
+	_ = MarkRoomRead(ctx, db, team.ID, "bob")
+	counts, _ = RoomUnreadCounts(ctx, db, "bob")
+	if counts[team.ID] != 0 {
+		t.Fatalf("team unread after read = %d, want 0", counts[team.ID])
+	}
+
+	// FindRoomByName resolves case-insensitively.
+	found, err := FindRoomByName(ctx, db, "TEAM", "bob", nil)
+	if err != nil || found.ID != team.ID {
+		t.Fatalf("find team: %v (id=%d)", err, found.ID)
+	}
+	if _, err := FindRoomByName(ctx, db, "nope", "bob", nil); err == nil {
+		t.Fatal("unknown room should error")
 	}
 }
 

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -28,6 +29,8 @@ type Room struct {
 	// Transient, populated per-request by the API layer.
 	MemberCount int  `json:"member_count"`
 	Unread      bool `json:"unread"`
+	UnreadCount int  `json:"unread_count"`
+	Permanent   bool `json:"permanent"` // global + project primary rooms cannot be left
 }
 
 // Scope returns "global", "project", or "breakout".
@@ -235,9 +238,111 @@ func JoinRoom(ctx context.Context, db *sql.DB, roomID int64, memberID, role stri
 }
 
 // LeaveRoom removes a member from a room.
+// ErrRoomPermanent is returned when a member tries to leave a non-leavable room
+// (the global public room or a project's primary room).
+var ErrRoomPermanent = errors.New("this room cannot be left")
+
 func LeaveRoom(ctx context.Context, db *sql.DB, roomID int64, memberID string) error {
-	_, err := db.ExecContext(ctx, `DELETE FROM room_members WHERE room_id = ? AND member_id = ?`, roomID, strings.TrimSpace(memberID))
-	return err
+	room, err := GetRoom(ctx, db, roomID)
+	if err != nil {
+		return err
+	}
+	permanent, perr := RoomIsPermanent(ctx, db, room)
+	if perr != nil {
+		return perr
+	}
+	if permanent {
+		return ErrRoomPermanent
+	}
+	_, derr := db.ExecContext(ctx, `DELETE FROM room_members WHERE room_id = ? AND member_id = ?`, roomID, strings.TrimSpace(memberID))
+	return derr
+}
+
+// RoomIsPermanent reports whether a room is the primary (non-leavable) room for
+// its scope: the lowest-id public global room, or a project's lowest-id public
+// room. Breakout (ticket) and private rooms are always leavable.
+func RoomIsPermanent(ctx context.Context, db *sql.DB, room Room) (bool, error) {
+	if room.Archived || room.Visibility != "public" || strings.TrimSpace(room.TicketID) != "" {
+		return false, nil
+	}
+	var primaryID int64
+	var err error
+	if room.ProjectID == nil {
+		err = db.QueryRowContext(ctx, `SELECT room_id FROM rooms WHERE project_id IS NULL AND visibility = 'public' AND archived = 0 ORDER BY room_id LIMIT 1`).Scan(&primaryID)
+	} else {
+		err = db.QueryRowContext(ctx, `SELECT room_id FROM rooms WHERE project_id = ? AND ticket_id = '' AND visibility = 'public' AND archived = 0 ORDER BY room_id LIMIT 1`, *room.ProjectID).Scan(&primaryID)
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return primaryID == room.ID, nil
+}
+
+// RoomUnreadCounts returns, per room the member belongs to, how many messages
+// arrived after their last read (for the unread badge).
+func RoomUnreadCounts(ctx context.Context, db *sql.DB, memberID string) (map[int64]int, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT rm.room_id, COUNT(msg.message_id)
+		FROM room_members rm
+		JOIN room_messages msg ON msg.room_id = rm.room_id
+		WHERE rm.member_id = ? AND (rm.last_read_at = '' OR msg.created_at > rm.last_read_at)
+		GROUP BY rm.room_id`, strings.TrimSpace(memberID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		var n int
+		if serr := rows.Scan(&id, &n); serr != nil {
+			return nil, serr
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
+// FindRoomByName resolves a visible room by name or slug (case-insensitive),
+// preferring the current project scope, then global, that the member can see.
+func FindRoomByName(ctx context.Context, db *sql.DB, name, memberID string, projectID *int64) (Room, error) {
+	needle := strings.ToLower(strings.TrimSpace(name))
+	if needle == "" {
+		return Room{}, errors.New("room name is required")
+	}
+	rows, err := db.QueryContext(ctx, `SELECT `+roomColumns+` FROM rooms
+		WHERE archived = 0 AND (LOWER(name) = ? OR LOWER(slug) = ?)
+		  AND (visibility = 'public' OR room_id IN (SELECT room_id FROM room_members WHERE member_id = ?))
+		ORDER BY (project_id IS NOT NULL) DESC, room_id ASC`, needle, needle, strings.TrimSpace(memberID))
+	if err != nil {
+		return Room{}, err
+	}
+	defer rows.Close()
+	var match *Room
+	for rows.Next() {
+		r, serr := scanRoom(rows)
+		if serr != nil {
+			return Room{}, serr
+		}
+		// Prefer a room in the active project; otherwise take the first.
+		if projectID != nil && r.ProjectID != nil && *r.ProjectID == *projectID {
+			return r, nil
+		}
+		if match == nil {
+			rc := r
+			match = &rc
+		}
+	}
+	if rerr := rows.Err(); rerr != nil {
+		return Room{}, rerr
+	}
+	if match == nil {
+		return Room{}, fmt.Errorf("no room named %q", name)
+	}
+	return *match, nil
 }
 
 // IsRoomMember reports whether a member belongs to a room.
