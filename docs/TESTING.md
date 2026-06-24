@@ -5,23 +5,21 @@
 | Target                | What it covers                                      | Duration |
 |-----------------------|-----------------------------------------------------|----------|
 | `make test`           | Ultra-fast default unit packages (`config`, `password`, `web`) | ~1s |
-| `make test-fast`      | Recommended developer loop: unit + JS API + Go API smoke | ~7s |
+| `make test-fast`      | Recommended developer loop: unit + Go API smoke | ~7s |
 | `make test-unit`      | Config, password hashing, web package               | ~1s      |
 | `make test-api-smoke` | Fast Go API smoke packages (`internal/client`, `internal/server`) | ~2s |
 | `make test-cli`       | CLI package tests (`cmd/tk`)                        | ~10s     |
 | `make test-contract`  | Shared service contract tests (`libticket`)         | ~2s      |
 | `make test-store`     | Store package tests (`internal/store`)              | ~20s     |
-| `make test-api-js`    | JavaScript API client-library tests (`web/site2/api.test.js`) | ~2s |
 | `make test-api-cli`   | Full CLI/API contract path (`cmd/tk`, client, server, libticket) | ~14s |
-| `make test-api`       | Both API suites (`test-api-js` + `test-api-cli`)    | ~14s     |
-| `make test-browser`   | Fast browser smoke suite (`auth`, `home`, `navigation`, `tickets`) | ~13s |
-| `make test-browser-full` | Full browser E2E Playwright suite                | ~12s     |
+| `make test-api`       | Alias for `test-api-cli`                            | ~14s     |
+| `make test-browser`   | Browser suite over the live UI (`site2`, web/default+shared) | ~1m |
+| `make test-browser-full` | Browser suite (`site2`)                          | ~1m      |
 | `make test-integration` | Store + CLI/API Go suites                        | ~90s     |
 | `make test-go-cover`  | All Go tests with per-package coverage thresholds   | ~30s     |
 | `make ci-verify`      | Same verify sequence as the GitHub verify job       | varies   |
 | `make ci-browser`     | Same browser sequence as the GitHub browser job     | ~12-15s  |
 | `make ci`             | Same verify + browser flow as GitHub Actions        | varies   |
-| `make test-browser`| Full browser tests against the web UI               | ~12s     |
 | `make test-quickstart`| Executable QUICKSTART/TUTORIAL tests (see below)    | ~6s      |
 | `make test-todo-example` | Reproducible todo tutorial seed + verification  | ~6s      |
 | `make testscripts`    | Shell-based CLI harness scenarios                   | ~3s      |
