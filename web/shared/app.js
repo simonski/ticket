@@ -80,6 +80,7 @@
             drag: null,
             liveSocket: null,
             activeRoomID: 0,
+            lastRoomID: 0,
             rooms: [],
             liveRefreshTimer: null,
             refinementSocket: null,
@@ -2308,15 +2309,22 @@
                 const scoped = state.rooms.filter((r) => roomScope(r) === g[0]);
                 if (!scoped.length) { return; }
                 html += "<div class=\"chat-room-group\">" + escapeHTML(g[1]) + "</div>";
-                html += scoped.map((r) =>
-                    "<button type=\"button\" class=\"chat-room-item" + (r.room_id === state.activeRoomID ? " active" : "") + (r.unread ? " unread" : "") + "\" data-room-id=\"" + r.room_id + "\">" +
-                    (r.unread ? "<span class=\"chat-unread-dot\">*</span> " : "") +
-                    (r.visibility === "private" ? "🔒 " : "# ") + escapeHTML(r.name) +
-                    "<span class=\"chat-room-count\">" + (r.member_count || 0) + "</span></button>").join("");
+                html += scoped.map((r) => {
+                    const active = r.room_id === state.activeRoomID;
+                    const n = active ? 0 : (r.unread_count || 0);
+                    const badge = n > 0 ? "<span class=\"chat-unread-badge\">" + (n > 99 ? "99+" : n) + "</span>" : "";
+                    return "<button type=\"button\" class=\"chat-room-item" + (active ? " active" : "") + (n > 0 ? " unread" : "") + "\" data-room-id=\"" + r.room_id + "\">" +
+                        (r.visibility === "private" ? "🔒 " : "# ") + escapeHTML(r.name) + badge +
+                        "<span class=\"chat-room-count\">" + (r.member_count || 0) + "</span></button>";
+                }).join("");
             });
             list.innerHTML = html;
         }
         function selectRoom(roomID) {
+            // Remember where we came from so /leave can return there.
+            if (state.activeRoomID && state.activeRoomID !== roomID) {
+                state.lastRoomID = state.activeRoomID;
+            }
             state.activeRoomID = roomID;
             const room = state.rooms.find((r) => r.room_id === roomID);
             const titleEl = document.getElementById("chat-room-title");
@@ -2335,7 +2343,8 @@
             const joinBtn = document.getElementById("chat-join-button");
             const leaveBtn = document.getElementById("chat-leave-button");
             if (joinBtn) { joinBtn.hidden = false; }
-            if (leaveBtn) { leaveBtn.hidden = false; }
+            // The public global room and a project's room cannot be left.
+            if (leaveBtn) { leaveBtn.hidden = Boolean(room && room.permanent); }
             subscribeRoom(roomID);
             // Loading messages marks the room read server-side; refresh the list
             // afterwards so the unread marker clears.
@@ -2359,16 +2368,30 @@
             const body = String(input.value || "").trim();
             if (!body) { return; }
             const roomID = state.activeRoomID;
+            const isLeave = body.toLowerCase() === "/leave";
             input.value = "";
             apiClient.post("/api/rooms/" + roomID + "/messages", { body: body })
                 .then((msg) => loadRooms().then(() => {
                     renderRoomsList();
-                    // /msg routes to a DM room and /new creates a room — follow the
-                    // message if the server placed it somewhere other than here.
+                    if (isLeave) {
+                        // After leaving, return to the previous room (or a default).
+                        selectRoom(roomReturnTarget(roomID));
+                        return;
+                    }
+                    // /msg routes to a DM room and /new + /join switch rooms — follow
+                    // the message if the server placed it somewhere other than here.
                     const target = (msg && msg.room_id && msg.room_id !== roomID) ? msg.room_id : roomID;
                     if (target !== roomID) { selectRoom(target); } else { loadRoomMessages(roomID); }
                 }))
                 .catch((err) => setNotice("Send failed: " + err.message, true));
+        }
+        // roomReturnTarget picks where to land after leaving `leftRoomID`: the last
+        // room if it still exists, else a sensible default.
+        function roomReturnTarget(leftRoomID) {
+            if (state.lastRoomID && state.lastRoomID !== leftRoomID && state.rooms.some((r) => r.room_id === state.lastRoomID)) {
+                return state.lastRoomID;
+            }
+            return pickDefaultRoomID();
         }
         function createRoomFromPrompt() {
             Promise.resolve(uiPrompt("New room name", "", "Create")).then((name) => {
@@ -2432,7 +2455,11 @@
             if (leaveBtn) {
                 leaveBtn.addEventListener("click", () => {
                     if (!state.activeRoomID) { return; }
-                    apiClient.post("/api/rooms/" + state.activeRoomID + "/leave").then(() => loadRooms()).then(renderRoomsList).catch(() => {});
+                    const left = state.activeRoomID;
+                    apiClient.post("/api/rooms/" + left + "/leave")
+                        .then(() => loadRooms())
+                        .then(() => { renderRoomsList(); selectRoom(roomReturnTarget(left)); })
+                        .catch((err) => setNotice(err.message || "Cannot leave this room", true));
                 });
             }
         }

@@ -55,13 +55,18 @@ Type these in the composer:
 
 | Command | Does |
 |---------|------|
-| `/new <name>` | Create a room |
-| `/join` · `/leave` | Join or leave the current room |
+| `/new <name>` | Create a room and switch into it |
+| `/join <name>` | Join a room by name and switch into it (just switches if you're already a member) |
+| `/leave` | Leave the current room and return to the previous room |
 | `/invite <username>` | Add a user to the room (and its project) |
 | `/kick <username>` | Remove a user from the room |
 | `/list` | List rooms alphabetically with member counts |
 | `/msg @username <message>` | Send a direct message |
 | `/task [@agent] <description>` | Create a tracked ticket (see below) |
+
+The **public room** and a **project's room** are permanent — you can't leave them
+(no Leave button, and `/leave` is rejected). When messages arrive in rooms you're
+not viewing, a **red counter** appears next to that room in the list.
 
 ### Breakout rooms from a ticket
 
