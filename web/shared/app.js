@@ -82,6 +82,8 @@
             activeRoomID: 0,
             lastRoomID: 0,
             rooms: [],
+            chatSort: "recency",
+            chatCollapsed: {},
             liveRefreshTimer: null,
             refinementSocket: null,
             refinementTicketId: null,
@@ -600,6 +602,9 @@
 
         function isAdmin() {
             return Boolean(state.status && state.status.user && state.status.user.role === "admin");
+        }
+        function currentUserID() {
+            return (state.status && state.status.user && (state.status.user.user_id || state.status.user.id)) || "";
         }
 
         // canAccessPanel gates a nav view by the user's effective panel set
@@ -2248,8 +2253,13 @@
 
         // ── Chat / multiplayer rooms (TK-118 / S5) ───────────────────────
         function roomScope(room) {
+            if (room.slug && room.slug.indexOf("dm-") === 0) { return "people"; }
             if (!room.project_id) { return "global"; }
             return room.ticket_id ? "breakout" : "project";
+        }
+        // Display label for a room (DMs show the conversation, not the raw name).
+        function roomLabel(room) {
+            return String(room.name || "room");
         }
         // @name and #label become highlighted entities in the message feed (S6).
         function highlightRoomText(body) {
@@ -2303,22 +2313,44 @@
                 list.innerHTML = "<div class=\"meta\" style=\"padding:10px\">No rooms yet — create one.</div>";
                 return;
             }
-            const groups = [["global", "Global"], ["project", "Project"], ["breakout", "Breakouts"]];
+            const groups = [["global", "Global"], ["project", "Project"], ["people", "People & Agents"], ["breakout", "Breakouts"]];
+            const sortRooms = (rooms) => rooms.slice().sort((a, b) => {
+                if (state.chatSort === "alpha") {
+                    return roomLabel(a).toLowerCase().localeCompare(roomLabel(b).toLowerCase());
+                }
+                return String(b.updated_at || "").localeCompare(String(a.updated_at || "")); // recency
+            });
             let html = "";
             groups.forEach((g) => {
-                const scoped = state.rooms.filter((r) => roomScope(r) === g[0]);
+                const scoped = sortRooms(state.rooms.filter((r) => roomScope(r) === g[0]));
                 if (!scoped.length) { return; }
-                html += "<div class=\"chat-room-group\">" + escapeHTML(g[1]) + "</div>";
+                const collapsed = Boolean(state.chatCollapsed[g[0]]);
+                // Sum unread across the group's non-active rooms (shown on the header when collapsed).
+                const groupUnread = scoped.reduce((sum, r) => sum + (r.room_id === state.activeRoomID ? 0 : (r.unread_count || 0)), 0);
+                const headerBadge = (collapsed && groupUnread > 0) ? "<span class=\"chat-unread-badge\">" + (groupUnread > 99 ? "99+" : groupUnread) + "</span>" : "";
+                html += "<button type=\"button\" class=\"chat-room-group\" data-chat-group=\"" + g[0] + "\">" +
+                    "<span class=\"chat-group-caret\">" + (collapsed ? "▸" : "▾") + "</span> " + escapeHTML(g[1]) + headerBadge + "</button>";
+                if (collapsed) { return; }
                 html += scoped.map((r) => {
                     const active = r.room_id === state.activeRoomID;
                     const n = active ? 0 : (r.unread_count || 0);
                     const badge = n > 0 ? "<span class=\"chat-unread-badge\">" + (n > 99 ? "99+" : n) + "</span>" : "";
+                    const icon = g[0] === "people" ? "@ " : (r.visibility === "private" ? "🔒 " : "# ");
                     return "<button type=\"button\" class=\"chat-room-item" + (active ? " active" : "") + (n > 0 ? " unread" : "") + "\" data-room-id=\"" + r.room_id + "\">" +
-                        (r.visibility === "private" ? "🔒 " : "# ") + escapeHTML(r.name) + badge +
+                        icon + escapeHTML(roomLabel(r)) + badge +
                         "<span class=\"chat-room-count\">" + (r.member_count || 0) + "</span></button>";
                 }).join("");
             });
             list.innerHTML = html;
+            // Wire group collapse toggles.
+            list.querySelectorAll("[data-chat-group]").forEach((el) => {
+                el.addEventListener("click", () => {
+                    const key = el.dataset.chatGroup;
+                    state.chatCollapsed[key] = !state.chatCollapsed[key];
+                    try { localStorage.setItem("site2.chatCollapsed", JSON.stringify(state.chatCollapsed)); } catch (e) { /* ignore */ }
+                    renderRoomsList();
+                });
+            });
         }
         function selectRoom(roomID) {
             // Remember where we came from so /leave can return there.
@@ -2345,6 +2377,9 @@
             if (joinBtn) { joinBtn.hidden = false; }
             // The public global room and a project's room cannot be left.
             if (leaveBtn) { leaveBtn.hidden = Boolean(room && room.permanent); }
+            const renameBtn = document.getElementById("chat-rename-button");
+            // You can rename a room you own (or as admin).
+            if (renameBtn) { renameBtn.hidden = !(room && (room.created_by === currentUserID() || isAdmin())); }
             subscribeRoom(roomID);
             // Loading messages marks the room read server-side; refresh the list
             // afterwards so the unread marker clears.
@@ -2442,6 +2477,37 @@
             if (newBtn) { newBtn.addEventListener("click", createRoomFromPrompt); }
             const breakoutBtn = document.getElementById("ticket-breakout-button");
             if (breakoutBtn) { breakoutBtn.addEventListener("click", () => openBreakoutRoom(state.activeTicket)); }
+            // Restore persisted sort + group-collapse preferences.
+            try {
+                const s = localStorage.getItem("site2.chatSort");
+                if (s === "alpha" || s === "recency") { state.chatSort = s; }
+                const c = localStorage.getItem("site2.chatCollapsed");
+                if (c) { state.chatCollapsed = JSON.parse(c) || {}; }
+            } catch (e) { /* ignore */ }
+            const sortBtn = document.getElementById("chat-sort-button");
+            if (sortBtn) {
+                const syncSortLabel = () => { sortBtn.textContent = state.chatSort === "alpha" ? "↕ A–Z" : "↕ Recent"; };
+                syncSortLabel();
+                sortBtn.addEventListener("click", () => {
+                    state.chatSort = state.chatSort === "alpha" ? "recency" : "alpha";
+                    try { localStorage.setItem("site2.chatSort", state.chatSort); } catch (e) { /* ignore */ }
+                    syncSortLabel();
+                    renderRoomsList();
+                });
+            }
+            const renameBtn = document.getElementById("chat-rename-button");
+            if (renameBtn) {
+                renameBtn.addEventListener("click", () => {
+                    if (!state.activeRoomID) { return; }
+                    const room = state.rooms.find((r) => r.room_id === state.activeRoomID);
+                    Promise.resolve(uiPrompt("Rename room", room ? room.name : "", "Rename")).then((name) => {
+                        const trimmed = String(name || "").trim();
+                        if (!trimmed) { return null; }
+                        return api("/api/rooms/" + state.activeRoomID, { method: "PATCH", body: JSON.stringify({ name: trimmed }) })
+                            .then(() => loadRooms()).then(() => { renderRoomsList(); selectRoom(state.activeRoomID); });
+                    }).catch((err) => setNotice(err.message || "Rename failed", true));
+                });
+            }
             const composer = document.getElementById("chat-composer");
             if (composer) { composer.addEventListener("submit", (event) => { event.preventDefault(); sendRoomMessage(); }); }
             const joinBtn = document.getElementById("chat-join-button");
