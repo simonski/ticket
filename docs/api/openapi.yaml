@@ -70,6 +70,21 @@ components:
       description: Agent UUID as username, agent password as password
 
   schemas:
+    AccessRole:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        builtin: { type: boolean }
+        panels: { type: array, items: { type: string } }
+    AccessRoleInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        panels: { type: array, items: { type: string } }
     Room:
       type: object
       description: A multiplayer chat room. Scope is global (no project), project, or breakout (project + ticket).
@@ -1633,6 +1648,103 @@ components:
         error: "ticket not found"
 
 paths:
+  # ── Access roles (per-panel feature flags) ───────────────────────────
+  /api/me/panels:
+    get:
+      tags: [Access]
+      summary: Effective panel set for the current user
+      operationId: getMyPanels
+      responses:
+        '200':
+          description: Panels
+          content:
+            application/json:
+              schema: { type: object, properties: { panels: { type: array, items: { type: string } } } }
+  /api/panels:
+    get:
+      tags: [Access]
+      summary: Catalogue of grantable and all panels (admin)
+      operationId: listPanels
+      responses:
+        '200': { description: Panel catalogue }
+  /api/access-roles:
+    get:
+      tags: [Access]
+      summary: List access roles (admin)
+      operationId: listAccessRoles
+      responses:
+        '200':
+          description: Access roles
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AccessRole' } }
+    post:
+      tags: [Access]
+      summary: Create an access role (admin)
+      operationId: createAccessRole
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccessRoleInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessRole' }
+  /api/access-roles/memberships:
+    get:
+      tags: [Access]
+      summary: Get a user's access-role ids (admin)
+      operationId: getUserAccessRoles
+      parameters:
+        - { name: user_id, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Membership }
+    put:
+      tags: [Access]
+      summary: Replace a user's access-role membership (admin)
+      operationId: setUserAccessRoles
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { user_id: { type: string }, role_ids: { type: array, items: { type: integer } } } }
+      responses:
+        '200': { description: Updated }
+  /api/access-roles/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Access]
+      summary: Get an access role (admin)
+      operationId: getAccessRole
+      responses:
+        '200':
+          description: Access role
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessRole' }
+    put:
+      tags: [Access]
+      summary: Update an access role (admin)
+      operationId: updateAccessRole
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccessRoleInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessRole' }
+    delete:
+      tags: [Access]
+      summary: Delete an access role (admin)
+      operationId: deleteAccessRole
+      responses:
+        '200': { description: Deleted }
+
   # ── Chat rooms ───────────────────────────────────────────────────────
   /api/rooms:
     get:
