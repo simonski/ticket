@@ -9915,18 +9915,56 @@
                     .catch((err) => setNotice("Comment failed: " + err.message, true));
             });
         }
+        // afterTicketMutation refreshes ticket state + the board after a palette
+        // action changes a ticket, so the change is visible without a manual reload.
+        function afterTicketMutation() {
+            Promise.resolve().then(() => loadTickets()).then(() => {
+                if (typeof renderAll === "function") { renderAll(); }
+            }).catch(() => {});
+        }
+        // ticketLifecycleAction POSTs to a ticket lifecycle endpoint (next, previous,
+        // ready, complete, reopen, close, …) and reports the outcome.
+        function ticketLifecycleAction(key, action, label) {
+            return api("/api/tickets/" + encodeURIComponent(key) + "/" + action, { method: "POST", body: {} })
+                .then(() => { setNotice(key + " — " + label + "."); afterTicketMutation(); })
+                .catch((err) => setNotice(label + " failed: " + err.message, true));
+        }
+        function claimTicket(key) {
+            return api("/api/tickets/claim", { method: "POST", body: { ticket_ref: key } })
+                .then((res) => { setNotice(key + " — " + ((res && res.status) ? String(res.status).toLowerCase() : "claimed") + "."); afterTicketMutation(); })
+                .catch((err) => setNotice("Claim failed: " + err.message, true));
+        }
+        // ticketLifecycleItems is the second-level "Lifecycle…" submenu, pushed as a
+        // new frame so Esc pops back to the ticket's top-level actions (TK-169).
+        function ticketLifecycleItems(key) {
+            return [
+                { label: "Advance → next", run: () => ticketLifecycleAction(key, "next", "advanced") },
+                { label: "Move back ← previous", run: () => ticketLifecycleAction(key, "previous", "moved back") },
+                { label: "Mark ready", run: () => ticketLifecycleAction(key, "ready", "marked ready") },
+                { label: "Complete", run: () => ticketLifecycleAction(key, "complete", "completed") },
+                { label: "Reopen", run: () => ticketLifecycleAction(key, "reopen", "reopened") },
+                { label: "Close", run: () => ticketLifecycleAction(key, "close", "closed") },
+            ];
+        }
         function ticketActionItems(key) {
             return [
                 { label: "Open detail", run: () => openTicketByKey(key) },
                 { label: "Add comment…", run: () => promptTicketComment(key) },
+                { label: "Lifecycle…", title: key + " · lifecycle", submenu: () => ticketLifecycleItems(key) },
+                { label: "Claim", run: () => claimTicket(key) },
+                { label: "Open in chat (breakout)", run: () => openBreakoutRoom((state.tickets || []).find((t) => String(t.id || "").toUpperCase() === key) || { id: key }) },
                 { label: "Copy key", run: () => { try { if (navigator.clipboard) { navigator.clipboard.writeText(key); } } catch (e) {} setNotice("Copied " + key + "."); } },
             ];
         }
-        function pushTicketActions(key) {
-            paletteStack.push({ kind: "actions", title: key, items: ticketActionItems(key) });
+        // pushActionsFrame pushes a generic action menu onto the palette stack.
+        function pushActionsFrame(title, items) {
+            paletteStack.push({ kind: "actions", title: title, items: items });
             paletteActiveIndex = 0;
             paletteEls.input.value = "";
             renderPalette();
+        }
+        function pushTicketActions(key) {
+            pushActionsFrame(key, ticketActionItems(key));
         }
         function popPaletteFrame() {
             if (paletteStack.length <= 1) { return false; }
@@ -9942,7 +9980,15 @@
             if (frame.kind === "actions") {
                 return frame.items
                     .filter((it) => !query || it.label.toLowerCase().includes(query))
-                    .map((it, i) => ({ left: String(i + 1), label: it.label, run: () => { closeCommandPalette(); it.run(); } }));
+                    .map((it, i) => ({
+                        left: String(i + 1),
+                        label: it.label,
+                        // A submenu pushes another frame (Esc pops back); a leaf
+                        // action closes the palette and runs.
+                        run: it.submenu
+                            ? () => pushActionsFrame(it.title || it.label, it.submenu())
+                            : () => { closeCommandPalette(); it.run(); },
+                    }));
             }
             const rank = (cmd) => (cmd.key === query ? 0 : cmd.key.startsWith(query) ? 1 : cmd.label.toLowerCase().startsWith(query) ? 2 : 3);
             const items = buildPaletteCommands()
