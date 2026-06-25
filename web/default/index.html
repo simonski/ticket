@@ -604,6 +604,7 @@
                                 <div>
                                     <h2 id="chat-room-title">Select a room</h2>
                                     <p class="meta" id="chat-room-topic"></p>
+                                    <p class="meta chat-presence" id="chat-presence" hidden></p>
                                 </div>
                                 <div class="view-actions">
                                     <button id="chat-rename-button" class="btn btn-ghost" type="button" hidden>Rename</button>
@@ -612,6 +613,7 @@
                                 </div>
                             </div>
                             <div id="chat-messages" class="chat-messages"></div>
+                            <div id="chat-typing" class="chat-typing-indicator" hidden></div>
                             <form id="chat-composer" class="chat-composer">
                                 <input id="chat-composer-input" type="text" autocomplete="off" placeholder="Message — @name, #label, or /task /new /invite /kick /join /leave /list /msg" disabled>
                                 <button id="chat-send-button" class="btn btn-primary" type="submit" disabled>Send</button>
