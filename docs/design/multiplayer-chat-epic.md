@@ -38,6 +38,16 @@ Sed-style substitution in the chat composer: `s/old/new/` (first match),
 - **Surface:** pure front-end in `web/shared/app.js` (composer input + keydown near
   `app.js:2596`). No API change for composer-only scope.
 
+**Resolved scope (TK-167):** the substitution targets your **previous composer
+message** (the last entry in the composer history) and loads the corrected text
+back into the composer for review — it is **not** auto-sent and does **not** edit a
+server-side message. This is the recognisable "sed correction" chat idiom while
+staying composer-only (no message-edit API). Invalid regex or no prior message →
+visible inline notice, composer left unchanged. The parser returns `{pattern,
+replacement, flags}` so a future explicit `target` (a selected ticket field) can be
+layered on without rework. Delimiter is any punctuation after `s` (so `s|/|-|g`
+works); flags limited to `g`/`i`.
+
 ---
 
 ## Story B (TK-168): Ephemeral agent backlog
