@@ -33,11 +33,12 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		if _, err := store.GetUserByToken(r.Context(), db, token); err != nil {
+		wsUser, err := store.GetUserByToken(r.Context(), db, token)
+		if err != nil {
 			writeAuthError(w, err)
 			return
 		}
-		if err := websocketServe(live, w, r); err != nil {
+		if err := websocketServe(live, w, r, wsUser.ID, presenceName(wsUser)); err != nil {
 			if strings.Contains(err.Error(), "websocket") || strings.Contains(err.Error(), "upgrade") {
 				writeStoreError(w, err)
 				return

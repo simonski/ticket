@@ -2546,6 +2546,55 @@
                     state.liveSocket.send(JSON.stringify({ type: "subscribe", room_id: roomID }));
                 }
             } catch (e) { /* ignore */ }
+            // Switching rooms clears any presence/typing state from the old room.
+            renderRoomPresence([]);
+            clearTypingIndicator();
+        }
+        // emitTyping sends a typing notice for the active room, throttled so we
+        // don't flood the socket on every keystroke.
+        function emitTyping() {
+            if (!state.activeRoomID) { return; }
+            const now = Date.now();
+            if (state._lastTypingSentAt && now - state._lastTypingSentAt < 1500) { return; }
+            state._lastTypingSentAt = now;
+            try {
+                if (state.liveSocket && state.liveSocket.readyState === 1) {
+                    state.liveSocket.send(JSON.stringify({ type: "typing", room_id: state.activeRoomID }));
+                }
+            } catch (e) { /* ignore */ }
+        }
+        // renderRoomPresence shows who is currently present in the active room
+        // (excluding the current user — "you" is implied).
+        function renderRoomPresence(users) {
+            const el = document.getElementById("chat-presence");
+            if (!el) { return; }
+            const me = currentUserID();
+            const others = (Array.isArray(users) ? users : []).filter((u) => u && u.user_id !== me);
+            if (!others.length) {
+                el.hidden = true;
+                el.textContent = "";
+                return;
+            }
+            const names = others.map((u) => String(u.name || u.user_id || "?"));
+            el.hidden = false;
+            el.textContent = "● " + names.join(", ") + (names.length === 1 ? " is here" : " are here");
+        }
+        function clearTypingIndicator() {
+            const el = document.getElementById("chat-typing");
+            if (el) { el.hidden = true; el.textContent = ""; }
+            if (state._typingTimer) { clearTimeout(state._typingTimer); state._typingTimer = null; }
+        }
+        // showTypingIndicator displays a transient "X is typing…" that auto-expires
+        // if no further typing notice arrives.
+        function showTypingIndicator(who) {
+            const me = currentUserID();
+            if (!who || who.user_id === me) { return; }
+            const el = document.getElementById("chat-typing");
+            if (!el) { return; }
+            el.hidden = false;
+            el.textContent = String(who.name || "Someone") + " is typing…";
+            if (state._typingTimer) { clearTimeout(state._typingTimer); }
+            state._typingTimer = setTimeout(clearTypingIndicator, 3000);
         }
         function setupChat() {
             const list = document.getElementById("chat-rooms-list");
@@ -2613,6 +2662,10 @@
                         composerInput.value = "";
                         chatHistoryIdx = chatHistory.length;
                     }
+                });
+                // Emit a debounced typing notice so others see "X is typing…".
+                composerInput.addEventListener("input", () => {
+                    if (composerInput.value) { emitTyping(); }
                 });
             }
             const joinBtn = document.getElementById("chat-join-button");
@@ -2979,6 +3032,18 @@
                     if (payload.type === "room_message") {
                         if (state.activeRoomID && Number(payload.room_id) === state.activeRoomID) {
                             loadRoomMessages(state.activeRoomID);
+                        }
+                        return;
+                    }
+                    if (payload.type === "room_presence") {
+                        if (state.activeRoomID && Number(payload.room_id) === state.activeRoomID) {
+                            renderRoomPresence(payload.payload || []);
+                        }
+                        return;
+                    }
+                    if (payload.type === "typing") {
+                        if (state.activeRoomID && Number(payload.room_id) === state.activeRoomID) {
+                            showTypingIndicator(payload.payload || {});
                         }
                         return;
                     }
