@@ -1160,6 +1160,151 @@
                 .replace(/'/g, "&#39;");
         }
 
+        // ── Rich chat rendering (TK-177) ─────────────────────────────────────
+        // A chat/refiner reply may append a single fenced ```render block holding a
+        // JSON render-spec describing how to present the answer (markdown text, a
+        // list, a table, or a bar/line chart). renderRichAgentText is the single
+        // shared entry point used by the refinement thread, the live streaming
+        // bubble, and (later) a general chat view. Everything is escaped before
+        // insertion, so untrusted model output cannot inject markup.
+
+        // extractRenderSpec splits an agent reply into prose and an optional parsed
+        // render-spec. Only the first ```render (or ~~~render) fence is honoured; a
+        // malformed block is ignored and its text left in the prose.
+        function extractRenderSpec(raw) {
+            const text = String(raw || "");
+            const re = /(^|\n)[ \t]*(```|~~~)[ \t]*render[ \t]*\n([\s\S]*?)\n[ \t]*\2[ \t]*(?=\n|$)/i;
+            const m = text.match(re);
+            if (!m) return { prose: text.trim(), spec: null };
+            let spec = null;
+            try {
+                const parsed = JSON.parse(m[3]);
+                if (parsed && Array.isArray(parsed.blocks) && parsed.blocks.length) spec = parsed;
+            } catch (_) { spec = null; }
+            if (!spec) return { prose: text.trim(), spec: null };
+            const prose = (text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim();
+            return { prose, spec };
+        }
+
+        // streamingProse returns the portion of an in-progress reply safe to show live —
+        // everything before a (possibly still-streaming) ```render fence — so the raw
+        // JSON never flashes in the bubble while the model is typing it.
+        function streamingProse(raw) {
+            const s = String(raw || "");
+            const m = s.match(/(^|\n)[ \t]*(```|~~~)[ \t]*render/i);
+            return (m ? s.slice(0, m.index) : s);
+        }
+
+        // renderMarkdownLite renders a conservative markdown subset to safe HTML: it
+        // escapes first, then re-introduces inline code, bold, italic, links and breaks.
+        function renderMarkdownLite(text) {
+            let html = escapeHTML(text);
+            html = html.replace(/`([^`]+)`/g, (_, c) => "<code>" + c + "</code>");
+            html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+            html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+            html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+                (_, t, u) => "<a href=\"" + u + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + t + "</a>");
+            return html.replace(/\n/g, "<br>");
+        }
+
+        function renderListBlockHTML(block) {
+            const items = Array.isArray(block.items) ? block.items : [];
+            if (!items.length) return "";
+            const tag = block.ordered ? "ol" : "ul";
+            const lis = items.map((it) => "<li>" + renderMarkdownLite(String(it)) + "</li>").join("");
+            return "<" + tag + " class=\"render-list\">" + lis + "</" + tag + ">";
+        }
+
+        function renderTableBlockHTML(block) {
+            const cols = Array.isArray(block.columns) ? block.columns : [];
+            const rows = Array.isArray(block.rows) ? block.rows : [];
+            if (!cols.length && !rows.length) return "";
+            let html = "<div class=\"render-table-wrap\"><table class=\"render-table\">";
+            if (cols.length) {
+                html += "<thead><tr>" + cols.map((c) => "<th>" + escapeHTML(String(c)) + "</th>").join("") + "</tr></thead>";
+            }
+            html += "<tbody>" + rows.map((r) => {
+                const cells = Array.isArray(r) ? r : [r];
+                return "<tr>" + cells.map((c) => "<td>" + escapeHTML(String(c)) + "</td>").join("") + "</tr>";
+            }).join("") + "</tbody></table></div>";
+            return html;
+        }
+
+        // renderChartBlockHTML draws a small inline-SVG bar or line chart (no external
+        // dependency) from labels + named series.
+        function renderChartBlockHTML(block) {
+            const labels = Array.isArray(block.labels) ? block.labels.map(String) : [];
+            const series = Array.isArray(block.series) ? block.series.filter((s) => s && Array.isArray(s.data)) : [];
+            if (!series.length) return "";
+            const type = String(block.chartType || "bar").toLowerCase() === "line" ? "line" : "bar";
+            const W = 480, H = 240, padL = 36, padR = 12, padT = 12, padB = 28;
+            const plotW = W - padL - padR, plotH = H - padT - padB;
+            let max = 0;
+            series.forEach((s) => s.data.forEach((v) => { const n = Number(v) || 0; if (n > max) max = n; }));
+            if (max <= 0) max = 1;
+            const n = Math.max(1, labels.length, Math.max.apply(null, series.map((s) => s.data.length)));
+            const colors = ["#4f8cff", "#ff7d4f", "#39c486", "#c879ff", "#ffc24f"];
+            const xLine = (i) => padL + (n <= 1 ? plotW / 2 : (plotW * i) / (n - 1));
+            const groupW = plotW / n;
+            const labelX = (i) => type === "line" ? xLine(i) : padL + i * groupW + groupW / 2;
+            const y = (v) => padT + plotH - (plotH * (Number(v) || 0)) / max;
+            const axisY = padT + plotH;
+            let body = "<line x1=\"" + padL + "\" y1=\"" + axisY + "\" x2=\"" + (W - padR) + "\" y2=\"" + axisY + "\" class=\"render-chart-axis\"/>" +
+                "<line x1=\"" + padL + "\" y1=\"" + padT + "\" x2=\"" + padL + "\" y2=\"" + axisY + "\" class=\"render-chart-axis\"/>";
+            if (type === "line") {
+                series.forEach((s, si) => {
+                    const pts = s.data.map((v, i) => xLine(i).toFixed(1) + "," + y(v).toFixed(1)).join(" ");
+                    body += "<polyline class=\"render-chart-line\" fill=\"none\" stroke=\"" + colors[si % colors.length] + "\" points=\"" + pts + "\"/>";
+                });
+            } else {
+                const barW = Math.max(2, (groupW * 0.7) / series.length);
+                series.forEach((s, si) => {
+                    s.data.forEach((v, i) => {
+                        const bx = padL + i * groupW + groupW * 0.15 + si * barW;
+                        const by = y(v);
+                        const bh = Math.max(0, axisY - by);
+                        body += "<rect x=\"" + bx.toFixed(1) + "\" y=\"" + by.toFixed(1) + "\" width=\"" + barW.toFixed(1) + "\" height=\"" + bh.toFixed(1) + "\" fill=\"" + colors[si % colors.length] + "\"/>";
+                    });
+                });
+            }
+            labels.forEach((lab, i) => {
+                body += "<text class=\"render-chart-label\" x=\"" + labelX(i).toFixed(1) + "\" y=\"" + (H - 8) + "\" text-anchor=\"middle\">" + escapeHTML(lab) + "</text>";
+            });
+            let legend = "";
+            if (series.length > 1 || (series[0] && series[0].name)) {
+                legend = "<div class=\"render-chart-legend\">" + series.map((s, si) =>
+                    "<span class=\"render-chart-key\"><span class=\"render-chart-swatch\" style=\"background:" + colors[si % colors.length] + "\"></span>" +
+                    escapeHTML(String(s.name || ("series " + (si + 1)))) + "</span>").join("") + "</div>";
+            }
+            return "<div class=\"render-chart\"><svg viewBox=\"0 0 " + W + " " + H + "\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\">" + body + "</svg>" + legend + "</div>";
+        }
+
+        function renderSpecBlocksHTML(spec) {
+            if (!spec || !Array.isArray(spec.blocks)) return "";
+            return spec.blocks.map((block) => {
+                if (!block || typeof block !== "object") return "";
+                switch (String(block.type || "").toLowerCase()) {
+                    case "text": return "<div class=\"render-text\">" + renderMarkdownLite(String(block.content || "")) + "</div>";
+                    case "list": return renderListBlockHTML(block);
+                    case "table": return renderTableBlockHTML(block);
+                    case "chart": return renderChartBlockHTML(block);
+                    default: return "";
+                }
+            }).join("");
+        }
+
+        // renderRichAgentText returns safe HTML for an agent message: prose rendered as
+        // light markdown plus any render-spec blocks. Degrades to plain prose when no
+        // (or a malformed) render block is present.
+        function renderRichAgentText(raw) {
+            const parsed = extractRenderSpec(raw);
+            let html = "";
+            if (parsed.prose) html += "<div class=\"render-prose\">" + renderMarkdownLite(parsed.prose) + "</div>";
+            if (parsed.spec) html += "<div class=\"render-blocks\">" + renderSpecBlocksHTML(parsed.spec) + "</div>";
+            if (!html) html = "<div class=\"render-prose\">" + escapeHTML(String(raw || "")) + "</div>";
+            return html;
+        }
+
         // humanizeSince renders a coarse elapsed time since a stored UTC timestamp
         // ("2026-06-22 18:08:52"), mirroring the CLI/TUI helper (TK-90).
         function humanizeSince(ts) {
@@ -8295,9 +8440,13 @@
                     const author = item.author || "user";
                     const isAgent = agents.has(String(author).toLowerCase()) || /refin/i.test(author);
                     const side = isAgent ? "agent" : "human";
+                    const rawText = item.text || item.comment || "";
+                    // Agent replies may carry a render-spec — render rich (tables,
+                    // lists, charts, markdown). Human turns stay plain text.
+                    const bodyHTML = isAgent ? renderRichAgentText(rawText) : escapeHTML(rawText);
                     return "<div class=\"refinement-bubble refinement-bubble-" + side + "\">" +
                         "<div class=\"refinement-author\">" + escapeHTML(author) + "</div>" +
-                        "<div class=\"refinement-text\">" + escapeHTML(item.text || item.comment || "") + "</div>" +
+                        "<div class=\"refinement-text\">" + bodyHTML + "</div>" +
                         (item.date ? "<div class=\"refinement-date\">" + escapeHTML(item.date) + "</div>" : "") +
                         "</div>";
                 }).join("");
@@ -8671,13 +8820,21 @@
                     setRefinementStatus("Refiner is responding…", true);
                     const node = ensureRefinementStreamingBubble();
                     if (node) {
-                        // Clear the "thinking" dots once real output begins.
                         const bubble = node.closest(".refinement-bubble");
+                        // Clear the "thinking" dots once real output begins.
                         if (bubble && bubble.classList.contains("refinement-thinking")) {
                             bubble.classList.remove("refinement-thinking");
-                            node.textContent = "";
+                            if (bubble) bubble.dataset.raw = "";
                         }
-                        node.textContent += String(payload.text || "");
+                        // Accumulate the raw reply but only show the prose portion live —
+                        // a streaming ```render block is hidden until message_done re-
+                        // renders the persisted reply richly.
+                        if (bubble) {
+                            bubble.dataset.raw = (bubble.dataset.raw || "") + String(payload.text || "");
+                            node.textContent = streamingProse(bubble.dataset.raw);
+                        } else {
+                            node.textContent += String(payload.text || "");
+                        }
                         refinementScrollToBottom();
                     }
                     return;
