@@ -115,6 +115,26 @@ function installSite2Mock(page, seed = {}) {
       ],
       commentsByTicket: {
         "OPS-101": [{ author: "admin", text: "Initial note", date: "now" }],
+        // TK-177: a refiner reply carrying a render-spec (table + chart + list).
+        "OPS-200": [
+          {
+            author: "refiner",
+            date: "now",
+            text: [
+              "Here is the quarterly breakdown:",
+              "",
+              "```render",
+              JSON.stringify({
+                blocks: [
+                  { type: "table", columns: ["Quarter", "Revenue"], rows: [["Q1", "100"], ["Q2", "140"]] },
+                  { type: "chart", chartType: "bar", labels: ["Q1", "Q2"], series: [{ name: "Revenue", data: [100, 140] }] },
+                  { type: "list", ordered: false, items: ["Alpha", "Beta"] },
+                ],
+              }),
+              "```",
+            ].join("\n"),
+          },
+        ],
       },
       labels: [{ label_id: 51, project_id: 1, name: "backend", color: "#ff6600", created_at: "now" }],
       ticketLabelIDs: { "OPS-101": [51] },
@@ -1987,6 +2007,30 @@ test("reorders the proposed breakdown from the refinement panel", async ({ page 
       }),
     ]),
   );
+});
+
+test("renders a chat render-spec as table/list/chart in the refinement thread (TK-177)", async ({ page }) => {
+  await page.getByText("Refine me").click();
+  await page.locator("[data-ticket-tab='refinement']").click();
+  const thread = page.locator("#refinement-thread");
+
+  // Prose before the render block renders as markdown text, not raw JSON.
+  await expect(thread.locator(".render-prose")).toContainText("quarterly breakdown");
+  await expect(thread).not.toContainText("```render");
+  await expect(thread).not.toContainText("\"blocks\"");
+
+  // Table block.
+  await expect(thread.locator(".render-table th").first()).toHaveText("Quarter");
+  const firstRow = thread.locator(".render-table tbody tr").first();
+  await expect(firstRow).toContainText("Q1");
+  await expect(firstRow).toContainText("100");
+
+  // Chart block (inline SVG bars).
+  await expect(thread.locator(".render-chart svg rect").first()).toBeVisible();
+  await expect(thread.locator(".render-chart-legend")).toContainText("Revenue");
+
+  // List block.
+  await expect(thread.locator(".render-list li").first()).toHaveText("Alpha");
 });
 
 test("creates, updates, uploads, and deletes documents from the Documents view", async ({ page }) => {
