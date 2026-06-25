@@ -302,6 +302,9 @@ func handleRefinementMessage(db *sql.DB, ticketID, userID, text string, notify f
 	if u, uErr := store.GetUserByID(ctx, db, refinerID); uErr == nil {
 		refinerName = u.Username
 	}
+	// Drop a malformed render block before persistence so the transcript never keeps
+	// raw broken JSON; a valid block is left intact for the front-end renderer.
+	full = sanitizeRenderBlock(full)
 	proposal := store.ParseRefinementProposal(full)
 	if err := store.ApplyLiveRefinerReply(ctx, db, ticketID, refinerName, refinerID, proposal); err != nil {
 		sharedRefinementHub.broadcast(ticketID, mustJSON(map[string]any{"type": "refinement_error", "error": err.Error()}))
@@ -449,6 +452,7 @@ func buildServerRefinementPrompt(ticket store.Ticket, comments []store.Comment) 
 	b.WriteString("- When the idea is too big and should be split, end with:\n")
 	b.WriteString("    PROPOSE_BREAKDOWN\n    STORY: <title> | <one-line description>\n    STORY: <title> | <one-line description>\n")
 	b.WriteString("- Otherwise just ask your questions and stop (no marker).\n\n")
+	b.WriteString(renderSpecPromptGuidance())
 	b.WriteString(fmt.Sprintf("Idea: %s — %s\n", ticket.ID, strings.TrimSpace(ticket.Title)))
 	if strings.TrimSpace(ticket.Description) != "" {
 		b.WriteString("Description:\n" + strings.TrimSpace(ticket.Description) + "\n")
