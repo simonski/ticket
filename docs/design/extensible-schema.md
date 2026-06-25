@@ -572,6 +572,30 @@ Nested object fields (like the `dor_map`/`dod_map`/`ac_map` guidance maps) have
 bespoke marshalling and are folded explicitly in `hydrateTicketAttrs` /
 `ticketAttrsForWrite` alongside the registry; only scalars use the one-liner.
 
+## 19. Migration safety: proven & documented (TK-175/S4)
+
+The §15 matrix is now locked by tests and the restore path is documented.
+
+- **Entry-point audit (proven).** Both auto-migrating paths — server startup
+  (`autoUpgradeDatabase`) and `tk admin upgrade-database` — go through
+  `UpgradeInPlace` → `UpgradeInPlaceWithBackup`, so every migration is preceded by
+  a verified backup with auto-rollback. The local/CLI `Open()` path **refuses**
+  (returns `SchemaVersionError` with upgrade guidance) and is regression-guarded
+  by `TestOpenDoesNotMigrateOlderDatabase`, which asserts a refused open neither
+  changes the schema version nor writes a backup. If anyone later makes `Open()`
+  auto-upgrade without the backed-up path, that test fails.
+- **Rollback (proven).** `TestUpgradeInPlaceRollsBackOnFailedMigration` injects a
+  migration that deletes data then errors; the test asserts the rows and schema
+  version are restored from the verified backup and a clear error is surfaced.
+- **Backup verification & retention (proven).**
+  `TestUpgradeInPlaceTakesVerifiedBackup`, `TestVerifyDatabaseBackupRejectsBadBackups`
+  (corrupt file / wrong version rejected before the live DB is touched), and
+  `TestPruneOldBackupsRetainsNewest` (keeps the newest `DefaultBackupRetention=5`,
+  never the last good backup). The WAL is checkpointed (`TRUNCATE`) into the main
+  file before copy, so the backup is self-contained.
+- **Restore procedure.** Documented step-by-step for operators in
+  `docs/USER_GUIDE.md` → "Database upgrades, backups & restore (admin)".
+
 ## 18. Sign-off checklist (this story, TK-172)
 
 - [x] Three-tier model + **enforced** decision rule (§13) with worked examples.
