@@ -2239,3 +2239,37 @@ test("typing a substitution rewrites the previous message in the composer (TK-16
   // The substitution loads the corrected previous message back into the composer.
   await expect(input).toHaveValue("hello world");
 });
+
+test("palette /tk-NNN exposes a deeper action stack with a lifecycle submenu (TK-169)", async ({ page }) => {
+  // The shared beforeEach already logged in and landed on the Board.
+  await page.keyboard.press("Shift");
+  await page.keyboard.press("Shift");
+  await expect(page.locator("#command-palette-overlay")).toBeVisible();
+  await page.locator("#command-palette-input").fill("ops-101");
+  await page.locator("#command-palette-input").press("Enter");
+  // Expanded top-level actions are present.
+  const list = page.locator("#command-palette-list");
+  await expect(list).toContainText("Open detail");
+  await expect(list).toContainText("Lifecycle…");
+  await expect(list).toContainText("Claim");
+  await expect(list).toContainText("Open in chat (breakout)");
+
+  // Entering the Lifecycle submenu pushes a new frame (number key selects it).
+  await page.locator("#command-palette-input").press("3");
+  await expect(list).toContainText("Advance → next");
+  await expect(list).toContainText("Complete");
+  await expect(list).not.toContainText("Open detail"); // we are one frame deeper
+
+  // Esc pops back to the ticket's top-level actions (not closed).
+  await page.locator("#command-palette-input").press("Escape");
+  await expect(page.locator("#command-palette-overlay")).toBeVisible();
+  await expect(list).toContainText("Lifecycle…");
+  await expect(list).not.toContainText("Advance → next");
+
+  // Esc again pops back to the command list; a third closes the palette.
+  await page.locator("#command-palette-input").press("Escape");
+  await expect(page.locator("#command-palette-overlay")).toBeVisible();
+  await expect(list).not.toContainText("Lifecycle…");
+  await page.locator("#command-palette-input").press("Escape");
+  await expect(page.locator("#command-palette-overlay")).toBeHidden();
+});

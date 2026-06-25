@@ -111,6 +111,14 @@ Expand the shallow palette ticket-action menu into a richer numbered stack.
   endpoints. Cancel is a no-op (no data loss).
 - Front-end focused (`app.js` ~9715), reusing existing endpoints.
 
+**Resolved (TK-169):** the palette already had the frame stack, ESC frame-pop, and
+number/arrow selection (TK-127/TK-130). This story made action menus support nested
+sub-frames (`{label, submenu}`) and expanded the ticket actions to: Open detail, Add
+comment…, **Lifecycle…** (a pushed sub-frame: next / previous / ready / complete /
+reopen / close), Claim, Open in chat (breakout), Copy key — all wired to existing
+`POST /api/tickets/{key}/{action}` and `/api/tickets/claim`. ESC pops one level
+(submenu → ticket actions → command list → close).
+
 ---
 
 ## Story D (TK-170): Room presence & typing indicators
