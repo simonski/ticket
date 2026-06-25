@@ -345,3 +345,209 @@ PRs into `main` only once all stories land.
 All `dor_map`/`dod_map`/`ac_map` folds are complete across tickets, projects,
 roles and workflow_stages (tickets+projects via TK-115; roles+stages via
 TK-113/TK-114). `projects.git_repository`/`notes` reclassified Keep.
+
+---
+
+# Part II — Finishing & standardising (epic TK-171)
+
+> Status: **Design (S1 / TK-172)** — sign-off gate for epic **TK-171**.
+> Stories: TK-173 (declare-once attrs framework), TK-174 (migrate remaining
+> churn columns, verified vs reference DB), TK-175 (verified backup + tested
+> rollback on *every* migration entry point), TK-176 (optional Tier-3 generated
+> columns).
+>
+> Part I above describes the **already-shipped** foundation (prior epic
+> TK-105/106, stories TK-107–TK-115). This part **builds on it, does not rebuild
+> it.** Where Part I states intent, this part records what the code actually does
+> today (verified against `internal/store` at schema **v15**) and defines the
+> remaining, enforceable convention.
+
+## 12. Current reality (verified against the code, schema v15)
+
+Everything below is present in `internal/store` today; this is the substrate the
+TK-171 stories extend.
+
+| Capability | Where | Notes |
+|------------|-------|-------|
+| Schema version | `schema_version.go` — `CurrentSchemaVersion = 15` | stored in `schema_meta(key,value)` under `schema_version` |
+| Additive migrations | `store.go` — `migrateSchema(ctx, db)` | ~74 idempotent guards (`columnExists`/`tableExists`); `PRAGMA foreign_keys=OFF` for the run, restored on exit; additive-only |
+| `attrs` bag | `tickets`, `projects`, `roles`, `workflow_stages` | `attrs TEXT NOT NULL DEFAULT '{}'` (never NULL) |
+| Typed bag helper | `attrs.go` — `type Attrs map[string]any`; `parseAttrs`, `marshalAttrs`, `GetString/GetInt`, `SetString/SetInt` | `Set*` **delete** empty/zero values → stored object stays sparse |
+| Promotion (light) | `attrs_query.go` — `EnsureAttrIndex(ctx, db, table, key)`, `ValidAttrsKey` | idempotent `CREATE INDEX IF NOT EXISTS … json_extract(attrs,'$.key')`; key restricted to `[A-Za-z0-9_]+` (no SQL injection); no version bump |
+| Backup-safe upgrade | `schema_version.go` — `UpgradeInPlaceWithBackup(ctx, path)` | WAL `checkpoint(TRUNCATE)` → copy db+`-wal`+`-shm` → `integrity_check` + version verify → migrate → **rollback on failure** → prune to `DefaultBackupRetention = 5` |
+| Driver | `modernc.org/sqlite` (pure Go) | JSON1 (`json_extract`/`json_set`) used throughout; no CGO |
+
+**Already living in `tickets.attrs`** (typed `Ticket` fields hydrated from the
+bag, not columns): `git_repository`, `git_branch`, `estimate_complete`,
+`health_score`, `author`, `pr_url`, and the `dor_map`/`dod_map`/`ac_map`
+guidance maps. The dead `open` column was dropped.
+
+## 13. The enforced decision rule (sharpened)
+
+Part I §3 introduces the three tiers. TK-171 makes the rule **prescriptive** —
+a checklist a reviewer (human or agent) can apply deterministically to any new
+field. Default is **Tier 2**; you must *justify* leaving it.
+
+```
+Adding a field F to entity E?
+
+  Does F need ANY of:
+    • a FOREIGN KEY to another table,
+    • a NOT NULL / UNIQUE / CHECK constraint enforced by the DB,
+    • participation in a hot-path WHERE / ORDER BY / JOIN (every list query),
+    • SQL-side aggregation (SUM/COUNT/AVG over many rows)?
+      └─ YES → Tier 1: real column   (DDL + version bump + scan list edit; rare)
+      └─ NO  ↓
+  Is F sparse / optional / display-only / per-ticket-type / still evolving?
+      └─ YES → Tier 2: attrs bag     (no DDL, no version bump — the DEFAULT)
+                 ↓ later …
+  Does the Tier-2 field now need filtering/sorting/indexing?
+      └─ light (occasional filter)        → Tier 3a: expression index (EnsureAttrIndex)
+      └─ needs a typed/indexed column face → Tier 3b: generated column (TK-176)
+```
+
+Tie-breakers: when Tier-1 and Tier-2 both *seem* to fit, choose **Tier 2** and
+record why in the field's Go doc comment. "We might query it one day" is **not**
+a Tier-1 justification — that is exactly the Tier-3a promotion path, which is
+cheap and reversible. Tier-1 is reserved for fields that are *structurally*
+relational (FK/constraint) or *always* on the hot path.
+
+## 14. Write path and read path (the two diagrams)
+
+The bag is never touched as raw JSON in business logic. A typed struct is the
+only public surface; one helper marshals/merges on write, one helper parses and
+hydrates on read.
+
+**Write path** — typed struct → attrs merge → row:
+
+```mermaid
+sequenceDiagram
+  participant Caller as Caller (CreateTicket/UpdateTicket)
+  participant W as ticketAttrsForWrite
+  participant A as Attrs (Set*)
+  participant DB as SQLite (tickets)
+  Caller->>W: Ticket{typed fields incl. bag-backed}
+  W->>A: SetString/SetInt for each bag-backed field
+  Note over A: empty/zero ⇒ key deleted (stays sparse)
+  A-->>W: Attrs map
+  W->>W: marshalAttrs → JSON text
+  W->>DB: UPDATE … SET attrs = ?  (Tier-1 cols set positionally)
+```
+
+**Read path** — row → attrs parse → hydrated struct:
+
+```mermaid
+sequenceDiagram
+  participant DB as SQLite (tickets)
+  participant S as scanTicket
+  participant H as hydrateTicketAttrs
+  participant Out as Ticket
+  DB-->>S: row (31 cols, ticketColumnNames order; attrs last)
+  S->>S: parseAttrs(attrsJSON)
+  S->>H: Ticket + parsed Attrs
+  H->>Out: copy bag keys → typed fields (git_*, pr_url, health_score, …)
+  H->>Out: delete those keys from user-visible Attrs (sparse)
+  Note over Out: Tier-1 cols already populated by positional scan
+```
+
+**The blast radius TK-173/S2 removes.** Today a *bag-backed* field is declared
+in **three** hand-maintained places that must stay in lockstep:
+`ticketColumnNames`/`scanTicket` are untouched (good — that is the Part I win),
+but you still edit (1) the `Ticket` struct field, (2) `hydrateTicketAttrs`
+(read), and (3) `ticketAttrsForWrite` (write). Miss one and the field silently
+fails to persist or to load. S2's goal: a single declaration (one table of
+`{key, accessor}`) that drives both hydrate and write, so a new sparse field is
+genuinely a one-liner. This doc is the spec S2 implements against.
+
+## 15. Migration entry points & backup matrix (feeds TK-175/S4)
+
+Epic AC #4 requires a verified backup + tested rollback on **every** migration
+entry point. The audit of what exists today:
+
+| Entry point | File | Migrates in place? | Backup taken? |
+|-------------|------|--------------------|---------------|
+| Server startup | `cmd/tk` — `autoUpgradeDatabase` | Yes (on version gap) | **Yes** — `UpgradeInPlaceWithBackup` |
+| `tk upgrade` (CLI/admin) | `cmd/tk` — upgrade command | Yes | **Yes** — `UpgradeInPlaceWithBackup` |
+| Local/CLI open | `store.go` — `Open(path)` | **No** — returns `SchemaVersionError` | n/a (refuses; safe-by-refusal) |
+| `createSchema` (fresh/empty DB) | `store.go` — `Open` → `createSchema` | n/a — builds at current version | n/a (nothing to lose) |
+
+**Finding:** there is no unprotected in-place migration path today — the local
+`Open()` deliberately *refuses* to migrate and tells the user to run the backed-up
+upgrade. So S4's work is not "add a missing backup" but:
+1. **Lock this in with a test** that fails if any future path migrates without
+   first calling `UpgradeInPlaceWithBackup` (regression guard for the matrix).
+2. **Prove rollback** by injecting a deliberately-broken migration and asserting
+   the live DB + sidecars are restored byte-for-byte, schema version unchanged,
+   and a clear error surfaced.
+3. **Document the restore procedure** (where backups live, retention = 5, how to
+   restore manually) in the user guide.
+
+```mermaid
+flowchart TD
+  E1[Server startup] --> U[UpgradeInPlaceWithBackup]
+  E2[tk upgrade] --> U
+  E3[Open path, version gap] --> R[SchemaVersionError: run upgrade]
+  R -.user runs.-> E2
+  U --> CP[wal_checkpoint TRUNCATE] --> BK[copy db + -wal + -shm] --> V{integrity_check + version readable?}
+  V -- no --> AB[abort, live DB untouched]
+  V -- yes --> M[migrate in tx]
+  M -- ok --> P[advance schema_version; prune to 5 backups]
+  M -- fail --> RB[restore db + sidecars from backup] --> ERR[clear error; original intact]
+```
+
+## 16. Remaining-column audit for `tickets` (feeds TK-174/S3)
+
+Part I §9.1's Move/Fold columns are **already done**. This is the *current*
+classification of the live `tickets` table (32 columns at v15) for the "one
+schema change this time". The conservative bias holds: structural/relational and
+hot-path columns stay Tier-1. The honest conclusion is that **little remains to
+move** — the prior epic already harvested the soft fields — so S3 should be
+scoped tightly and verified against the reference DB rather than moving columns
+for their own sake.
+
+| Column(s) | Decision | Rationale |
+|-----------|----------|-----------|
+| ticket_id, project_id, parent_id, clone_of | **Keep** | PK / FKs |
+| type, title, description, acceptance_criteria | **Keep** | core, always present, displayed everywhere |
+| workflow_id, workflow_stage_id, role_id, previous_workflow_stage_id, previous_role_id, release_id | **Keep** | FKs / lifecycle |
+| stage, state, status | **Keep** | hot lifecycle filters |
+| priority, sort_order | **Keep** | sorted / ordered |
+| estimate_effort | **Keep** | aggregation candidate (rollups) |
+| draft, complete, archived, deleted | **Keep** | hot boolean filters |
+| assignee, created_by | **Keep** | filtered |
+| recommended_ready | **Keep** | filtered flag |
+| started_at, created_at, updated_at | **Keep** | sorted timestamps |
+| attrs | **Keep** | the bag itself |
+
+**S3 candidates to scrutinise (not yet moved):** `clone_of` and `release_id`
+are sparse and rarely filtered, but both are FKs — moving them would lose
+referential integrity, so they stay Tier-1. `recommended_ready` is a sparse
+boolean that *is* filtered (Tier-1 by the rule). **Net: no tickets column is a
+clear Move candidate today.** S3's real deliverable is therefore the *proof
+harness* — run the (possibly no-op) consolidation against a reference copy of the
+production DB and verify row counts and every value round-trip — plus moving any
+churn-prone column on `projects`/`roles`/`workflow_stages` that a fresh audit of
+those tables surfaces. S3 must **not** invent moves to look busy; an empty,
+verified diff is a valid outcome that satisfies "the one schema change runs
+cleanly and preserves all data".
+
+## 17. Tier-3 generated columns (feeds TK-176/S5, optional)
+
+Tier-3a (expression index via `EnsureAttrIndex`) ships today. Tier-3b — a
+`GENERATED ALWAYS AS (json_extract(attrs,'$.key')) VIRTUAL` column — is still
+**documented-only**. S5 is optional and should be built only when a concrete
+attrs key needs a first-class typed/indexable column *surface* (e.g. a strict
+type for an external tool, or a UNIQUE constraint over a bag key) that an
+expression index cannot provide. Acceptance for S5, if taken: a worked example
+key promoted to a `VIRTUAL` generated column, an index on it, and a test showing
+`EXPLAIN QUERY PLAN` uses the index — with no table rewrite and no data backfill.
+
+## 18. Sign-off checklist (this story, TK-172)
+
+- [x] Three-tier model + **enforced** decision rule (§13) with worked examples.
+- [x] Write-path and read-path diagrams (§14); migration/backup flow (§15).
+- [x] Current `tickets` column audit at v15 (§16) feeding S3.
+- [x] Current reality documented accurately (§12): v15, `schema_meta`,
+      `migrateSchema` guards, `Attrs`/`EnsureAttrIndex`, `UpgradeInPlaceWithBackup`,
+      modernc JSON1.
+- [ ] Reviewed & agreed before Stories TK-173–TK-176 begin (human gate).
