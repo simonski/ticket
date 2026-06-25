@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -274,8 +275,17 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 		return Ticket{}, err
 	}
 	// git_repository, git_branch, estimate_complete, author (and health_score,
-	// pr_url which default to 0/"") now live in the attrs bag (TK-111).
-	attrsJSON, err := ticketAttrsForWrite(params.Attrs, params.GitRepository, params.GitBranch, params.EstimateComplete, params.Author, "", 0, params.DORMap, params.DODMap, acMap)
+	// pr_url which default to 0/"") now live in the attrs bag (TK-111), declared
+	// once via the scalar registry (TK-173).
+	attrsJSON, err := ticketAttrsForWrite(params.Attrs, &Ticket{
+		GitRepository:    params.GitRepository,
+		GitBranch:        params.GitBranch,
+		EstimateComplete: params.EstimateComplete,
+		Author:           params.Author,
+		DORMap:           params.DORMap,
+		DODMap:           params.DODMap,
+		ACMap:            acMap,
+	})
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -547,8 +557,19 @@ writeTicket:
 	if params.Attrs != nil {
 		baseAttrs = params.Attrs
 	}
-	// Guidance maps (dor/dod/ac) are also folded into the bag (TK-115).
-	attrsJSON, err := ticketAttrsForWrite(baseAttrs, nextGitRepository, nextGitBranch, strings.TrimSpace(params.EstimateComplete), current.Author, current.PrURL, current.HealthScore, nextDORMap, nextDODMap, nextACMap)
+	// Guidance maps (dor/dod/ac) are also folded into the bag (TK-115). Scalar
+	// fields are declared once via the registry (TK-173).
+	attrsJSON, err := ticketAttrsForWrite(baseAttrs, &Ticket{
+		GitRepository:    nextGitRepository,
+		GitBranch:        nextGitBranch,
+		EstimateComplete: strings.TrimSpace(params.EstimateComplete),
+		Author:           current.Author,
+		PrURL:            current.PrURL,
+		HealthScore:      current.HealthScore,
+		DORMap:           nextDORMap,
+		DODMap:           nextDODMap,
+		ACMap:            nextACMap,
+	})
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -1486,31 +1507,27 @@ var ticketColumnCoalesce = map[string]string{
 	"started_at":        "''",
 }
 
-// ticketAttrStringKeys are the soft string fields that now live in the attrs bag
-// (TK-111) and are surfaced as typed Ticket fields for back-compat.
-var ticketAttrStringKeys = []string{"git_repository", "git_branch", "estimate_complete", "author", "pr_url"}
-
-const ticketAttrHealthScoreKey = "health_score"
+// ticketAttrGuidanceKeys are the nested guidance maps folded into the bag
+// (TK-115). They have bespoke marshalling and sit alongside the scalar registry
+// (ticketAttrScalarFields, see ticket_attrs.go).
+var ticketAttrGuidanceKeys = []string{"dor_map", "dod_map", "ac_map"}
 
 // hydrateTicketAttrs copies the bag-backed soft fields out of t.Attrs into their
 // typed Ticket fields and removes them from the user-visible bag (so they are not
-// duplicated). It is the read-side of the attrs consolidation.
+// duplicated). It is the read-side of the attrs consolidation. Scalar fields are
+// driven by the declare-once registry (TK-173); guidance maps are folded here.
 func hydrateTicketAttrs(t *Ticket) {
-	t.GitRepository = t.Attrs.GetString("git_repository")
-	t.GitBranch = t.Attrs.GetString("git_branch")
-	t.EstimateComplete = t.Attrs.GetString("estimate_complete")
-	t.Author = t.Attrs.GetString("author")
-	t.PrURL = t.Attrs.GetString("pr_url")
-	t.HealthScore = t.Attrs.GetInt(ticketAttrHealthScoreKey)
+	for _, f := range ticketAttrScalarFields {
+		f.hydrate(t, t.Attrs)
+	}
 	// Guidance maps folded into the bag (TK-115).
 	t.DORMap = guidanceMapFromAttr(t.Attrs["dor_map"])
 	t.DODMap = guidanceMapFromAttr(t.Attrs["dod_map"])
 	t.ACMap = withLegacyAcceptanceCriteria(t.AcceptanceCriteria, guidanceMapFromAttr(t.Attrs["ac_map"]))
-	for _, k := range ticketAttrStringKeys {
-		delete(t.Attrs, k)
+	for _, f := range ticketAttrScalarFields {
+		delete(t.Attrs, f.key)
 	}
-	delete(t.Attrs, ticketAttrHealthScoreKey)
-	for _, k := range []string{"dor_map", "dod_map", "ac_map"} {
+	for _, k := range ticketAttrGuidanceKeys {
 		delete(t.Attrs, k)
 	}
 	if len(t.Attrs) == 0 {
@@ -1518,22 +1535,20 @@ func hydrateTicketAttrs(t *Ticket) {
 	}
 }
 
-// ticketAttrsForWrite merges the bag-backed typed fields into a base bag and
-// returns the JSON text to store. It is the write-side of the attrs consolidation.
-func ticketAttrsForWrite(base Attrs, gitRepository, gitBranch, estimateComplete, author, prURL string, healthScore int, dor, dod, ac GuidanceMap) (string, error) {
+// ticketAttrsForWrite merges the bag-backed typed fields from fields into a copy
+// of base and returns the JSON text to store. It is the write-side of the attrs
+// consolidation: scalar fields are driven by the declare-once registry (TK-173),
+// guidance maps are folded explicitly. fields is a Ticket-shaped carrier holding
+// only the bag-backed values to persist.
+func ticketAttrsForWrite(base Attrs, fields *Ticket) (string, error) {
 	merged := Attrs{}
-	for k, v := range base {
-		merged[k] = v
+	maps.Copy(merged, base)
+	for _, f := range ticketAttrScalarFields {
+		f.write(merged, fields)
 	}
-	merged.SetString("git_repository", strings.TrimSpace(gitRepository))
-	merged.SetString("git_branch", strings.TrimSpace(gitBranch))
-	merged.SetString("estimate_complete", strings.TrimSpace(estimateComplete))
-	merged.SetString("author", strings.TrimSpace(author))
-	merged.SetString("pr_url", strings.TrimSpace(prURL))
-	merged.SetInt(ticketAttrHealthScoreKey, healthScore)
-	setGuidanceAttr(merged, "dor_map", dor)
-	setGuidanceAttr(merged, "dod_map", dod)
-	setGuidanceAttr(merged, "ac_map", ac)
+	setGuidanceAttr(merged, "dor_map", fields.DORMap)
+	setGuidanceAttr(merged, "dod_map", fields.DODMap)
+	setGuidanceAttr(merged, "ac_map", fields.ACMap)
 	return marshalAttrs(merged)
 }
 
@@ -1665,10 +1680,8 @@ func validateTicketStage(ctx context.Context, db *sql.DB, ticket Ticket, stage s
 	if err != nil {
 		return "", err
 	}
-	for _, validStage := range validStages {
-		if normalized == validStage {
-			return normalized, nil
-		}
+	if slices.Contains(validStages, normalized) {
+		return normalized, nil
 	}
 	return "", fmt.Errorf("invalid stage %q; valid stages: %s", stage, strings.Join(validStages, ", "))
 }

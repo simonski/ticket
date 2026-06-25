@@ -542,6 +542,28 @@ expression index cannot provide. Acceptance for S5, if taken: a worked example
 key promoted to a `VIRTUAL` generated column, an index on it, and a test showing
 `EXPLAIN QUERY PLAN` uses the index — with no table rewrite and no data backfill.
 
+## 17a. How to add a Tier-2 field (the declare-once recipe, TK-173)
+
+The scalar attrs framework lives in `internal/store/ticket_attrs.go`. Adding a
+new sparse scalar field to a ticket is now **two edits, one of them a one-liner**:
+
+1. Add the typed field + JSON tag to the `Ticket` struct (e.g.
+   `RiskNote string \`json:"risk_note,omitempty"\``).
+2. Add **one** line to `ticketAttrScalarFields`:
+   ```go
+   strAttrField("risk_note", func(t *Ticket) *string { return &t.RiskNote }),
+   ```
+   (or `intAttrField` for an int). That single declaration drives **both**
+   hydration (bag → field) and write-back (field → bag, sparse) — there are no
+   separate key/hydrate/write lists to keep in sync, and no `scanTicket`/column
+   edits because the field never becomes a column. If the field later needs
+   filtering/sorting, promote it with `EnsureAttrIndex(ctx, db, "tickets",
+   "risk_note")` (Tier-3a) — still no DDL or version bump.
+
+Nested object fields (like the `dor_map`/`dod_map`/`ac_map` guidance maps) have
+bespoke marshalling and are folded explicitly in `hydrateTicketAttrs` /
+`ticketAttrsForWrite` alongside the registry; only scalars use the one-liner.
+
 ## 18. Sign-off checklist (this story, TK-172)
 
 - [x] Three-tier model + **enforced** decision rule (§13) with worked examples.
