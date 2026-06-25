@@ -127,7 +127,7 @@ func runLogin(args []string) error {
 			if outputJSON {
 				return printJSON(status)
 			}
-			fmt.Printf("logged in as %s\n", status.User.Username)
+			fmt.Printf("logged in as %s to %s\n", status.User.Username, serverURL)
 			return nil
 		}
 	}
@@ -210,7 +210,7 @@ func finishLogin(cfg config.Config, user store.User, token string) error {
 	if outputJSON {
 		return printJSON(map[string]any{"token": token, "user": user})
 	}
-	fmt.Printf("logged in as %s\n", user.Username)
+	fmt.Printf("logged in as %s to %s\n", user.Username, serverURL)
 	return nil
 }
 
