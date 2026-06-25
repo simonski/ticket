@@ -218,38 +218,38 @@ func runLogout(args []string) error {
 	if len(args) != 0 {
 		return errors.New("usage: tk logout")
 	}
-	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
-	if location == "" {
-		return errors.New("ticket logout only works in remote mode; set TICKET_URL and try again")
-	}
-	resolved, err := config.ResolveLocation(location)
+	// Resolve the server the same way as every other command (TICKET_URL, else the
+	// default remote), so logout targets whatever you're actually logged in to —
+	// not only when TICKET_URL is set (TK-164).
+	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	if resolved.Mode != config.ModeRemote || strings.TrimSpace(resolved.ServerURL) == "" {
-		return errors.New("ticket logout requires a remote server URL; set TICKET_URL to http:// or https://")
+	serverURL, err := resolveServerURLForAuth(cfg)
+	if err != nil {
+		return err
 	}
 	creds, err := config.LoadCredentials()
 	if err != nil {
 		return err
 	}
-	remoteCreds, ok := creds.Remote(resolved.ServerURL)
+	remoteCreds, ok := creds.Remote(serverURL)
 	if !ok || strings.TrimSpace(remoteCreds.Token) == "" {
-		return fmt.Errorf("no stored login session for %s; nothing to log out", resolved.ServerURL)
+		return fmt.Errorf("no stored login session for %s; nothing to log out", serverURL)
 	}
 	svc := libticket.NewHTTP(config.Config{
-		Location: resolved.ServerURL,
+		Location: serverURL,
 		Username: remoteCreds.Username,
 		Token:    remoteCreds.Token,
 	})
-	if err := svc.Logout(context.Background()); err != nil {
-		if clearErr := config.ClearRemoteCredentials(resolved.ServerURL); clearErr != nil {
-			return clearErr
-		}
-		return err
+	logoutErr := svc.Logout(context.Background())
+	// Always clear the local token (keeping the username so the next login
+	// remembers it), even if the server-side logout call fails.
+	if clearErr := config.ClearRemoteToken(serverURL); clearErr != nil {
+		return clearErr
 	}
-	if err := config.ClearRemoteCredentials(resolved.ServerURL); err != nil {
-		return err
+	if logoutErr != nil {
+		return logoutErr
 	}
 	if outputJSON {
 		return printJSON(map[string]string{"status": "logged_out"})

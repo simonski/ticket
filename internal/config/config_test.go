@@ -753,3 +753,28 @@ func TestRemoteHelpersAndValidationBranches(t *testing.T) {
 		t.Fatal("RemoveRemote(empty) removed = true, want false")
 	}
 }
+
+func TestClearRemoteTokenRetainsUsername(t *testing.T) {
+	t.Setenv("TICKET_HOME", t.TempDir())
+	const url = "http://127.0.0.1:9999"
+	if err := SaveRemoteCredentials(url, "admin", "tok-123"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := ClearRemoteToken(url); err != nil {
+		t.Fatalf("clear token: %v", err)
+	}
+	creds, err := LoadCredentials()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	rc, ok := creds.Remote(url)
+	if !ok {
+		t.Fatalf("credential entry should be retained for %s", url)
+	}
+	if rc.Username != "admin" {
+		t.Fatalf("username should be retained, got %q", rc.Username)
+	}
+	if rc.Token != "" {
+		t.Fatalf("token should be cleared, got %q", rc.Token)
+	}
+}

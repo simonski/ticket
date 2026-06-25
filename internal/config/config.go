@@ -271,6 +271,34 @@ func ClearCredentials() error {
 	return nil
 }
 
+// ClearRemoteToken clears the session token for a remote but retains the stored
+// username, so the next login can pre-fill it (the password is never stored).
+func ClearRemoteToken(location string) error {
+	location, err := CanonicalizeRemoteURL(location)
+	if err != nil {
+		return err
+	}
+	creds, err := LoadCredentials()
+	if err != nil {
+		return err
+	}
+	if location == "" {
+		creds.Token = ""
+		return SaveCredentials(creds)
+	}
+	if creds.Remotes == nil {
+		return nil
+	}
+	rc, ok := creds.Remotes[location]
+	if !ok {
+		return nil
+	}
+	rc.Token = ""
+	creds.Remotes[location] = rc
+	creds.Token = ""
+	return SaveCredentials(creds)
+}
+
 func ClearRemoteCredentials(location string) error {
 	var err error
 	location, err = CanonicalizeRemoteURL(location)
