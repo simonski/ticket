@@ -81,6 +81,18 @@ comment-thread transcript and interoperate:
 The UI connects the WebSocket when the refinement panel opens, renders streamed
 chunks into a live bubble, and reconciles from the server on `message_done`.
 
+**Structured rich rendering (TK-177).** The refiner prompt (and any chat over the same
+command bridge) invites the model to append a single fenced ```` ```render ```` block
+holding a JSON render-spec — `{"blocks":[…]}` with `text` (markdown), `list`, `table`,
+and `chart` (bar/line) block types — so a reply like "make a table" renders as an HTML
+table, list, or inline-SVG chart instead of prose. The spec rides *inside* the persisted
+comment text (no schema change), so it survives thread reloads. The server validates it
+(`internal/server/render_spec.go`: `renderSpecPromptGuidance`, `sanitizeRenderBlock`) and
+drops a malformed block before persistence; a single shared front-end renderer
+(`renderRichAgentText` in `web/shared/app.js`) parses the fence and renders the blocks
+for the live stream, the thread re-render, and any future general chat. The raw JSON is
+hidden mid-stream and the rich blocks appear once the reply completes.
+
 Key files: `internal/orchestrator/orchestrator.go`, `internal/store/orchestrator.go`,
 `internal/server/server.go` (`runOrchestrator`), `internal/server/api_agents.go`
 (push model + abandonment guard), `cmd/tk/cmd_orchestrator.go`. History event types:
