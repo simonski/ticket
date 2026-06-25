@@ -404,13 +404,18 @@ func runComplete(args []string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	message := fs.String("m", "", "comment to attach")
+	mergePR := fs.Bool("merge-pr", false, "merge the ticket's open linked PR(s) on completion")
+	closePR := fs.Bool("close-pr", false, "close the ticket's open linked PR(s) on completion")
 	positional, err := parseFlagsWithPositionals(fs, args)
 	if err != nil {
 		return err
 	}
 	idVal, rest, err := resolveIDFlag(*id, positional)
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: tk complete [-id] <id> [-m comment]")
+		return errors.New("usage: tk complete [-id] <id> [-m comment] [--merge-pr|--close-pr]")
+	}
+	if *mergePR && *closePR {
+		return errors.New("choose only one of --merge-pr or --close-pr")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -420,14 +425,32 @@ func runComplete(args []string) error {
 	if err != nil {
 		return err
 	}
-	updated, err := svc.CompleteTicket(context.Background(), idVal, *message)
+	ctx := context.Background()
+	updated, err := svc.CompleteTicket(ctx, idVal, *message)
 	if err != nil {
 		return err
 	}
+	if !outputJSON {
+		fmt.Printf("%s completed (stage: done, complete: true)\n", updated.ID)
+	}
+	// Reconcile any open linked PR (TK-160): act on the flag, else prompt on an
+	// interactive terminal, else skip with a printed warning. PR-side failures are
+	// non-fatal — the ticket is already complete.
+	prAction := ""
+	if *mergePR {
+		prAction = store.PullRequestStatusMerged
+	} else if *closePR {
+		prAction = store.PullRequestStatusClosed
+	}
+	msgOut := os.Stdout
+	if outputJSON {
+		// Keep machine-readable stdout clean; route reconciliation notes to stderr.
+		msgOut = os.Stderr
+	}
+	reconcileTicketPullRequests(ctx, svc, updated.ID, prAction, !outputJSON && interactiveStdio(), msgOut)
 	if outputJSON {
 		return printJSON(updated)
 	}
-	fmt.Printf("%s completed (stage: done, complete: true)\n", updated.ID)
 	return nil
 }
 

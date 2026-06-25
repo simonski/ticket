@@ -11279,3 +11279,94 @@ func TestUnassignWithoutNameAsAdmin(t *testing.T) {
 		t.Fatalf("expected already-unassigned message, got %q", out2)
 	}
 }
+
+func TestExtractPRNumber(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/acme/repo/pull/94":  "94",
+		"https://github.com/acme/repo/pull/94/": "94",
+		"https://github.com/acme/repo/pull/abc": "",
+		"":                                      "",
+		"not-a-url":                             "",
+	}
+	for url, want := range cases {
+		if got := extractPRNumber(url); got != want {
+			t.Errorf("extractPRNumber(%q) = %q, want %q", url, got, want)
+		}
+	}
+}
+
+func TestCompleteReconcilesLinkedNativePR(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	ctx := context.Background()
+
+	// --close-pr closes an open native PR when completing the ticket.
+	closeTicket := createLocalTask(t, []string{"add", "Close PR on complete"})
+	if _, err := svc.CreatePullRequest(ctx, libticket.PullRequestRequest{
+		TicketID: closeTicket, Provider: "none", SourceBranch: "f-close",
+	}); err != nil {
+		t.Fatalf("CreatePullRequest(close) error = %v", err)
+	}
+	out := captureStdout(t, func() {
+		if err := run([]string{"complete", closeTicket, "--close-pr"}); err != nil {
+			t.Fatalf("complete --close-pr error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "closed linked PR") {
+		t.Fatalf("expected close confirmation, got:\n%s", out)
+	}
+	prs, _ := svc.ListPullRequestsByTicket(ctx, closeTicket)
+	if len(prs) != 1 || prs[0].Status != "closed" {
+		t.Fatalf("PR after --close-pr = %+v, want status closed", prs)
+	}
+
+	// --merge-pr merges an open native PR.
+	mergeTicket := createLocalTask(t, []string{"add", "Merge PR on complete"})
+	if _, err := svc.CreatePullRequest(ctx, libticket.PullRequestRequest{
+		TicketID: mergeTicket, Provider: "none", SourceBranch: "f-merge",
+	}); err != nil {
+		t.Fatalf("CreatePullRequest(merge) error = %v", err)
+	}
+	if err := run([]string{"complete", mergeTicket, "--merge-pr"}); err != nil {
+		t.Fatalf("complete --merge-pr error = %v", err)
+	}
+	prs, _ = svc.ListPullRequestsByTicket(ctx, mergeTicket)
+	if len(prs) != 1 || prs[0].Status != "merged" {
+		t.Fatalf("PR after --merge-pr = %+v, want status merged", prs)
+	}
+}
+
+func TestCompleteNonInteractiveWarnsAboutOpenPR(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	ctx := context.Background()
+
+	ticket := createLocalTask(t, []string{"add", "Skip PR on complete"})
+	if _, err := svc.CreatePullRequest(ctx, libticket.PullRequestRequest{
+		TicketID: ticket, Provider: "none", SourceBranch: "f-skip",
+	}); err != nil {
+		t.Fatalf("CreatePullRequest error = %v", err)
+	}
+	// No flag + non-interactive stdout (test): the open PR is left untouched but
+	// the user is warned, never silently skipped.
+	out := captureStdout(t, func() {
+		if err := run([]string{"complete", ticket}); err != nil {
+			t.Fatalf("complete error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "still has open PR") {
+		t.Fatalf("expected an open-PR warning, got:\n%s", out)
+	}
+	prs, _ := svc.ListPullRequestsByTicket(ctx, ticket)
+	if len(prs) != 1 || prs[0].Status != "open" {
+		t.Fatalf("PR should remain open after skip, got %+v", prs)
+	}
+}
+
+func TestCompleteRejectsBothPRFlags(t *testing.T) {
+	setupLocalCLI(t)
+	ticket := createLocalTask(t, []string{"add", "Both flags"})
+	if err := run([]string{"complete", ticket, "--merge-pr", "--close-pr"}); err == nil {
+		t.Fatal("expected an error when both --merge-pr and --close-pr are given")
+	}
+}
