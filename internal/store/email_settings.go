@@ -17,7 +17,7 @@ const (
 	emailKeyHost        = "email.smtp_host"
 	emailKeyPort        = "email.smtp_port"
 	emailKeyUsername    = "email.smtp_username"
-	emailKeyPassword    = "email.smtp_password"
+	emailKeyPassword    = "email.smtp_password" // #nosec G101 -- app_settings key name, not a credential
 	emailKeyFromAddress = "email.from_address"
 	emailKeyFromName    = "email.from_name"
 	emailKeySecurity    = "email.security"
