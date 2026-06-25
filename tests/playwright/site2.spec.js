@@ -115,6 +115,26 @@ function installSite2Mock(page, seed = {}) {
       ],
       commentsByTicket: {
         "OPS-101": [{ author: "admin", text: "Initial note", date: "now" }],
+        // TK-177: a refiner reply carrying a render-spec (table + chart + list).
+        "OPS-200": [
+          {
+            author: "refiner",
+            date: "now",
+            text: [
+              "Here is the quarterly breakdown:",
+              "",
+              "```render",
+              JSON.stringify({
+                blocks: [
+                  { type: "table", columns: ["Quarter", "Revenue"], rows: [["Q1", "100"], ["Q2", "140"]] },
+                  { type: "chart", chartType: "bar", labels: ["Q1", "Q2"], series: [{ name: "Revenue", data: [100, 140] }] },
+                  { type: "list", ordered: false, items: ["Alpha", "Beta"] },
+                ],
+              }),
+              "```",
+            ].join("\n"),
+          },
+        ],
       },
       labels: [{ label_id: 51, project_id: 1, name: "backend", color: "#ff6600", created_at: "now" }],
       ticketLabelIDs: { "OPS-101": [51] },
@@ -195,7 +215,33 @@ function installSite2Mock(page, seed = {}) {
       defaultPlanSlug: String(mockSeed.defaultPlanSlug || "starter"),
       rooms: [{ room_id: 1, slug: "general", name: "General", topic: "Everything", visibility: "public", project_id: null, ticket_id: "", archived: 0, created_by: "admin" }],
       roomMembers: [{ room_id: 1, member_id: "admin", role: "owner", joined_at: "now", last_read_at: "" }],
-      roomMessages: [{ message_id: 1, room_id: 1, sender_id: "u-9f3a", sender_name: "admin", kind: "text", body: "welcome to the room", created_at: "now" }],
+      roomMessages: [
+        { message_id: 1, room_id: 1, sender_id: "u-9f3a", sender_name: "admin", kind: "text", body: "welcome to the room", created_at: "now" },
+        // TK-177: an agent reply that answered with a plain markdown table (the common
+        // case) must still render as an HTML table, not raw pipes.
+        {
+          message_id: 2, room_id: 1, sender_id: "agent-1", sender_name: "claude", kind: "text",
+          attrs: { agent: true },
+          body: "Here is the breakdown:\n\n| Quarter | Revenue |\n| --- | --- |\n| Q1 | 100 |\n| Q2 | 140 |",
+          created_at: "now",
+        },
+        // TK-177: an agent reply that used a render-spec block (table + chart).
+        {
+          message_id: 3, room_id: 1, sender_id: "agent-1", sender_name: "claude", kind: "text",
+          attrs: { agent: true },
+          body: [
+            "Spec sample:",
+            "",
+            "```render",
+            JSON.stringify({ blocks: [
+              { type: "table", columns: ["A", "B"], rows: [["x", "y"]] },
+              { type: "chart", chartType: "line", labels: ["t0", "t1"], series: [{ name: "load", data: [3, 7] }] },
+            ] }),
+            "```",
+          ].join("\n"),
+          created_at: "now",
+        },
+      ],
       nextRoomID: 2,
       nextRoomMessageID: 2,
       agents: [{ user_id: "agent-1", enabled: true }],
@@ -1989,6 +2035,30 @@ test("reorders the proposed breakdown from the refinement panel", async ({ page 
   );
 });
 
+test("renders a chat render-spec as table/list/chart in the refinement thread (TK-177)", async ({ page }) => {
+  await page.getByText("Refine me").click();
+  await page.locator("[data-ticket-tab='refinement']").click();
+  const thread = page.locator("#refinement-thread");
+
+  // Prose before the render block renders as markdown text, not raw JSON.
+  await expect(thread.locator(".render-prose")).toContainText("quarterly breakdown");
+  await expect(thread).not.toContainText("```render");
+  await expect(thread).not.toContainText("\"blocks\"");
+
+  // Table block.
+  await expect(thread.locator(".render-table th").first()).toHaveText("Quarter");
+  const firstRow = thread.locator(".render-table tbody tr").first();
+  await expect(firstRow).toContainText("Q1");
+  await expect(firstRow).toContainText("100");
+
+  // Chart block (inline SVG bars).
+  await expect(thread.locator(".render-chart svg rect").first()).toBeVisible();
+  await expect(thread.locator(".render-chart-legend")).toContainText("Revenue");
+
+  // List block.
+  await expect(thread.locator(".render-list li").first()).toHaveText("Alpha");
+});
+
 test("creates, updates, uploads, and deletes documents from the Documents view", async ({ page }) => {
   await page.getByRole("button", { name: "Documents" }).click();
   await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible();
@@ -2116,6 +2186,23 @@ test("chat: rooms list, messages, send, and create a room", async ({ page }) => 
   await page.locator("#dialog-input").fill("Engineering");
   await page.locator("#dialog-ok").click();
   await expect(page.locator("#chat-rooms-list")).toContainText("Engineering");
+});
+
+test("renders agent chat replies richly: markdown table + render-spec block (TK-177)", async ({ page }) => {
+  await page.locator('#main-nav button[data-view="chat"]').click();
+  await page.locator('.chat-room-item[data-room-id="1"]').click();
+  const box = page.locator("#chat-messages");
+
+  // A plain markdown table from the agent becomes an HTML table (the bug report).
+  await expect(box.locator(".chat-msg-body .render-table").first()).toBeVisible();
+  await expect(box.locator(".render-table th").first()).toHaveText("Quarter");
+  await expect(box).not.toContainText("| Quarter | Revenue |");
+
+  // A render-spec block renders its table + (line) chart; raw JSON is not shown.
+  await expect(box.locator(".render-chart svg").first()).toBeVisible();
+  await expect(box.locator(".render-chart-line").first()).toBeVisible();
+  await expect(box).not.toContainText("```render");
+  await expect(box).not.toContainText("\"blocks\"");
 });
 
 test("chat: breakout room from a ticket", async ({ page }) => {

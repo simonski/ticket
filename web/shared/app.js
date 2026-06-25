@@ -1160,6 +1160,237 @@
                 .replace(/'/g, "&#39;");
         }
 
+        // ── Rich chat rendering (TK-177) ─────────────────────────────────────
+        // A chat/refiner reply may append a single fenced ```render block holding a
+        // JSON render-spec describing how to present the answer (markdown text, a
+        // list, a table, or a bar/line chart). renderRichAgentText is the single
+        // shared entry point used by the refinement thread, the live streaming
+        // bubble, and (later) a general chat view. Everything is escaped before
+        // insertion, so untrusted model output cannot inject markup.
+
+        // extractRenderSpec splits an agent reply into prose and an optional parsed
+        // render-spec. Only the first ```render (or ~~~render) fence is honoured; a
+        // malformed block is ignored and its text left in the prose.
+        function extractRenderSpec(raw) {
+            const text = String(raw || "");
+            const re = /(^|\n)[ \t]*(```|~~~)[ \t]*render[ \t]*\n([\s\S]*?)\n[ \t]*\2[ \t]*(?=\n|$)/i;
+            const m = text.match(re);
+            if (!m) return { prose: text.trim(), spec: null };
+            let spec = null;
+            try {
+                const parsed = JSON.parse(m[3]);
+                if (parsed && Array.isArray(parsed.blocks) && parsed.blocks.length) spec = parsed;
+            } catch (_) { spec = null; }
+            if (!spec) return { prose: text.trim(), spec: null };
+            const prose = (text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim();
+            return { prose, spec };
+        }
+
+        // streamingProse returns the portion of an in-progress reply safe to show live —
+        // everything before a (possibly still-streaming) ```render fence — so the raw
+        // JSON never flashes in the bubble while the model is typing it.
+        function streamingProse(raw) {
+            const s = String(raw || "");
+            const m = s.match(/(^|\n)[ \t]*(```|~~~)[ \t]*render/i);
+            return (m ? s.slice(0, m.index) : s);
+        }
+
+        // renderInlineMd renders inline markdown (code, bold, italic, links) to safe
+        // HTML. It escapes first so untrusted text cannot inject markup.
+        function renderInlineMd(text) {
+            let html = escapeHTML(text);
+            html = html.replace(/`([^`]+)`/g, (_, c) => "<code>" + c + "</code>");
+            html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+            html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+            html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+                (_, t, u) => "<a href=\"" + u + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + t + "</a>");
+            return html;
+        }
+
+        // mdSplitRow splits a markdown table row ("| a | b |") into trimmed cells.
+        function mdSplitRow(line) {
+            let s = String(line).trim();
+            if (s.startsWith("|")) s = s.slice(1);
+            if (s.endsWith("|")) s = s.slice(0, -1);
+            return s.split("|").map((c) => c.trim());
+        }
+
+        // mdIsTableSeparator reports whether a line is a GitHub table header rule
+        // ("|---|:--:|"), which (with a preceding row) marks a markdown table.
+        function mdIsTableSeparator(line) {
+            const t = String(line || "").trim();
+            return t.indexOf("-") !== -1 && /^\|?[\s:|-]+\|?$/.test(t);
+        }
+
+        // renderMarkdownLite renders a conservative block-level markdown subset to safe
+        // HTML: headings, fenced code, GitHub tables, bullet/numbered lists, and
+        // paragraphs — with inline formatting inside. This is the prose fallback so a
+        // model that answers with a plain markdown table/list still renders richly even
+        // when it does not emit a render-spec block.
+        function renderMarkdownLite(text) {
+            const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+            let html = "";
+            let i = 0;
+            const isSpecial = (ln) => /^(```|~~~|#{1,6}\s|[-*+]\s|\d+\.\s)/.test(ln.trim());
+            while (i < lines.length) {
+                const t = lines[i].trim();
+                if (t === "") { i++; continue; }
+                // Fenced code block.
+                if (/^(```|~~~)/.test(t)) {
+                    const fence = t.slice(0, 3);
+                    i++;
+                    const buf = [];
+                    while (i < lines.length && lines[i].trim().slice(0, 3) !== fence) { buf.push(lines[i]); i++; }
+                    if (i < lines.length) i++; // closing fence
+                    html += "<pre class=\"render-code\"><code>" + escapeHTML(buf.join("\n")) + "</code></pre>";
+                    continue;
+                }
+                // Heading.
+                const h = t.match(/^(#{1,6})\s+(.*)$/);
+                if (h) {
+                    const lvl = h[1].length;
+                    html += "<h" + lvl + " class=\"render-h\">" + renderInlineMd(h[2]) + "</h" + lvl + ">";
+                    i++;
+                    continue;
+                }
+                // GitHub table: a row with pipes followed by a separator rule.
+                if (t.indexOf("|") !== -1 && i + 1 < lines.length && mdIsTableSeparator(lines[i + 1])) {
+                    const header = mdSplitRow(t);
+                    i += 2;
+                    const rows = [];
+                    while (i < lines.length && lines[i].indexOf("|") !== -1 && lines[i].trim() !== "") {
+                        rows.push(mdSplitRow(lines[i])); i++;
+                    }
+                    html += renderTableBlockHTML({ columns: header, rows: rows });
+                    continue;
+                }
+                // Unordered list.
+                if (/^[-*+]\s+/.test(t)) {
+                    const items = [];
+                    while (i < lines.length && /^[-*+]\s+/.test(lines[i].trim())) {
+                        items.push(lines[i].trim().replace(/^[-*+]\s+/, "")); i++;
+                    }
+                    html += "<ul class=\"render-list\">" + items.map((it) => "<li>" + renderInlineMd(it) + "</li>").join("") + "</ul>";
+                    continue;
+                }
+                // Ordered list.
+                if (/^\d+\.\s+/.test(t)) {
+                    const items = [];
+                    while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+                        items.push(lines[i].trim().replace(/^\d+\.\s+/, "")); i++;
+                    }
+                    html += "<ol class=\"render-list\">" + items.map((it) => "<li>" + renderInlineMd(it) + "</li>").join("") + "</ol>";
+                    continue;
+                }
+                // Paragraph: gather consecutive plain lines.
+                const para = [];
+                while (i < lines.length && lines[i].trim() !== "" && !isSpecial(lines[i]) &&
+                    !(lines[i].indexOf("|") !== -1 && i + 1 < lines.length && mdIsTableSeparator(lines[i + 1]))) {
+                    para.push(lines[i]); i++;
+                }
+                html += "<p class=\"render-p\">" + para.map(renderInlineMd).join("<br>") + "</p>";
+            }
+            return html;
+        }
+
+        function renderListBlockHTML(block) {
+            const items = Array.isArray(block.items) ? block.items : [];
+            if (!items.length) return "";
+            const tag = block.ordered ? "ol" : "ul";
+            const lis = items.map((it) => "<li>" + renderInlineMd(String(it)) + "</li>").join("");
+            return "<" + tag + " class=\"render-list\">" + lis + "</" + tag + ">";
+        }
+
+        function renderTableBlockHTML(block) {
+            const cols = Array.isArray(block.columns) ? block.columns : [];
+            const rows = Array.isArray(block.rows) ? block.rows : [];
+            if (!cols.length && !rows.length) return "";
+            let html = "<div class=\"render-table-wrap\"><table class=\"render-table\">";
+            if (cols.length) {
+                html += "<thead><tr>" + cols.map((c) => "<th>" + escapeHTML(String(c)) + "</th>").join("") + "</tr></thead>";
+            }
+            html += "<tbody>" + rows.map((r) => {
+                const cells = Array.isArray(r) ? r : [r];
+                return "<tr>" + cells.map((c) => "<td>" + escapeHTML(String(c)) + "</td>").join("") + "</tr>";
+            }).join("") + "</tbody></table></div>";
+            return html;
+        }
+
+        // renderChartBlockHTML draws a small inline-SVG bar or line chart (no external
+        // dependency) from labels + named series.
+        function renderChartBlockHTML(block) {
+            const labels = Array.isArray(block.labels) ? block.labels.map(String) : [];
+            const series = Array.isArray(block.series) ? block.series.filter((s) => s && Array.isArray(s.data)) : [];
+            if (!series.length) return "";
+            const type = String(block.chartType || "bar").toLowerCase() === "line" ? "line" : "bar";
+            const W = 480, H = 240, padL = 36, padR = 12, padT = 12, padB = 28;
+            const plotW = W - padL - padR, plotH = H - padT - padB;
+            let max = 0;
+            series.forEach((s) => s.data.forEach((v) => { const n = Number(v) || 0; if (n > max) max = n; }));
+            if (max <= 0) max = 1;
+            const n = Math.max(1, labels.length, Math.max.apply(null, series.map((s) => s.data.length)));
+            const colors = ["#4f8cff", "#ff7d4f", "#39c486", "#c879ff", "#ffc24f"];
+            const xLine = (i) => padL + (n <= 1 ? plotW / 2 : (plotW * i) / (n - 1));
+            const groupW = plotW / n;
+            const labelX = (i) => type === "line" ? xLine(i) : padL + i * groupW + groupW / 2;
+            const y = (v) => padT + plotH - (plotH * (Number(v) || 0)) / max;
+            const axisY = padT + plotH;
+            let body = "<line x1=\"" + padL + "\" y1=\"" + axisY + "\" x2=\"" + (W - padR) + "\" y2=\"" + axisY + "\" class=\"render-chart-axis\"/>" +
+                "<line x1=\"" + padL + "\" y1=\"" + padT + "\" x2=\"" + padL + "\" y2=\"" + axisY + "\" class=\"render-chart-axis\"/>";
+            if (type === "line") {
+                series.forEach((s, si) => {
+                    const pts = s.data.map((v, i) => xLine(i).toFixed(1) + "," + y(v).toFixed(1)).join(" ");
+                    body += "<polyline class=\"render-chart-line\" fill=\"none\" stroke=\"" + colors[si % colors.length] + "\" points=\"" + pts + "\"/>";
+                });
+            } else {
+                const barW = Math.max(2, (groupW * 0.7) / series.length);
+                series.forEach((s, si) => {
+                    s.data.forEach((v, i) => {
+                        const bx = padL + i * groupW + groupW * 0.15 + si * barW;
+                        const by = y(v);
+                        const bh = Math.max(0, axisY - by);
+                        body += "<rect x=\"" + bx.toFixed(1) + "\" y=\"" + by.toFixed(1) + "\" width=\"" + barW.toFixed(1) + "\" height=\"" + bh.toFixed(1) + "\" fill=\"" + colors[si % colors.length] + "\"/>";
+                    });
+                });
+            }
+            labels.forEach((lab, i) => {
+                body += "<text class=\"render-chart-label\" x=\"" + labelX(i).toFixed(1) + "\" y=\"" + (H - 8) + "\" text-anchor=\"middle\">" + escapeHTML(lab) + "</text>";
+            });
+            let legend = "";
+            if (series.length > 1 || (series[0] && series[0].name)) {
+                legend = "<div class=\"render-chart-legend\">" + series.map((s, si) =>
+                    "<span class=\"render-chart-key\"><span class=\"render-chart-swatch\" style=\"background:" + colors[si % colors.length] + "\"></span>" +
+                    escapeHTML(String(s.name || ("series " + (si + 1)))) + "</span>").join("") + "</div>";
+            }
+            return "<div class=\"render-chart\"><svg viewBox=\"0 0 " + W + " " + H + "\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\">" + body + "</svg>" + legend + "</div>";
+        }
+
+        function renderSpecBlocksHTML(spec) {
+            if (!spec || !Array.isArray(spec.blocks)) return "";
+            return spec.blocks.map((block) => {
+                if (!block || typeof block !== "object") return "";
+                switch (String(block.type || "").toLowerCase()) {
+                    case "text": return "<div class=\"render-text\">" + renderMarkdownLite(String(block.content || "")) + "</div>";
+                    case "list": return renderListBlockHTML(block);
+                    case "table": return renderTableBlockHTML(block);
+                    case "chart": return renderChartBlockHTML(block);
+                    default: return "";
+                }
+            }).join("");
+        }
+
+        // renderRichAgentText returns safe HTML for an agent message: prose rendered as
+        // light markdown plus any render-spec blocks. Degrades to plain prose when no
+        // (or a malformed) render block is present.
+        function renderRichAgentText(raw) {
+            const parsed = extractRenderSpec(raw);
+            let html = "";
+            if (parsed.prose) html += "<div class=\"render-prose\">" + renderMarkdownLite(parsed.prose) + "</div>";
+            if (parsed.spec) html += "<div class=\"render-blocks\">" + renderSpecBlocksHTML(parsed.spec) + "</div>";
+            if (!html) html = "<div class=\"render-prose\">" + escapeHTML(String(raw || "")) + "</div>";
+            return html;
+        }
+
         // humanizeSince renders a coarse elapsed time since a stored UTC timestamp
         // ("2026-06-22 18:08:52"), mirroring the CLI/TUI helper (TK-90).
         function humanizeSince(ts) {
@@ -2440,9 +2671,12 @@
                 ? "<span class=\"chat-avatar chat-avatar-agent\" title=\"agent\">🤖</span>"
                 : "<span class=\"chat-avatar chat-avatar-person\">" + initial + "</span>";
             const model = (isAgent && attrs.model) ? "<span class=\"chat-msg-model\">via " + escapeHTML(String(attrs.model)) + "</span>" : "";
+            // Agent replies may carry a render-spec (table/list/chart/markdown);
+            // render them richly. Human turns keep @mention/#label highlighting.
+            const bodyHTML = isAgent ? renderRichAgentText(m.body) : highlightRoomText(m.body);
             const bubble = "<div class=\"chat-bubble\">" +
                 (isSelf ? "" : "<div class=\"chat-msg-meta\">" + name + model + "</div>") +
-                "<div class=\"chat-msg-body\">" + highlightRoomText(m.body) + "</div></div>";
+                "<div class=\"chat-msg-body\">" + bodyHTML + "</div></div>";
             const side = isSelf ? "chat-msg-self" : "chat-msg-other";
             return "<div class=\"chat-msg chat-bubble-row " + side + "\" data-message-id=\"" + m.message_id + "\">" +
                 (isSelf ? bubble : bubble + avatar) + "</div>";
@@ -8295,9 +8529,13 @@
                     const author = item.author || "user";
                     const isAgent = agents.has(String(author).toLowerCase()) || /refin/i.test(author);
                     const side = isAgent ? "agent" : "human";
+                    const rawText = item.text || item.comment || "";
+                    // Agent replies may carry a render-spec — render rich (tables,
+                    // lists, charts, markdown). Human turns stay plain text.
+                    const bodyHTML = isAgent ? renderRichAgentText(rawText) : escapeHTML(rawText);
                     return "<div class=\"refinement-bubble refinement-bubble-" + side + "\">" +
                         "<div class=\"refinement-author\">" + escapeHTML(author) + "</div>" +
-                        "<div class=\"refinement-text\">" + escapeHTML(item.text || item.comment || "") + "</div>" +
+                        "<div class=\"refinement-text\">" + bodyHTML + "</div>" +
                         (item.date ? "<div class=\"refinement-date\">" + escapeHTML(item.date) + "</div>" : "") +
                         "</div>";
                 }).join("");
@@ -8671,13 +8909,21 @@
                     setRefinementStatus("Refiner is responding…", true);
                     const node = ensureRefinementStreamingBubble();
                     if (node) {
-                        // Clear the "thinking" dots once real output begins.
                         const bubble = node.closest(".refinement-bubble");
+                        // Clear the "thinking" dots once real output begins.
                         if (bubble && bubble.classList.contains("refinement-thinking")) {
                             bubble.classList.remove("refinement-thinking");
-                            node.textContent = "";
+                            if (bubble) bubble.dataset.raw = "";
                         }
-                        node.textContent += String(payload.text || "");
+                        // Accumulate the raw reply but only show the prose portion live —
+                        // a streaming ```render block is hidden until message_done re-
+                        // renders the persisted reply richly.
+                        if (bubble) {
+                            bubble.dataset.raw = (bubble.dataset.raw || "") + String(payload.text || "");
+                            node.textContent = streamingProse(bubble.dataset.raw);
+                        } else {
+                            node.textContent += String(payload.text || "");
+                        }
                         refinementScrollToBottom();
                     }
                     return;

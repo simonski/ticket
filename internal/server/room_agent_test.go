@@ -151,6 +151,15 @@ func TestReplyAsAgentsIgnoresNonAgentAndNonMember(t *testing.T) {
 	}
 }
 
+func TestBuildRoomAgentPromptIncludesRenderGuidance(t *testing.T) {
+	prompt := buildRoomAgentPrompt("helper", "make a table of revenue", nil)
+	for _, want := range []string{"render", "\"table\"", "\"chart\"", "make a table of revenue"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("room agent prompt missing %q\n---\n%s", want, prompt)
+		}
+	}
+}
+
 func TestDefaultRoomAgentReplyPromptPlaceholder(t *testing.T) {
 	ctx := context.Background()
 	// {prompt} placeholder: substituted as an argument (echo prints it back).
