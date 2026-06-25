@@ -2195,3 +2195,47 @@ test("chat: opening the panel auto-selects a room and focuses the composer", asy
   await expect(page.locator("#chat-composer-input")).toBeEnabled();
   await expect(page.locator("#chat-composer-input")).toBeFocused();
 });
+
+test("composer power transforms apply sed-style substitutions safely (TK-167)", async ({ page }) => {
+  // The shared beforeEach already booted and logged in; the transform helpers
+  // are exposed on window at app boot.
+  const result = await page.evaluate(() => {
+    const tt = window.__site2TextTransform;
+    const apply = (target, text) => {
+      const sub = tt.parseSubstitution(text);
+      if (!sub) { return { parsed: false }; }
+      return { parsed: true, ...tt.applySubstitution(target, sub) };
+    };
+    return {
+      firstOnly: apply("teh cat sat on teh mat", "s/teh/the/"),
+      global: apply("teh cat sat on teh mat", "s/teh/the/g"),
+      caseInsensitive: apply("Hello HELLO hello", "s/hello/hi/gi"),
+      altDelimiter: apply("a/b/c", "s|/|-|g"),
+      invalid: apply("anything", "s/(unclosed/x/"),
+      notACommand: tt.parseSubstitution("such a nice day"),
+      bareWordS: tt.parseSubstitution("so this is fine"),
+    };
+  });
+  expect(result.firstOnly.text).toBe("the cat sat on teh mat");
+  expect(result.global.text).toBe("the cat sat on the mat");
+  expect(result.caseInsensitive.text).toBe("hi hi hi");
+  expect(result.altDelimiter.text).toBe("a-b-c");
+  expect(result.invalid.error).toBeTruthy(); // invalid regex reported, not thrown
+  expect(result.notACommand).toBeNull();
+  expect(result.bareWordS).toBeNull();
+});
+
+test("typing a substitution rewrites the previous message in the composer (TK-167)", async ({ page }) => {
+  // The shared beforeEach already logged in and landed on the Board.
+  await page.locator('#main-nav button[data-view="chat"]').click();
+  const input = page.locator("#chat-composer-input");
+  await expect(input).toBeEnabled();
+  // Send a message with a typo, then correct it with a substitution.
+  await input.fill("hello wrold");
+  await input.press("Enter");
+  await expect.poll(() => page.evaluate(() => document.getElementById("chat-composer-input").value)).toBe("");
+  await input.fill("s/wrold/world/");
+  await input.press("Enter");
+  // The substitution loads the corrected previous message back into the composer.
+  await expect(input).toHaveValue("hello world");
+});

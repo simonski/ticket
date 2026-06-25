@@ -2469,11 +2469,75 @@
         // Shell-style composer history: Up/Down recall sent messages, Esc clears.
         let chatHistory = [];
         let chatHistoryIdx = 0;
+        // parseSubstitution recognises a sed-style s/pattern/replacement/[flags]
+        // command. The delimiter is whatever punctuation follows the leading "s";
+        // it can be escaped inside the pattern/replacement with a backslash. Only
+        // the g and i flags are accepted. Returns null when the text is not a
+        // well-formed substitution (so it is treated as an ordinary message).
+        function parseSubstitution(text) {
+            const t = String(text || "").trim();
+            if (t.length < 4 || t[0] !== "s") { return null; }
+            const delim = t[1];
+            if (/[\sA-Za-z0-9\\]/.test(delim)) { return null; }
+            const segs = [""];
+            let i = 2;
+            while (i < t.length) {
+                const ch = t[i];
+                if (ch === "\\" && i + 1 < t.length && t[i + 1] === delim) {
+                    segs[segs.length - 1] += delim; i += 2; continue;
+                }
+                if (ch === delim) {
+                    if (segs.length === 3) { return null; } // a 4th delimiter ⇒ not a clean s///
+                    segs.push(""); i++; continue;
+                }
+                segs[segs.length - 1] += ch; i++;
+            }
+            // Need the closing delimiter, i.e. exactly [pattern, replacement, flags].
+            if (segs.length !== 3) { return null; }
+            const pattern = segs[0], replacement = segs[1], flags = segs[2];
+            if (!pattern) { return null; }
+            if (/[^gi]/.test(flags)) { return null; }
+            return { pattern: pattern, replacement: replacement, flags: flags };
+        }
+        // applySubstitution runs a parsed substitution against target text. Returns
+        // {text} on success or {error} when the pattern is not a valid regex.
+        function applySubstitution(target, sub) {
+            let re;
+            try {
+                re = new RegExp(sub.pattern, sub.flags);
+            } catch (e) {
+                return { error: (e && e.message) || "invalid pattern" };
+            }
+            return { text: String(target).replace(re, sub.replacement) };
+        }
+        // Expose the pure transform helpers for browser tests (no effect otherwise).
+        try { window.__site2TextTransform = { parseSubstitution: parseSubstitution, applySubstitution: applySubstitution }; } catch (e) { /* ignore */ }
         function sendRoomMessage() {
             const input = document.getElementById("chat-composer-input");
             if (!input || !state.activeRoomID) { return; }
             const body = String(input.value || "").trim();
             if (!body) { return; }
+            // Power transform: s/old/new/[g][i] rewrites your previous message and
+            // loads the result back into the composer for review (it is not sent
+            // automatically). Operates on composer text; on a bad pattern or with
+            // no prior message it leaves the composer unchanged and explains why.
+            const sub = parseSubstitution(body);
+            if (sub) {
+                const prev = chatHistory.length ? chatHistory[chatHistory.length - 1] : "";
+                if (!prev) {
+                    setNotice("Nothing to transform — send a message first", true);
+                    return;
+                }
+                const result = applySubstitution(prev, sub);
+                if (result.error) {
+                    setNotice("Invalid pattern: " + result.error, true);
+                    return; // leave the s/// text in the composer so it can be fixed
+                }
+                input.value = result.text;
+                input.focus();
+                input.setSelectionRange(input.value.length, input.value.length);
+                return;
+            }
             if (chatHistory[chatHistory.length - 1] !== body) { chatHistory.push(body); }
             chatHistoryIdx = chatHistory.length;
             const roomID = state.activeRoomID;
