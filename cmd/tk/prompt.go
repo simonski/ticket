@@ -70,10 +70,13 @@ func readPasswordPrompt(reader *bufio.Reader, in io.Reader, out io.Writer) (stri
 		}
 		switch single[0] {
 		case '\r', '\n':
-			fmt.Fprint(out, "\n")
+			// Raw mode: \n is line-feed only, so emit \r\n to return the cursor to
+			// column 0 — otherwise the next output is indented by the password
+			// length (the count of asterisks just printed) (TK-161).
+			fmt.Fprint(out, "\r\n")
 			return string(buf), nil
 		case 3:
-			fmt.Fprint(out, "^C\n")
+			fmt.Fprint(out, "^C\r\n")
 			return "", errors.New("interrupt")
 		case 8, 127:
 			if len(buf) > 0 {
