@@ -539,16 +539,38 @@ further churn-prone columns (the prior epic already consolidated them, see §9).
 S3 deliberately moved exactly one evidence-backed column rather than inventing
 make-work.
 
-## 17. Tier-3 generated columns (feeds TK-176/S5, optional)
+## 17. Tier-3 generated columns (TK-176/S5)
 
-Tier-3a (expression index via `EnsureAttrIndex`) ships today. Tier-3b — a
-`GENERATED ALWAYS AS (json_extract(attrs,'$.key')) VIRTUAL` column — is still
-**documented-only**. S5 is optional and should be built only when a concrete
-attrs key needs a first-class typed/indexable column *surface* (e.g. a strict
-type for an external tool, or a UNIQUE constraint over a bag key) that an
-expression index cannot provide. Acceptance for S5, if taken: a worked example
-key promoted to a `VIRTUAL` generated column, an index on it, and a test showing
-`EXPLAIN QUERY PLAN` uses the index — with no table rewrite and no data backfill.
+Two promotion mechanisms now ship, both with no table rewrite, no write-path
+change, and no schema-version bump (the value keeps living in `attrs`):
+
+- **Tier-3a — expression index**: `EnsureAttrIndex(ctx, db, table, key)` creates
+  `idx_<table>_attrs_<key>` over `json_extract(attrs,'$.<key>')`. The value has no
+  column surface; you query it through the `json_extract` expression (which the
+  index serves).
+- **Tier-3b — generated column**: `EnsureGeneratedColumn(ctx, db, table, key, type)`
+  idempotently adds a VIRTUAL generated column `gen_<key>` defined as
+  `json_extract(attrs,'$.<key>')` with a declared affinity (`TEXT`/`INTEGER`/`REAL`),
+  then indexes it (`idx_<table>_gencol_<key>`). Now the value has a real, **typed**
+  column handle.
+
+**When to choose which.** Default to Tier-3a — it is simpler and sufficient for
+filter/sort. Reach for Tier-3b only when you need a true **column surface** that
+an expression cannot give you:
+
+- a **declared type/affinity** so comparisons behave numerically, not lexically
+  (e.g. `gen_health_score >= 6` rather than a string compare on the JSON text);
+- tooling that **introspects columns** (reporting, ORMs, `SELECT *` consumers)
+  and cannot see a bare `json_extract` expression;
+- a column you want to reference by name in many queries without repeating the
+  `json_extract` path.
+
+VIRTUAL (not STORED) is used deliberately: SQLite forbids adding a STORED
+generated column via `ALTER TABLE`, and VIRTUAL costs nothing on disk while the
+index provides lookup speed. Implemented in `internal/store/attrs_query.go`;
+worked example + `EXPLAIN QUERY PLAN` index-usage assertion on `health_score` in
+`attrs_query_test.go`. Idempotency uses `pragma_table_xinfo` because plain
+`pragma_table_info` does not list generated columns.
 
 ## 17a. How to add a Tier-2 field (the declare-once recipe, TK-173)
 

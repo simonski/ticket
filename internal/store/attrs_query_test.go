@@ -94,3 +94,104 @@ func TestListTicketsByAttrUsesIndex(t *testing.T) {
 		t.Fatalf("expression index not used by planner; plan:\n%s", plan)
 	}
 }
+
+func TestEnsureGeneratedColumnRejectsBadInput(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db, _ := attrsTestDB(t)
+
+	if err := EnsureGeneratedColumn(ctx, db, "not_a_table", "health_score", "INTEGER"); err == nil {
+		t.Fatal("expected error for unknown table")
+	}
+	if err := EnsureGeneratedColumn(ctx, db, "tickets", "bad key", "INTEGER"); err == nil {
+		t.Fatal("expected error for invalid attrs key")
+	}
+	if err := EnsureGeneratedColumn(ctx, db, "tickets", "health_score", "DROP TABLE tickets"); err == nil {
+		t.Fatal("expected error for unsupported column type")
+	}
+}
+
+// TestEnsureGeneratedColumnTypedIndexedQuery promotes the health_score attrs key
+// to a typed VIRTUAL generated column, proves creation is idempotent, that the
+// column reflects the bag value with INTEGER affinity (typed comparison), and
+// that the planner uses the generated-column index for a range query.
+func TestEnsureGeneratedColumnTypedIndexedQuery(t *testing.T) {
+	// Not parallel: alters the schema of its own DB.
+	ctx := context.Background()
+	db, _ := attrsTestDB(t)
+
+	mk := func(title string, score int) {
+		tk, err := CreateTicket(ctx, db, TicketCreateParams{ProjectID: 1, Type: "task", Title: title})
+		if err != nil {
+			t.Fatalf("CreateTicket(%s) error = %v", title, err)
+		}
+		if _, err := db.ExecContext(ctx,
+			`UPDATE tickets SET attrs = json_set(attrs, '$.health_score', ?) WHERE ticket_id = ?`, score, tk.ID); err != nil {
+			t.Fatalf("seed health_score(%s) error = %v", title, err)
+		}
+	}
+	mk("low", 3)
+	mk("mid", 6)
+	mk("high", 9)
+
+	// Idempotent: declaring the generated column twice must not error.
+	if err := EnsureGeneratedColumn(ctx, db, "tickets", "health_score", "INTEGER"); err != nil {
+		t.Fatalf("EnsureGeneratedColumn() error = %v", err)
+	}
+	if err := EnsureGeneratedColumn(ctx, db, "tickets", "health_score", "INTEGER"); err != nil {
+		t.Fatalf("EnsureGeneratedColumn() second call error = %v", err)
+	}
+
+	col := GeneratedColumnName("health_score") // gen_health_score
+	if exists, err := generatedColumnExists(ctx, db, "tickets", col); err != nil {
+		t.Fatalf("generatedColumnExists error = %v", err)
+	} else if !exists {
+		t.Fatalf("generated column %q was not created", col)
+	}
+
+	// Typed (INTEGER) comparison via the generated column: a numeric range query
+	// returns the rows with score >= 6, ordered, proving the column carries the
+	// bag value with integer affinity (string affinity would mis-sort).
+	// #nosec G202 -- col is the allowlist-derived generated column name, no user input.
+	rows, err := db.QueryContext(ctx,
+		`SELECT title FROM tickets WHERE project_id = 1 AND `+col+` >= 6 ORDER BY `+col)
+	if err != nil {
+		t.Fatalf("range query error = %v", err)
+	}
+	defer rows.Close()
+	var titles []string
+	for rows.Next() {
+		var title string
+		if scanErr := rows.Scan(&title); scanErr != nil {
+			t.Fatalf("scan error = %v", scanErr)
+		}
+		titles = append(titles, title)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows error = %v", err)
+	}
+	if len(titles) != 2 || titles[0] != "mid" || titles[1] != "high" {
+		t.Fatalf("typed range query returned %v, want [mid high]", titles)
+	}
+
+	// The planner uses the generated-column index for the range filter.
+	var plan strings.Builder
+	// #nosec G202 -- col is allowlist-derived.
+	planRows, err := db.QueryContext(ctx, `EXPLAIN QUERY PLAN SELECT title FROM tickets WHERE `+col+` >= 6`)
+	if err != nil {
+		t.Fatalf("EXPLAIN QUERY PLAN error = %v", err)
+	}
+	defer planRows.Close()
+	for planRows.Next() {
+		var id, parent, notused int
+		var detail string
+		if scanErr := planRows.Scan(&id, &parent, &notused, &detail); scanErr != nil {
+			t.Fatalf("scan plan error = %v", scanErr)
+		}
+		plan.WriteString(detail)
+		plan.WriteString("\n")
+	}
+	if !strings.Contains(plan.String(), "idx_tickets_gencol_health_score") {
+		t.Fatalf("generated-column index not used by planner; plan:\n%s", plan.String())
+	}
+}
