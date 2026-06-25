@@ -93,6 +93,43 @@ func TestUpgradeInPlaceRollsBackOnFailedMigration(t *testing.T) {
 	}
 }
 
+// TestOpenDoesNotMigrateOlderDatabase is the entry-point regression guard for the
+// epic's safety contract: the local/CLI Open() path must NEVER migrate in place
+// (which would skip the verified backup). It must refuse with a SchemaVersionError
+// and leave the database byte-untouched at its original version. If a future change
+// makes Open() auto-upgrade, this test fails and forces it to go through the
+// backed-up UpgradeInPlaceWithBackup path instead.
+func TestOpenDoesNotMigrateOlderDatabase(t *testing.T) {
+	t.Parallel()
+	path := createPreviousSchemaDatabaseForTest(t)
+
+	before, err := DetectSchemaVersion(path)
+	if err != nil {
+		t.Fatalf("DetectSchemaVersion() before = %v", err)
+	}
+	if before >= CurrentSchemaVersion {
+		t.Fatalf("precondition: fixture version %d is not older than current %d", before, CurrentSchemaVersion)
+	}
+
+	_, openErr := Open(path)
+	var versionErr *SchemaVersionError
+	if !errors.As(openErr, &versionErr) {
+		t.Fatalf("Open() error = %v, want SchemaVersionError (must refuse, not migrate)", openErr)
+	}
+
+	after, err := DetectSchemaVersion(path)
+	if err != nil {
+		t.Fatalf("DetectSchemaVersion() after = %v", err)
+	}
+	if after != before {
+		t.Fatalf("Open() migrated the database without a backup: version %d -> %d", before, after)
+	}
+	// No backup should have been produced by a refused open.
+	if matches, _ := filepath.Glob(path + ".bak-*"); len(matches) != 0 {
+		t.Fatalf("refused Open() unexpectedly produced backups: %v", matches)
+	}
+}
+
 // TestUpgradeInPlaceTakesVerifiedBackup confirms a verifiable backup is produced
 // before the migration runs.
 func TestUpgradeInPlaceTakesVerifiedBackup(t *testing.T) {

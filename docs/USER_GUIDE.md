@@ -135,6 +135,53 @@ sidebar section):
   whose data backs the board (Workflows, Roles, Teams) are hidden in the nav but
   their shared data stays reachable so ticket flows keep working.
 
+## Database upgrades, backups & restore (admin)
+
+`tk` stores everything in a single SQLite database (`$TICKET_HOME/ticket.db` by
+default). When you upgrade `tk` to a build with a newer schema, the database is
+migrated — **always behind a verified, automatic backup**.
+
+**How upgrades happen**
+
+- **Server startup** auto-upgrades the database when the schema is out of date.
+- **`tk admin upgrade-database [-f <db>]`** upgrades a database on demand.
+- The **local/CLI path refuses to migrate silently**: if you point the CLI at an
+  older database, it stops with a clear error telling you to run
+  `tk admin upgrade-database -f <db>` rather than touching your data unexpectedly.
+
+In every case that *does* migrate, the upgrade first takes a backup, verifies it,
+and **rolls the database back automatically if the migration fails** — so a
+failed upgrade leaves your original database intact.
+
+**What the backup contains and where it lives**
+
+- Before migrating, the WAL is checkpointed into the main file and the database is
+  copied to a timestamped file **next to your database**:
+  `ticket.db.bak-YYYYMMDD-HHMMSS.<nanos>`. The backup is a self-contained,
+  consistent copy (any `-wal`/`-shm` sidecars present are copied too).
+- The backup is verified (`PRAGMA integrity_check` + a readable schema version)
+  *before* the live database is touched; if verification fails, the upgrade
+  aborts without modifying your data.
+- The **5 most recent** backups are retained; older ones are pruned only after a
+  successful upgrade, so the last known-good backup is never removed.
+
+**Restoring manually**
+
+If you ever need to roll back yourself (the database is corrupt, or you want the
+pre-upgrade state):
+
+1. **Stop the `tk` server** (no process may be using the database).
+2. Find the newest backup beside your database:
+   `ls -t ticket.db.bak-*` — the first entry is the most recent.
+3. Remove any stale sidecars and restore the backup over the live file:
+   ```bash
+   rm -f ticket.db-wal ticket.db-shm
+   cp "ticket.db.bak-YYYYMMDD-HHMMSS.<nanos>" ticket.db
+   ```
+4. Restart the server. (If the backup is older than your current binary's schema,
+   run `tk admin upgrade-database -f ticket.db` — which will itself take a fresh
+   backup first.)
+
 ## More
 
 - Tickets, the board, projects, workflows, roles, and the mailbox are reachable
