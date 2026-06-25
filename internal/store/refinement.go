@@ -184,7 +184,7 @@ func ApproveRefinement(ctx context.Context, db *sql.DB, ticketID, actorUsername,
 
 	// Breakdown: the idea becomes the epic; its children become ready stories.
 	if _, err := db.ExecContext(ctx, `
-		UPDATE tickets SET type = 'epic', draft = 0, recommended_ready = 0, assignee = '', updated_at = CURRENT_TIMESTAMP
+		UPDATE tickets SET type = 'epic', draft = 0, attrs = json_remove(attrs, '$.recommended_ready'), assignee = '', updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
 	`, ticketID); err != nil {
 		return Ticket{}, err

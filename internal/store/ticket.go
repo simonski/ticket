@@ -566,6 +566,9 @@ writeTicket:
 		Author:           current.Author,
 		PrURL:            current.PrURL,
 		HealthScore:      current.HealthScore,
+		// recommended_ready is not edited by UpdateTicket; preserve the current
+		// value so the registry re-persists it instead of stripping it (TK-174).
+		RecommendedReady: current.RecommendedReady,
 		DORMap:           nextDORMap,
 		DODMap:           nextDODMap,
 		ACMap:            nextACMap,
@@ -752,9 +755,14 @@ func SetRecommendedReady(ctx context.Context, db *sql.DB, id string, recommended
 	if err != nil {
 		return Ticket{}, err
 	}
-	result, err := db.ExecContext(ctx, `
-		UPDATE tickets SET recommended_ready = ?, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?
-	`, boolToInt(recommended), id)
+	// recommended_ready now lives in the attrs bag (TK-174): set the key when true,
+	// remove it when false to keep the bag sparse (matches the registry round-trip).
+	setExpr := `json_remove(attrs, '$.recommended_ready')`
+	if recommended {
+		setExpr = `json_set(attrs, '$.recommended_ready', 1)`
+	}
+	result, err := db.ExecContext(ctx,
+		`UPDATE tickets SET attrs = `+setExpr+`, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?`, id)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -800,7 +808,7 @@ func MarkTicketReady(ctx context.Context, db *sql.DB, id, actorUsername, actorID
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET draft = 0, stage = ?, state = 'idle', status = ? || '/idle', recommended_ready = 0, assignee = '', updated_at = CURRENT_TIMESTAMP
+		SET draft = 0, stage = ?, state = 'idle', status = ? || '/idle', attrs = json_remove(attrs, '$.recommended_ready'), assignee = '', updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
 	`, stage, stage, id)
 	if err != nil {
@@ -1495,16 +1503,15 @@ var ticketColumnNames = []string{
 	"stage", "state", "status", "priority", "sort_order", "estimate_effort",
 	"assignee", "draft", "complete",
 	"archived", "deleted", "previous_workflow_stage_id", "previous_role_id",
-	"release_id", "created_by", "created_at", "updated_at", "recommended_ready",
+	"release_id", "created_by", "created_at", "updated_at",
 	"started_at", "attrs",
 }
 
 // ticketColumnCoalesce maps nullable columns to the SQL literal substituted via
 // COALESCE when selecting them, so scanTicket can scan into non-pointer fields.
 var ticketColumnCoalesce = map[string]string{
-	"created_by":        "''",
-	"recommended_ready": "0",
-	"started_at":        "''",
+	"created_by": "''",
+	"started_at": "''",
 }
 
 // ticketAttrGuidanceKeys are the nested guidance maps folded into the bag
@@ -1594,7 +1601,6 @@ func scanTicket(s scanner) (Ticket, error) {
 	var prevStageID sql.NullInt64
 	var prevRoleID sql.NullInt64
 	var releaseID sql.NullInt64
-	var recommendedReady int
 	var attrsJSON sql.NullString
 	if err := s.Scan(
 		&ticket.ID,
@@ -1625,7 +1631,6 @@ func scanTicket(s scanner) (Ticket, error) {
 		&ticket.CreatedBy,
 		&ticket.CreatedAt,
 		&ticket.UpdatedAt,
-		&recommendedReady,
 		&ticket.StartedAt,
 		&attrsJSON,
 	); err != nil {
@@ -1666,7 +1671,7 @@ func scanTicket(s scanner) (Ticket, error) {
 	ticket.Complete = complete == 1
 	ticket.Archived = archived == 1
 	ticket.Deleted = deleted == 1
-	ticket.RecommendedReady = recommendedReady == 1
+	// RecommendedReady is hydrated from attrs by the scalar registry (TK-174).
 	hydrateTicketAttrs(&ticket)
 	return ticket, nil
 }

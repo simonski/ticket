@@ -1696,9 +1696,18 @@ CREATE TABLE user_notifications (
 		}
 	}
 
-	// Add recommended_ready to tickets (refiner agent signals readiness).
-	if !columnExists(ctx, db, "tickets", "recommended_ready") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN recommended_ready INTEGER NOT NULL DEFAULT 0`); err != nil {
+	// recommended_ready (refiner readiness signal) moved from a dedicated column
+	// into the attrs bag (TK-174). It is sparse and never used in a value predicate,
+	// so it is a Tier-2 field. Preserve a set (=1) flag into the bag, then drop the
+	// column; false flags stay sparse (absent), matching the registry round-trip.
+	// Idempotent and non-clobbering (json_set only fills an absent key). The legacy
+	// ADD COLUMN was removed so fresh databases never create the column.
+	if columnExists(ctx, db, "tickets", "recommended_ready") {
+		if _, err := db.ExecContext(ctx, `UPDATE tickets SET attrs = json_set(attrs, '$.recommended_ready', recommended_ready) `+
+			`WHERE json_extract(attrs, '$.recommended_ready') IS NULL AND COALESCE(recommended_ready, 0) <> 0`); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets DROP COLUMN recommended_ready`); err != nil {
 			return err
 		}
 	}
