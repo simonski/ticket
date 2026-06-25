@@ -96,6 +96,18 @@ created_at, updated_at}` where `state ∈ {queued, running, done, failed}`.
 Reuses: room membership, WS hub, `room_agent.go`, `/task` path.
 New: queue table + worker loop + panel + enqueue rule + `/promote`.
 
+**Resolved (TK-168):** new `room_agent_tasks` table (distinct from `work_items`);
+always-ephemeral with TTL purge (`PurgeFinishedRoomAgentTasks`). `ClaimNextRoomAgentTask`
+atomically marks the oldest queued task running **only if** no task for the same
+`(room, agent)` is already running — serial per (room,agent), concurrent across keys.
+A server-lifecycle dispatcher (`runRoomAgentTaskWorker`, gated by `roomWorkerEnabled`
+so tests don't race it) drains eligible tasks, runs each via the existing
+`roomAgentReply`, posts the result into the room, and broadcasts a `room_queue` WS
+event. `@agent do/queue X` enqueues (`parseAgentTaskInstruction`); other mentions
+still reply once. `GET /api/rooms/{id}/agent-queue` feeds the live panel;
+`/promote [id]` converts a task into a real ticket via `createRoomTask` and removes
+it from the queue.
+
 ---
 
 ## Story C (TK-169): Deeper `/tk-NNN` palette action stack

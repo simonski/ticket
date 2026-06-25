@@ -2273,3 +2273,29 @@ test("palette /tk-NNN exposes a deeper action stack with a lifecycle submenu (TK
   await page.locator("#command-palette-input").press("Escape");
   await expect(page.locator("#command-palette-overlay")).toBeHidden();
 });
+
+test("agent queue panel renders pending/running/done states (TK-168)", async ({ page }) => {
+  // The shared beforeEach logged in; go to chat so the panel element exists.
+  await page.locator('#main-nav button[data-view="chat"]').click();
+  await expect(page.locator("#chat-composer-input")).toBeEnabled();
+
+  // Drive the live panel renderer directly (the same path room_queue WS events use).
+  await page.evaluate(() => {
+    window.__site2RenderAgentQueue([
+      { task_id: 1, instruction: "run the linter", state: "done", agent_name: "buildbot" },
+      { task_id: 2, instruction: "summarise the thread", state: "running", agent_name: "buildbot" },
+      { task_id: 3, instruction: "draft release notes", state: "queued", agent_name: "buildbot" },
+    ]);
+  });
+
+  const panel = page.locator("#chat-queue");
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("Agent queue");
+  await expect(panel.locator(".chat-queue-running")).toContainText("summarise the thread");
+  await expect(panel.locator(".chat-queue-done")).toContainText("run the linter");
+  await expect(panel.locator(".chat-queue-item")).toHaveCount(3);
+
+  // An empty queue hides the panel.
+  await page.evaluate(() => window.__site2RenderAgentQueue([]));
+  await expect(panel).toBeHidden();
+});

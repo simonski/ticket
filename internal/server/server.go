@@ -35,10 +35,16 @@ type Server struct {
 	httpServer       *http.Server
 	stopReaper       chan struct{}
 	stopOrchestrator chan struct{}
+	stopRoomWorker   chan struct{}
 }
 
+// roomWorkerEnabled gates the ephemeral agent-task dispatcher. It is true in
+// production; the server test suite disables it (TestMain) so the background
+// worker does not race with tests that drive the queue directly (TK-168).
+var roomWorkerEnabled = true
+
 func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string, enableOrchestrator bool, accessLog, errorLog io.Writer) (*Server, error) {
-	handler, err := handlerWithPasskeyFactory(db, version, verbose, output, staticPath, siteName, accessLog, errorLog, defaultPasskeyServiceFactory)
+	handler, live, err := handlerWithPasskeyFactory(db, version, verbose, output, staticPath, siteName, accessLog, errorLog, defaultPasskeyServiceFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -54,10 +60,14 @@ func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer
 		},
 		stopReaper:       make(chan struct{}),
 		stopOrchestrator: make(chan struct{}),
+		stopRoomWorker:   make(chan struct{}),
 	}
 	go s.runAgentReaper(db, verbose, output)
 	go s.runRetentionPurge(db, verbose)
 	go s.runRefinementReaper(db)
+	if roomWorkerEnabled {
+		go s.runRoomAgentTaskWorker(db, live)
+	}
 	if enableOrchestrator {
 		go s.runOrchestrator(db, verbose)
 	}
@@ -210,10 +220,11 @@ func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
 }
 
 func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string) (http.Handler, error) {
-	return handlerWithPasskeyFactory(db, version, verbose, output, staticPath, siteName, nil, nil, defaultPasskeyServiceFactory)
+	handler, _, err := handlerWithPasskeyFactory(db, version, verbose, output, staticPath, siteName, nil, nil, defaultPasskeyServiceFactory)
+	return handler, err
 }
 
-func handlerWithPasskeyFactory(db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string, accessLog, errorLog io.Writer, passkeys passkeyServiceFactory) (http.Handler, error) {
+func handlerWithPasskeyFactory(db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string, accessLog, errorLog io.Writer, passkeys passkeyServiceFactory) (http.Handler, *liveHub, error) {
 	var staticFS fs.FS
 	if staticPath != "" {
 		staticFS = os.DirFS(staticPath)
@@ -221,7 +232,7 @@ func handlerWithPasskeyFactory(db *sql.DB, version string, verbose bool, output 
 		var err error
 		staticFS, err = web.SiteFS(siteName)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -254,7 +265,7 @@ func handlerWithPasskeyFactory(db *sql.DB, version string, verbose bool, output 
 		handler = loggingHandler(handler, stdoutLog, accessLog, errorLog)
 	}
 	handler = compressionMiddleware(handler)
-	return handler, nil
+	return handler, live, nil
 }
 
 func writeRateLimitFromEnv() int {
@@ -525,6 +536,7 @@ func (s *Server) ListenAndServe() error {
 func (s *Server) Shutdown(ctx context.Context) error {
 	close(s.stopReaper)
 	close(s.stopOrchestrator)
+	close(s.stopRoomWorker)
 	sharedChatRuntime.stopHeartbeat()
 	return s.httpServer.Shutdown(ctx)
 }

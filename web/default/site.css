@@ -2133,3 +2133,13 @@ select {
 @keyframes chatTyping { 0%,60%,100% { opacity: .25; transform: translateY(0); } 30% { opacity: .9; transform: translateY(-3px); } }
 .chat-presence { margin-top: 2px; color: var(--accent, #2ea043); font-size: 0.75rem; }
 .chat-typing-indicator { padding: 2px 8px; color: var(--fg-2); font-size: 0.75rem; font-style: italic; min-height: 1em; }
+.chat-queue { border-top: 1px solid var(--card-border, #333); padding: 6px 8px; max-height: 30%; overflow-y: auto; }
+.chat-queue-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-2); margin-bottom: 4px; }
+.chat-queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.chat-queue-item { display: flex; align-items: baseline; gap: 6px; font-size: 0.8125rem; }
+.chat-queue-state { width: 1em; flex-shrink: 0; text-align: center; }
+.chat-queue-instr { flex: 1; }
+.chat-queue-agent { color: var(--fg-2); font-size: 0.75rem; flex-shrink: 0; }
+.chat-queue-running .chat-queue-state { color: var(--accent, #2ea043); }
+.chat-queue-done .chat-queue-instr { opacity: .6; text-decoration: line-through; }
+.chat-queue-failed .chat-queue-state { color: var(--danger, #d33); }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -169,6 +170,8 @@ func (r *router) registerRoomHandlers() {
 			handleRoomMembers(w, req, db, roomID)
 		case "messages":
 			handleRoomMessages(w, req, db, user, room, r.live)
+		case "agent-queue":
+			handleRoomAgentQueue(w, req, db, roomID)
 		default:
 			writeError(w, http.StatusNotFound, "unknown room subresource")
 		}
@@ -222,6 +225,48 @@ func handleRoomItem(w http.ResponseWriter, req *http.Request, db *sql.DB, user s
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// resolvePromoteTask picks the agent task to promote: the one named by id, or —
+// when no id is given — the most recent task in the room.
+func resolvePromoteTask(ctx context.Context, db *sql.DB, roomID int64, arg string) (store.RoomAgentTask, error) {
+	arg = strings.TrimSpace(arg)
+	if arg != "" {
+		id, err := strconv.ParseInt(arg, 10, 64)
+		if err != nil {
+			return store.RoomAgentTask{}, fmt.Errorf("usage: /promote <task id>")
+		}
+		task, gerr := store.GetRoomAgentTask(ctx, db, id)
+		if gerr != nil || task.RoomID != roomID {
+			return store.RoomAgentTask{}, fmt.Errorf("no such task in this room")
+		}
+		return task, nil
+	}
+	tasks, err := store.ListRoomAgentTasks(ctx, db, roomID)
+	if err != nil {
+		return store.RoomAgentTask{}, err
+	}
+	if len(tasks) == 0 {
+		return store.RoomAgentTask{}, fmt.Errorf("no agent tasks to promote")
+	}
+	return tasks[len(tasks)-1], nil
+}
+
+// handleRoomAgentQueue returns the room's ephemeral agent task queue (TK-168).
+func handleRoomAgentQueue(w http.ResponseWriter, req *http.Request, db *sql.DB, roomID int64) {
+	if req.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	tasks, err := store.ListRoomAgentTasks(req.Context(), db, roomID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if tasks == nil {
+		tasks = []store.RoomAgentTask{}
+	}
+	writeJSON(w, http.StatusOK, tasks)
 }
 
 func handleRoomMembers(w http.ResponseWriter, req *http.Request, db *sql.DB, roomID int64) {
@@ -456,6 +501,27 @@ func handleRoomCommand(w http.ResponseWriter, req *http.Request, db *sql.DB, roo
 			writeError(w, http.StatusBadRequest, terr.Error())
 			return true
 		}
+		if hub != nil {
+			hub.broadcastRoomMessage(room.ID, msg)
+		}
+		writeJSON(w, http.StatusCreated, msg)
+		return true
+	case "promote":
+		task, perr := resolvePromoteTask(ctx, db, room.ID, arg)
+		if perr != nil {
+			writeError(w, http.StatusBadRequest, perr.Error())
+			return true
+		}
+		msg, terr := createRoomTask(ctx, db, room, user, "", task.Instruction)
+		if terr != nil {
+			writeError(w, http.StatusBadRequest, terr.Error())
+			return true
+		}
+		// The ephemeral task has become a real ticket; drop it from the queue.
+		if derr := store.DeleteRoomAgentTask(ctx, db, task.ID); derr != nil {
+			log.Printf("server: delete promoted room agent task: %v", derr)
+		}
+		broadcastRoomQueue(ctx, db, hub, room.ID)
 		if hub != nil {
 			hub.broadcastRoomMessage(room.ID, msg)
 		}
