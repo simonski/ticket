@@ -1818,6 +1818,84 @@ select {
     color: var(--fg-2);
     margin-top: 4px;
 }
+
+/* Rich chat rendering (TK-177): render-spec blocks inside an agent bubble. */
+.render-prose,
+.render-text {
+    white-space: normal;
+    word-break: break-word;
+}
+.render-blocks {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.render-prose + .render-blocks {
+    margin-top: 10px;
+}
+.render-list {
+    margin: 0;
+    padding-left: 20px;
+}
+.render-list li {
+    margin: 2px 0;
+}
+.render-table-wrap {
+    overflow-x: auto;
+}
+.render-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.85rem;
+}
+.render-table th,
+.render-table td {
+    border: 1px solid var(--border, #3a3a3a);
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: top;
+}
+.render-table thead th {
+    background: var(--bg-2, rgba(127, 127, 127, 0.12));
+    font-weight: 600;
+}
+.render-chart svg {
+    width: 100%;
+    height: auto;
+    max-width: 480px;
+    display: block;
+}
+.render-chart-axis {
+    stroke: var(--border, #555);
+    stroke-width: 1;
+}
+.render-chart-line {
+    stroke-width: 2;
+}
+.render-chart-label {
+    fill: var(--fg-2, #999);
+    font-size: 11px;
+}
+.render-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: var(--fg-2);
+}
+.render-chart-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.render-chart-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+}
 .refinement-compose {
     display: flex;
     gap: 8px;
