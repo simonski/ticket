@@ -1843,8 +1843,17 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 	if err := runLogout(nil); err != nil {
 		t.Fatalf("runLogout() error = %v", err)
 	}
-	if _, err := os.Stat(credsPath); !os.IsNotExist(err) {
-		t.Fatalf("credentials.json should be removed after logout, err=%v", err)
+	// Logout clears the session token but retains the username so the next login
+	// remembers it (TK-164); the credentials file is not deleted.
+	credAfter, err := os.ReadFile(credsPath)
+	if err != nil {
+		t.Fatalf("credentials.json should be retained after logout, err=%v", err)
+	}
+	if strings.Contains(string(credAfter), "session-token") {
+		t.Fatalf("credentials.json should not contain the session token after logout:\n%s", string(credAfter))
+	}
+	if !strings.Contains(string(credAfter), "alice") {
+		t.Fatalf("credentials.json should retain the username after logout:\n%s", string(credAfter))
 	}
 }
 
@@ -1852,11 +1861,13 @@ func TestRunLogoutRequiresRemoteMode(t *testing.T) {
 	t.Setenv("TICKET_HOME", t.TempDir())
 	setTestLocation(t, "")
 
+	// With no resolvable server, logout errors (it resolves the server like other
+	// commands rather than requiring TICKET_URL to be set explicitly) (TK-164).
 	err := runLogout(nil)
 	if err == nil {
 		t.Fatal("runLogout() error = nil")
 	}
-	if !strings.Contains(err.Error(), "ticket logout only works in remote mode") {
+	if !strings.Contains(err.Error(), "server") {
 		t.Fatalf("runLogout() error = %v", err)
 	}
 }
