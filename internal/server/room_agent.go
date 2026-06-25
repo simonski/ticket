@@ -141,6 +141,9 @@ func postAgentReply(ctx context.Context, db *sql.DB, room store.Room, agent stor
 		return false
 	}
 	reply = strings.TrimSpace(reply)
+	// Drop a malformed render block before persistence so the transcript never keeps
+	// raw broken JSON; a valid block is left intact for the front-end renderer (TK-177).
+	reply = strings.TrimSpace(sanitizeRenderBlock(reply))
 	if reply == "" {
 		log.Printf("server: room agent %s returned an empty reply", agent.Username)
 		postAgentNotice(ctx, db, room, agent, "returned an empty reply (the model produced no output).", hub)
@@ -265,6 +268,7 @@ func buildRoomAgentPrompt(agentName, latest string, history []store.RoomMessage)
 			b.WriteString(m.SenderID + ": " + m.Body + "\n")
 		}
 	}
-	b.WriteString("\nRespond concisely to the latest message addressed to you: " + latest)
+	b.WriteString("\n" + renderSpecPromptGuidance())
+	b.WriteString("Respond concisely to the latest message addressed to you: " + latest)
 	return b.String()
 }

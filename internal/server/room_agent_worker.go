@@ -115,6 +115,9 @@ func (s *Server) executeRoomAgentTask(db *sql.DB, hub *liveHub, task store.RoomA
 	}
 
 	reply = strings.TrimSpace(reply)
+	// Strip a malformed render block before persistence (TK-177); a valid one is kept
+	// for the front-end renderer.
+	reply = strings.TrimSpace(sanitizeRenderBlock(reply))
 	if reply != "" {
 		postAgentText(ctx, db, room, agent, reply, cfg.Model, hub)
 	}

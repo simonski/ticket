@@ -1195,23 +1195,109 @@
             return (m ? s.slice(0, m.index) : s);
         }
 
-        // renderMarkdownLite renders a conservative markdown subset to safe HTML: it
-        // escapes first, then re-introduces inline code, bold, italic, links and breaks.
-        function renderMarkdownLite(text) {
+        // renderInlineMd renders inline markdown (code, bold, italic, links) to safe
+        // HTML. It escapes first so untrusted text cannot inject markup.
+        function renderInlineMd(text) {
             let html = escapeHTML(text);
             html = html.replace(/`([^`]+)`/g, (_, c) => "<code>" + c + "</code>");
             html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
             html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
             html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
                 (_, t, u) => "<a href=\"" + u + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + t + "</a>");
-            return html.replace(/\n/g, "<br>");
+            return html;
+        }
+
+        // mdSplitRow splits a markdown table row ("| a | b |") into trimmed cells.
+        function mdSplitRow(line) {
+            let s = String(line).trim();
+            if (s.startsWith("|")) s = s.slice(1);
+            if (s.endsWith("|")) s = s.slice(0, -1);
+            return s.split("|").map((c) => c.trim());
+        }
+
+        // mdIsTableSeparator reports whether a line is a GitHub table header rule
+        // ("|---|:--:|"), which (with a preceding row) marks a markdown table.
+        function mdIsTableSeparator(line) {
+            const t = String(line || "").trim();
+            return t.indexOf("-") !== -1 && /^\|?[\s:|-]+\|?$/.test(t);
+        }
+
+        // renderMarkdownLite renders a conservative block-level markdown subset to safe
+        // HTML: headings, fenced code, GitHub tables, bullet/numbered lists, and
+        // paragraphs — with inline formatting inside. This is the prose fallback so a
+        // model that answers with a plain markdown table/list still renders richly even
+        // when it does not emit a render-spec block.
+        function renderMarkdownLite(text) {
+            const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+            let html = "";
+            let i = 0;
+            const isSpecial = (ln) => /^(```|~~~|#{1,6}\s|[-*+]\s|\d+\.\s)/.test(ln.trim());
+            while (i < lines.length) {
+                const t = lines[i].trim();
+                if (t === "") { i++; continue; }
+                // Fenced code block.
+                if (/^(```|~~~)/.test(t)) {
+                    const fence = t.slice(0, 3);
+                    i++;
+                    const buf = [];
+                    while (i < lines.length && lines[i].trim().slice(0, 3) !== fence) { buf.push(lines[i]); i++; }
+                    if (i < lines.length) i++; // closing fence
+                    html += "<pre class=\"render-code\"><code>" + escapeHTML(buf.join("\n")) + "</code></pre>";
+                    continue;
+                }
+                // Heading.
+                const h = t.match(/^(#{1,6})\s+(.*)$/);
+                if (h) {
+                    const lvl = h[1].length;
+                    html += "<h" + lvl + " class=\"render-h\">" + renderInlineMd(h[2]) + "</h" + lvl + ">";
+                    i++;
+                    continue;
+                }
+                // GitHub table: a row with pipes followed by a separator rule.
+                if (t.indexOf("|") !== -1 && i + 1 < lines.length && mdIsTableSeparator(lines[i + 1])) {
+                    const header = mdSplitRow(t);
+                    i += 2;
+                    const rows = [];
+                    while (i < lines.length && lines[i].indexOf("|") !== -1 && lines[i].trim() !== "") {
+                        rows.push(mdSplitRow(lines[i])); i++;
+                    }
+                    html += renderTableBlockHTML({ columns: header, rows: rows });
+                    continue;
+                }
+                // Unordered list.
+                if (/^[-*+]\s+/.test(t)) {
+                    const items = [];
+                    while (i < lines.length && /^[-*+]\s+/.test(lines[i].trim())) {
+                        items.push(lines[i].trim().replace(/^[-*+]\s+/, "")); i++;
+                    }
+                    html += "<ul class=\"render-list\">" + items.map((it) => "<li>" + renderInlineMd(it) + "</li>").join("") + "</ul>";
+                    continue;
+                }
+                // Ordered list.
+                if (/^\d+\.\s+/.test(t)) {
+                    const items = [];
+                    while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+                        items.push(lines[i].trim().replace(/^\d+\.\s+/, "")); i++;
+                    }
+                    html += "<ol class=\"render-list\">" + items.map((it) => "<li>" + renderInlineMd(it) + "</li>").join("") + "</ol>";
+                    continue;
+                }
+                // Paragraph: gather consecutive plain lines.
+                const para = [];
+                while (i < lines.length && lines[i].trim() !== "" && !isSpecial(lines[i]) &&
+                    !(lines[i].indexOf("|") !== -1 && i + 1 < lines.length && mdIsTableSeparator(lines[i + 1]))) {
+                    para.push(lines[i]); i++;
+                }
+                html += "<p class=\"render-p\">" + para.map(renderInlineMd).join("<br>") + "</p>";
+            }
+            return html;
         }
 
         function renderListBlockHTML(block) {
             const items = Array.isArray(block.items) ? block.items : [];
             if (!items.length) return "";
             const tag = block.ordered ? "ol" : "ul";
-            const lis = items.map((it) => "<li>" + renderMarkdownLite(String(it)) + "</li>").join("");
+            const lis = items.map((it) => "<li>" + renderInlineMd(String(it)) + "</li>").join("");
             return "<" + tag + " class=\"render-list\">" + lis + "</" + tag + ">";
         }
 
@@ -2585,9 +2671,12 @@
                 ? "<span class=\"chat-avatar chat-avatar-agent\" title=\"agent\">🤖</span>"
                 : "<span class=\"chat-avatar chat-avatar-person\">" + initial + "</span>";
             const model = (isAgent && attrs.model) ? "<span class=\"chat-msg-model\">via " + escapeHTML(String(attrs.model)) + "</span>" : "";
+            // Agent replies may carry a render-spec (table/list/chart/markdown);
+            // render them richly. Human turns keep @mention/#label highlighting.
+            const bodyHTML = isAgent ? renderRichAgentText(m.body) : highlightRoomText(m.body);
             const bubble = "<div class=\"chat-bubble\">" +
                 (isSelf ? "" : "<div class=\"chat-msg-meta\">" + name + model + "</div>") +
-                "<div class=\"chat-msg-body\">" + highlightRoomText(m.body) + "</div></div>";
+                "<div class=\"chat-msg-body\">" + bodyHTML + "</div></div>";
             const side = isSelf ? "chat-msg-self" : "chat-msg-other";
             return "<div class=\"chat-msg chat-bubble-row " + side + "\" data-message-id=\"" + m.message_id + "\">" +
                 (isSelf ? bubble : bubble + avatar) + "</div>";

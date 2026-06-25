@@ -1834,8 +1834,28 @@ select {
 .render-prose + .render-blocks {
     margin-top: 10px;
 }
+.render-prose .render-p,
+.render-text .render-p {
+    margin: 0 0 8px;
+}
+.render-prose .render-p:last-child,
+.render-text .render-p:last-child {
+    margin-bottom: 0;
+}
+.render-h {
+    margin: 8px 0 4px;
+    line-height: 1.2;
+}
+.render-code {
+    margin: 6px 0;
+    padding: 8px 10px;
+    overflow-x: auto;
+    border-radius: 6px;
+    background: var(--bg-2, rgba(127, 127, 127, 0.12));
+    font-size: 0.82rem;
+}
 .render-list {
-    margin: 0;
+    margin: 4px 0;
     padding-left: 20px;
 }
 .render-list li {
