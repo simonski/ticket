@@ -321,10 +321,12 @@ html.landing-active .app-shell { display: none; }
 }
 .notice:empty { display: none; }
 
-.views-wrap { flex: 1; display: flex; flex-direction: column; }
+.views-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
 /* ── Views ──────────────────────────────────────────────────────── */
-.view { display: none; padding: 22px; flex: 1; flex-direction: column; min-height: 0; }
+.view { display: none; padding: 22px; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; }
+/* The chat view manages its own internal scroll (the message list), so it never scrolls as a whole. */
+#view-chat { overflow: hidden; }
 .view.active { display: flex; }
 
 .view.split {
