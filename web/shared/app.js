@@ -2411,6 +2411,7 @@
             // Loading messages marks the room read server-side; refresh the list
             // afterwards so the unread marker clears.
             loadRoomMessages(roomID).then(() => loadRooms()).then(renderRoomsList);
+            loadAgentQueue(roomID);
         }
         function loadRoomMessages(roomID) {
             return api("/api/rooms/" + roomID + "/messages").then((msgs) => {
@@ -2610,9 +2611,10 @@
                     state.liveSocket.send(JSON.stringify({ type: "subscribe", room_id: roomID }));
                 }
             } catch (e) { /* ignore */ }
-            // Switching rooms clears any presence/typing state from the old room.
+            // Switching rooms clears any presence/typing/queue state from the old room.
             renderRoomPresence([]);
             clearTypingIndicator();
+            renderAgentQueue([]);
         }
         // emitTyping sends a typing notice for the active room, throttled so we
         // don't flood the socket on every keystroke.
@@ -2643,6 +2645,37 @@
             el.hidden = false;
             el.textContent = "● " + names.join(", ") + (names.length === 1 ? " is here" : " are here");
         }
+        // loadAgentQueue fetches the room's ephemeral agent task queue and renders
+        // the live panel (TK-168). The panel also updates via room_queue WS events.
+        function loadAgentQueue(roomID) {
+            return api("/api/rooms/" + roomID + "/agent-queue").then((tasks) => {
+                if (state.activeRoomID !== roomID) { return; }
+                renderAgentQueue(Array.isArray(tasks) ? tasks : []);
+            }).catch(() => { renderAgentQueue([]); });
+        }
+        // renderAgentQueue draws the pending/running/done agent task panel.
+        function renderAgentQueue(tasks) {
+            const el = document.getElementById("chat-queue");
+            if (!el) { return; }
+            const list = Array.isArray(tasks) ? tasks : [];
+            if (!list.length) {
+                el.hidden = true;
+                el.innerHTML = "";
+                return;
+            }
+            const icon = (s) => s === "running" ? "▶" : s === "done" ? "✓" : s === "failed" ? "✗" : "•";
+            const rows = list.map((t) => {
+                const state = String(t.state || "queued");
+                return "<li class=\"chat-queue-item chat-queue-" + escapeHTML(state) + "\">" +
+                    "<span class=\"chat-queue-state\">" + icon(state) + "</span>" +
+                    "<span class=\"chat-queue-instr\">" + escapeHTML(String(t.instruction || "")) + "</span>" +
+                    "<span class=\"chat-queue-agent\">@" + escapeHTML(String(t.agent_name || "agent")) + "</span></li>";
+            }).join("");
+            el.hidden = false;
+            el.innerHTML = "<div class=\"chat-queue-title\">Agent queue</div><ul class=\"chat-queue-list\">" + rows + "</ul>";
+        }
+        // Expose for browser tests (no effect otherwise).
+        try { window.__site2RenderAgentQueue = renderAgentQueue; } catch (e) { /* ignore */ }
         function clearTypingIndicator() {
             const el = document.getElementById("chat-typing");
             if (el) { el.hidden = true; el.textContent = ""; }
@@ -3108,6 +3141,12 @@
                     if (payload.type === "typing") {
                         if (state.activeRoomID && Number(payload.room_id) === state.activeRoomID) {
                             showTypingIndicator(payload.payload || {});
+                        }
+                        return;
+                    }
+                    if (payload.type === "room_queue") {
+                        if (state.activeRoomID && Number(payload.room_id) === state.activeRoomID) {
+                            renderAgentQueue(payload.payload || []);
                         }
                         return;
                     }

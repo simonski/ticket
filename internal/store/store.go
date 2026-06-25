@@ -827,10 +827,31 @@ CREATE TABLE IF NOT EXISTS room_messages (
 	FOREIGN KEY(room_id) REFERENCES rooms(room_id)
 );
 
+-- Ephemeral, in-room agent task queue (TK-168). Distinct from work_items, which
+-- track ticket execution packets. These are short-lived: "@agent do X" enqueues
+-- one, a serial per-(room,agent) worker processes it, and finished items are
+-- auto-purged so they never reach the permanent ticket backlog.
+CREATE TABLE IF NOT EXISTS room_agent_tasks (
+	task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	room_id INTEGER NOT NULL,
+	agent_id TEXT NOT NULL,
+	agent_name TEXT NOT NULL DEFAULT '',
+	requester_id TEXT NOT NULL DEFAULT '',
+	instruction TEXT NOT NULL DEFAULT '',
+	state TEXT NOT NULL DEFAULT 'queued',
+	result TEXT NOT NULL DEFAULT '',
+	ephemeral INTEGER NOT NULL DEFAULT 1,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(room_id) REFERENCES rooms(room_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_rooms_slug ON rooms(slug);
 CREATE INDEX IF NOT EXISTS idx_rooms_project_id ON rooms(project_id);
 CREATE INDEX IF NOT EXISTS idx_rooms_ticket_id ON rooms(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_member_id ON room_members(member_id);
+CREATE INDEX IF NOT EXISTS idx_room_agent_tasks_room ON room_agent_tasks(room_id);
+CREATE INDEX IF NOT EXISTS idx_room_agent_tasks_state ON room_agent_tasks(state);
 CREATE INDEX IF NOT EXISTS idx_room_messages_room_id ON room_messages(room_id, message_id);
 
 -- Access roles: per-panel feature flags. Each access role grants a set of UI
