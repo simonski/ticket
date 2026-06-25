@@ -32,3 +32,6 @@ ticket.db
 # Runtime logs (must not be committed)
 access.log
 *.log
+
+# Local epic seed notes for TK-171 (kept untracked; folded into docs/design/extensible-schema.md)
+docs/DATABASE CHANGE.md

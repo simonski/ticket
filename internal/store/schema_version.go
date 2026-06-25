@@ -16,7 +16,7 @@ import (
 
 const (
 	LegacySchemaVersion  = 1
-	CurrentSchemaVersion = 15
+	CurrentSchemaVersion = 16
 	schemaMetaTable      = "schema_meta"
 	schemaVersionKey     = "schema_version"
 	// DefaultBackupRetention is the number of timestamped pre-upgrade backups

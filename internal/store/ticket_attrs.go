@@ -45,6 +45,23 @@ func intAttrField(key string, ref func(*Ticket) *int) ticketAttrField {
 	}
 }
 
+// boolAttrField declares a bool-valued attrs field, stored as int 1 when true.
+// False is not stored (SetInt(0) deletes), keeping the bag sparse, so a true
+// flag round-trips and a false flag is simply absent.
+func boolAttrField(key string, ref func(*Ticket) *bool) ticketAttrField {
+	return ticketAttrField{
+		key:     key,
+		hydrate: func(t *Ticket, a Attrs) { *ref(t) = a.GetInt(key) == 1 },
+		write: func(a Attrs, t *Ticket) {
+			if *ref(t) {
+				a.SetInt(key, 1)
+			} else {
+				a.SetInt(key, 0)
+			}
+		},
+	}
+}
+
 // ticketAttrScalarFields is the single source of truth for attrs-backed scalar
 // ticket fields. To add a new Tier-2 scalar field: add the struct field + json
 // tag to Ticket, then add ONE line here. No edits to hydrate/write/key lists.
@@ -57,6 +74,9 @@ var ticketAttrScalarFields = []ticketAttrField{
 	strAttrField("author", func(t *Ticket) *string { return &t.Author }),
 	strAttrField("pr_url", func(t *Ticket) *string { return &t.PrURL }),
 	intAttrField("health_score", func(t *Ticket) *int { return &t.HealthScore }),
+	// recommended_ready moved from a dedicated column into the bag (TK-174): a
+	// sparse refiner signal never used in a value predicate, so it is Tier-2.
+	boolAttrField("recommended_ready", func(t *Ticket) *bool { return &t.RecommendedReady }),
 }
 
 // ticketAttrScalarKeys returns the declared scalar attrs keys (used by callers

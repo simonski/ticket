@@ -515,21 +515,29 @@ for their own sake.
 | estimate_effort | **Keep** | aggregation candidate (rollups) |
 | draft, complete, archived, deleted | **Keep** | hot boolean filters |
 | assignee, created_by | **Keep** | filtered |
-| recommended_ready | **Keep** | filtered flag |
 | started_at, created_at, updated_at | **Keep** | sorted timestamps |
 | attrs | **Keep** | the bag itself |
+| recommended_ready | **Move (done, TK-174)** | sparse refiner signal; a code audit found **zero** value-predicate usage (only `WHERE ticket_id = ?`), so the §13 rule places it in Tier-2 |
 
-**S3 candidates to scrutinise (not yet moved):** `clone_of` and `release_id`
-are sparse and rarely filtered, but both are FKs — moving them would lose
-referential integrity, so they stay Tier-1. `recommended_ready` is a sparse
-boolean that *is* filtered (Tier-1 by the rule). **Net: no tickets column is a
-clear Move candidate today.** S3's real deliverable is therefore the *proof
-harness* — run the (possibly no-op) consolidation against a reference copy of the
-production DB and verify row counts and every value round-trip — plus moving any
-churn-prone column on `projects`/`roles`/`workflow_stages` that a fresh audit of
-those tables surfaces. S3 must **not** invent moves to look busy; an empty,
-verified diff is a valid outcome that satisfies "the one schema change runs
-cleanly and preserves all data".
+**S3 outcome (TK-174).** A code-level audit of value-predicate usage (not just
+the conservative S1 read) showed `recommended_ready` is never filtered or sorted
+by value anywhere in the repo — it is set by dedicated writers and read back per
+ticket. By the §13 rule that makes it Tier-2, so it was moved into `attrs` as the
+"one schema change this time" (`CurrentSchemaVersion` 15 → 16): a guarded
+`json_set` + `DROP COLUMN` migration, `boolAttrField` in the registry, and the
+three direct writers (`SetRecommendedReady`, the publish reset, the refinement
+breakdown) rerouted to `json_set`/`json_remove`. Verified **lossless against the
+real v15 reference DB** (143 tickets preserved, column dropped,
+`PRAGMA integrity_check ok`, backup auto-taken).
+
+The other sparse columns stay Tier-1 with evidence: `clone_of` and `release_id`
+are FKs (moving them loses referential integrity; `release_id` is used in JOINs
+and `WHERE` in `release.go`/`orchestrator.go`); `assignee`/`sort_order` are
+genuinely filtered/ordered. So `recommended_ready` is the **only** clear Move on
+`tickets`; a fresh audit of `projects`/`roles`/`workflow_stages` surfaced no
+further churn-prone columns (the prior epic already consolidated them, see §9).
+S3 deliberately moved exactly one evidence-backed column rather than inventing
+make-work.
 
 ## 17. Tier-3 generated columns (feeds TK-176/S5, optional)
 

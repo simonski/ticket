@@ -211,7 +211,7 @@ The primary work artifact.
 | complete | INTEGER | Boolean, default 0. When true, ticket is finished (stage=done). |
 | archived | INTEGER | Boolean, default 0 |
 | deleted | INTEGER | Boolean, default 0. Soft-delete flag. |
-| recommended_ready | INTEGER | Boolean, default 0. Set when the refiner proposes the ticket is ready. |
+| recommended_ready | INTEGER | Boolean, default 0. Set when the refiner proposes the ticket is ready. **(attrs)** |
 | dor_map / dod_map / ac_map | JSON | Guidance maps (Definition of Ready / Done / Acceptance Criteria) keyed by stage with a `default` fallback. **(attrs)** |
 | workflow_id | INTEGER | Nullable FK → workflows. Explicit per-ticket workflow override. |
 | pr_url | TEXT | Pull-request URL recorded by agents. **(attrs)** |
