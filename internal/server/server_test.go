@@ -865,7 +865,7 @@ func TestWebSocketServeConnectsSubscribesPingsAndCloses(t *testing.T) {
 	errc := make(chan error, 1)
 	hub := newLiveHub()
 	go func() {
-		errc <- websocketServe(hub, rec, req)
+		errc <- websocketServe(hub, rec, req, "u-test", "Tester")
 	}()
 
 	reader := bufio.NewReader(clientConn)

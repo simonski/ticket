@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/simonski/ticket/internal/store"
@@ -41,8 +42,16 @@ type liveClient struct {
 	send      chan []byte
 	done      chan struct{}
 	once      sync.Once
-	projectID int64 // if set, only receive events for this project
-	roomID    int64 // if set, also receive room events for this room
+	projectID int64  // if set, only receive events for this project
+	roomID    int64  // if set, also receive room events for this room
+	userID    string // identity of the connected user (for room presence)
+	userName  string // display name of the connected user (for room presence)
+}
+
+// presenceUser is one occupant of a room, derived purely from live connections.
+type presenceUser struct {
+	UserID string `json:"user_id"`
+	Name   string `json:"name"`
 }
 
 func newLiveHub() *liveHub {
@@ -66,8 +75,79 @@ func (h *liveHub) add(conn net.Conn) *liveClient {
 func (h *liveHub) remove(client *liveClient) {
 	client.close()
 	h.mu.Lock()
+	roomID := client.roomID
 	delete(h.clients, client)
 	h.mu.Unlock()
+	// A departing client changes who is present in its room.
+	if roomID != 0 {
+		h.broadcastRoomPresence(roomID)
+	}
+}
+
+// setSubscription updates a client's project/room subscription under the hub lock
+// and returns the room the client was previously in (0 if none). Mutating the
+// fields under the lock keeps them consistent with concurrent presence reads.
+func (h *liveHub) setSubscription(client *liveClient, projectID, roomID int64) (oldRoom int64) {
+	h.mu.Lock()
+	oldRoom = client.roomID
+	if projectID > 0 {
+		client.projectID = projectID
+	}
+	if roomID > 0 {
+		client.roomID = roomID
+	}
+	h.mu.Unlock()
+	return oldRoom
+}
+
+// presenceFor returns the distinct users currently subscribed to a room, sorted
+// for stable output. Presence is ephemeral — derived only from live connections.
+func (h *liveHub) presenceFor(roomID int64) []presenceUser {
+	h.mu.RLock()
+	seen := make(map[string]string)
+	for client := range h.clients {
+		if client.roomID == roomID && client.userID != "" {
+			if _, ok := seen[client.userID]; !ok {
+				seen[client.userID] = client.userName
+			}
+		}
+	}
+	h.mu.RUnlock()
+	users := make([]presenceUser, 0, len(seen))
+	for id, name := range seen {
+		users = append(users, presenceUser{UserID: id, Name: name})
+	}
+	sort.Slice(users, func(i, j int) bool {
+		if users[i].Name != users[j].Name {
+			return users[i].Name < users[j].Name
+		}
+		return users[i].UserID < users[j].UserID
+	})
+	return users
+}
+
+// broadcastRoomPresence sends the current occupant list to a room's subscribers.
+func (h *liveHub) broadcastRoomPresence(roomID int64) {
+	if roomID == 0 {
+		return
+	}
+	h.broadcast(liveEvent{Type: "room_presence", RoomID: roomID, Payload: h.presenceFor(roomID)})
+}
+
+// presenceName picks the best human-readable label for a user in presence lists.
+func presenceName(u store.User) string {
+	if strings.TrimSpace(u.DisplayName) != "" {
+		return u.DisplayName
+	}
+	return u.Username
+}
+
+// broadcastTyping fans a transient typing notice to a room's subscribers.
+func (h *liveHub) broadcastTyping(roomID int64, u presenceUser) {
+	if roomID == 0 {
+		return
+	}
+	h.broadcast(liveEvent{Type: "typing", RoomID: roomID, Payload: u})
 }
 
 func (h *liveHub) broadcast(event liveEvent) {
@@ -116,12 +196,14 @@ func (c *liveClient) close() {
 	})
 }
 
-func websocketServe(hub *liveHub, w http.ResponseWriter, r *http.Request) error {
+func websocketServe(hub *liveHub, w http.ResponseWriter, r *http.Request, userID, userName string) error {
 	conn, err := upgradeWebSocket(w, r)
 	if err != nil {
 		return err
 	}
 	client := hub.add(conn)
+	client.userID = userID
+	client.userName = userName
 
 	go func() {
 		defer hub.remove(client)
@@ -160,19 +242,32 @@ func websocketServe(hub *liveHub, w http.ResponseWriter, r *http.Request) error 
 				hub.remove(client)
 				return nil
 			}
-		case 0x1: // text frame — handle subscribe messages
+		case 0x1: // text frame — handle subscribe / typing messages
 			var msg struct {
 				Type      string `json:"type"`
 				ProjectID int64  `json:"project_id"`
 				RoomID    int64  `json:"room_id"`
 			}
-			if json.Unmarshal(payload, &msg) == nil && msg.Type == "subscribe" {
-				if msg.ProjectID > 0 {
-					client.projectID = msg.ProjectID
-				}
+			if json.Unmarshal(payload, &msg) != nil {
+				continue
+			}
+			switch msg.Type {
+			case "subscribe":
+				oldRoom := hub.setSubscription(client, msg.ProjectID, msg.RoomID)
 				if msg.RoomID > 0 {
-					client.roomID = msg.RoomID
+					// Leaving the previous room and joining the new one both
+					// change presence; refresh occupants for each affected room.
+					if oldRoom != 0 && oldRoom != msg.RoomID {
+						hub.broadcastRoomPresence(oldRoom)
+					}
+					hub.broadcastRoomPresence(msg.RoomID)
 				}
+			case "typing":
+				roomID := msg.RoomID
+				if roomID == 0 {
+					roomID = client.roomID
+				}
+				hub.broadcastTyping(roomID, presenceUser{UserID: client.userID, Name: client.userName})
 			}
 		}
 	}
