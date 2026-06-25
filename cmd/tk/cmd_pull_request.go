@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -382,6 +384,130 @@ func ghCreatePullRequest(title, body, head, base string) (string, error) {
 		return "", fmt.Errorf("gh pr create succeeded but no PR url was found in its output")
 	}
 	return url, nil
+}
+
+// interactiveStdio reports whether both stdin and stdout are a real terminal, so
+// the user can be prompted (TK-160).
+func interactiveStdio() bool {
+	_, _, ok := promptTerminal(os.Stdin, os.Stdout)
+	return ok
+}
+
+// reconcileTicketPullRequests reconciles a completed ticket's open linked PRs
+// (TK-160). For each PR still open/draft it applies action ("merged"/"closed"),
+// or — when action is empty — prompts on an interactive terminal, else skips with
+// a printed warning so an open PR is never left silently. PR-side failures are
+// non-fatal: the ticket is already complete. Messages go to out.
+func reconcileTicketPullRequests(ctx context.Context, svc libticket.Service, ticketID, action string, interactive bool, out io.Writer) {
+	prs, err := svc.ListPullRequestsByTicket(ctx, ticketID)
+	if err != nil {
+		fmt.Fprintf(out, "warning: could not check linked PRs for %s: %v\n", ticketID, err)
+		return
+	}
+	reader := bufio.NewReader(os.Stdin)
+	for _, pr := range prs {
+		if pr.Status != store.PullRequestStatusOpen && pr.Status != store.PullRequestStatusDraft {
+			continue // already merged/closed — nothing to reconcile
+		}
+		act := action
+		if act == "" {
+			if interactive {
+				act = promptPRReconcile(reader, pr, out)
+			} else {
+				act = "skip"
+			}
+		}
+		switch act {
+		case store.PullRequestStatusMerged:
+			reconcilePRStatus(ctx, svc, pr, store.PullRequestStatusMerged, out)
+		case store.PullRequestStatusClosed:
+			reconcilePRStatus(ctx, svc, pr, store.PullRequestStatusClosed, out)
+		default:
+			fmt.Fprintf(out, "note: %s still has open PR #%d (%s) — left untouched. Use --merge-pr/--close-pr or `tk pr merge|close %d`.\n",
+				ticketID, pr.ID, prRef(pr), pr.ID)
+		}
+	}
+}
+
+// promptPRReconcile asks the user what to do with an open linked PR.
+func promptPRReconcile(reader *bufio.Reader, pr store.PullRequest, out io.Writer) string {
+	for {
+		fmt.Fprintf(out, "Ticket %s has open PR #%d (%s) — [m]erge / [c]lose / [s]kip? ", pr.TicketID, pr.ID, prRef(pr))
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return "skip"
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "m", "merge":
+			return store.PullRequestStatusMerged
+		case "c", "close":
+			return store.PullRequestStatusClosed
+		case "s", "skip", "":
+			return "skip"
+		}
+	}
+}
+
+// reconcilePRStatus drives a single PR to the target status. For GitHub PRs it
+// acts on the host via the gh CLI first, then records the status locally; a host
+// failure is reported and the local record is left open.
+func reconcilePRStatus(ctx context.Context, svc libticket.Service, pr store.PullRequest, target string, out io.Writer) {
+	verb := statusVerb(target)
+	if pr.Provider == store.PullRequestProviderGitHub {
+		number := extractPRNumber(pr.URL)
+		if number == "" {
+			fmt.Fprintf(out, "warning: PR #%d is a GitHub PR but its URL has no number; left open — run `gh pr %s` manually.\n", pr.ID, verb)
+			return
+		}
+		if err := ghPullRequestAction(verb, number); err != nil {
+			fmt.Fprintf(out, "warning: could not %s GitHub PR #%s: %v; left open.\n", verb, number, err)
+			return
+		}
+	}
+	if _, err := svc.SetPullRequestStatus(ctx, pr.ID, target); err != nil {
+		fmt.Fprintf(out, "warning: %s on host but failed to record PR #%d status: %v\n", verb, pr.ID, err)
+		return
+	}
+	fmt.Fprintf(out, "%s linked PR #%d\n", verb+"d", pr.ID)
+}
+
+// prRef returns a short human reference for a PR: its URL when present, else its
+// provider.
+func prRef(pr store.PullRequest) string {
+	if strings.TrimSpace(pr.URL) != "" {
+		return pr.URL
+	}
+	return pr.Provider
+}
+
+// extractPRNumber pulls the PR number from a GitHub PR URL (…/pull/123).
+func extractPRNumber(url string) string {
+	url = strings.TrimRight(strings.TrimSpace(url), "/")
+	idx := strings.LastIndex(url, "/")
+	if idx < 0 || idx == len(url)-1 {
+		return ""
+	}
+	candidate := url[idx+1:]
+	if _, err := strconv.Atoi(candidate); err != nil {
+		return ""
+	}
+	return candidate
+}
+
+// ghPullRequestAction merges or closes a PR on GitHub via the gh CLI.
+func ghPullRequestAction(verb, number string) error {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return fmt.Errorf("gh CLI not found on PATH")
+	}
+	args := []string{"pr", verb, number}
+	if verb == "merge" {
+		args = append(args, "--rebase")
+	}
+	out, err := exec.Command("gh", args...).CombinedOutput() // #nosec G204 -- verb is a fixed literal and number is validated as an integer
+	if err != nil {
+		return fmt.Errorf("%s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // extractFirstURL returns the first https:// token found in s, or "".
