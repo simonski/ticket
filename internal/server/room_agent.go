@@ -45,6 +45,14 @@ func replyAsAgents(ctx context.Context, db *sql.DB, room store.Room, msg store.R
 		if merr != nil || !member {
 			continue
 		}
+		// "@agent do X" / "@agent queue X" enqueues an ephemeral work-item the
+		// worker processes serially; any other "@agent X" is a one-shot reply.
+		if instruction, ok := parseAgentTaskInstruction(msg.Body, agent.Username); ok {
+			if enqueueAgentTask(ctx, db, room, agent, msg.SenderID, instruction, hub) {
+				posted++
+			}
+			continue
+		}
 		if postAgentReply(ctx, db, room, agent, msg.SenderID, msg.Body, hub) {
 			posted++
 		}
@@ -72,6 +80,49 @@ func replyAsAgents(ctx context.Context, db *sql.DB, room store.Room, msg store.R
 		log.Printf("server: no agent reply in room %d (slug=%q): no agent @mentioned and not a personal-agent DM with an agent member", room.ID, room.Slug)
 	}
 	return posted
+}
+
+// parseAgentTaskInstruction detects the "@agent do X" / "@agent queue X" pattern
+// addressed to agentName and returns the instruction (the text after the verb).
+// The match is case-insensitive and the verb must be a whole word; otherwise it
+// returns ok=false so the message is treated as an ordinary mention/reply.
+func parseAgentTaskInstruction(body, agentName string) (string, bool) {
+	lower := strings.ToLower(body)
+	marker := "@" + strings.ToLower(strings.TrimSpace(agentName))
+	idx := strings.Index(lower, marker)
+	if idx < 0 {
+		return "", false
+	}
+	rest := strings.TrimSpace(body[idx+len(marker):])
+	restLower := strings.ToLower(rest)
+	for _, verb := range []string{"do", "queue"} {
+		if restLower == verb {
+			return "", false // a verb with no instruction is not a task
+		}
+		if strings.HasPrefix(restLower, verb+" ") {
+			return strings.TrimSpace(rest[len(verb):]), true
+		}
+	}
+	return "", false
+}
+
+// enqueueAgentTask adds an ephemeral task to the room's agent queue, posts a brief
+// acknowledgement, refreshes the live queue, and wakes the worker (TK-168).
+func enqueueAgentTask(ctx context.Context, db *sql.DB, room store.Room, agent store.User, requesterID, instruction string, hub *liveHub) bool {
+	if _, err := store.EnqueueRoomAgentTask(ctx, db, store.RoomAgentTask{
+		RoomID:      room.ID,
+		AgentID:     agent.ID,
+		AgentName:   agent.Username,
+		RequesterID: requesterID,
+		Instruction: instruction,
+	}); err != nil {
+		log.Printf("server: enqueue room agent task: %v", err)
+		return false
+	}
+	postAgentEvent(ctx, db, room, agent, "📋 queued: "+instruction, hub)
+	broadcastRoomQueue(ctx, db, hub, room.ID)
+	signalRoomTaskWorker()
+	return true
 }
 
 // postAgentReply generates and posts a single agent reply into the room. The
@@ -118,11 +169,16 @@ func postAgentReply(ctx context.Context, db *sql.DB, room store.Room, agent stor
 // postAgentNotice posts a muted agent_event line (e.g. a reply failure) into the
 // room from the agent, so failures are visible rather than silent.
 func postAgentNotice(ctx context.Context, db *sql.DB, room store.Room, agent store.User, text string, hub *liveHub) {
+	postAgentEvent(ctx, db, room, agent, "⚠️ "+text, hub)
+}
+
+// postAgentEvent posts a muted agent_event line into the room from the agent.
+func postAgentEvent(ctx context.Context, db *sql.DB, room store.Room, agent store.User, text string, hub *liveHub) {
 	out, err := store.PostRoomMessage(ctx, db, store.RoomMessage{
 		RoomID:   room.ID,
 		SenderID: agent.ID,
 		Kind:     "agent_event",
-		Body:     "⚠️ " + text,
+		Body:     text,
 		Attrs:    store.Attrs{"agent": true},
 	})
 	if err != nil {
