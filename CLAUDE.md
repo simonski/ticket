@@ -1,13 +1,20 @@
 # CLAUDE.md
 
-Design
-- red/green testing - on all work
+## Working rules
 
-Compile
-- `make test` on every run (ultra-fast default: unit tests).
-- `make test-fast` for the normal developer loop (unit + Go API smoke).
-- `make test-all` before completion/PR - full suite must pass.
-- `make lint` - on every turn - no lint failures.
+- **Branch first — never work on `main`.** Creating the feature branch is the
+  *first* action of any task, before the first file edit — not a cleanup step
+  afterwards. Start every change with
+  `git checkout main && git pull --rebase && git checkout -b feature/TK-<id>-<slug>`.
+  Before editing, confirm `git branch --show-current` is **not** `main`. `main`
+  only ever changes through a merged PR. If you notice you've started on `main`,
+  stop and move the work to a branch immediately (`git switch -c …`).
+- **Red/green testing on all work.**
+- `make test` (ultra-fast unit) on every run; `make lint` every turn — no lint
+  failures. `make test-fast` for the normal developer loop. Run `make test-all`
+  **and** `make lint` before completing a feature or opening a PR.
+- See **Staged test policy** below for which heavier suites to run when API or web
+  surfaces change.
 
 ## Build and Test
 
@@ -83,18 +90,17 @@ Routing is determined from the environment plus repo-local project binding: `TIC
 | `cmd/tk` | CLI entry point, all command handlers |
 | `internal/server` | HTTP server, API handlers, WebSocket, chat |
 | `internal/store` | SQLite schema, CRUD, lifecycle rules (20+ files) |
-| `internal/client` | HTTP client for server access |
+| `internal/client` | HTTP client for server access (used by the remote-mode service implementation) |
 | `internal/config` | Config resolution (`$TICKET_HOME`, mode detection) |
 | `internal/password` | Argon2id hashing |
 | `internal/tui` | BubbleTea terminal UI |
 | `libticket` | `Service` interface, local/remote implementations, and shared contract tests |
-| `internal/client` | HTTP client used by the remote-mode service implementation |
 
 ### Data Model
 
 - **Projects** have prefixes (e.g. `CUS`). **Tickets** have human keys (e.g. `CUS-42`).
 - Ticket types: epic, task, bug, spike, chore, story, note, question, requirement, decision.
-- **Workflows** define configurable lifecycle processes attached to projects. An Workflow has ordered **stages** (e.g. `design → develop → test → done`) and **roles** (e.g. architect, engineer, QA). Roles are assigned to stages via a stage-role junction table with ordering. Workflows can be exported/imported as JSON.
+- **Workflows** define configurable lifecycle processes attached to projects. A workflow has ordered **stages** (e.g. `design → develop → test → done`) and **roles** (e.g. architect, engineer, QA). Roles are assigned to stages via a stage-role junction table with ordering. Workflows can be exported/imported as JSON.
 - Ticket lifecycle fields: `stage` (from Workflow), `role` (current role within stage), `state` (`idle | active | success | fail`), `draft` (bool), `complete` (bool), `archived` (bool).
 - `tk next` advances a ticket to the next role or stage (on success); `tk previous` moves it back (on fail).
 - Parent tickets derive their lifecycle from descendants — only leaf tickets can be directly mutated.
@@ -106,7 +112,8 @@ Contract tests in `libticket/contract_test.go` define a `Factory` pattern and ve
 
 ## Development Rules
 
-- Red/green testing. `make test` must always pass.
+(Test cadence and branch discipline are in **Working rules** at the top.)
+
 - Unit tests, integration tests, and Playwright tests required for all code.
 - Keep documentation in sync: update DESIGN.md and USER_GUIDE.md when code changes.
 - Externalise strings to `constants.go` where possible.
@@ -140,6 +147,7 @@ These words as user input trigger specific workflows.
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
+- NEVER edit or commit on `main` — branch first (see **Working rules**); `main` changes only via a merged PR
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
