@@ -943,9 +943,10 @@ func runInitProject(args []string) error {
 		return err
 	}
 
-	// Reject if this repository is already registered.
+	// A registered repository still gets a local setup review.
 	if existing, findErr := svc.FindProjectByGitRepository(context.Background(), repo); findErr == nil {
-		return fmt.Errorf("repository %s is already assigned to project %q (%s)\nhint: use -project_id %s to target that project", repo, existing.Title, existing.Prefix, existing.Prefix)
+		fmt.Printf("repository %s is already assigned to project %q (%s)\n", repo, existing.Title, existing.Prefix)
+		return reviewRepositorySkill()
 	} else if !errors.Is(findErr, store.ErrProjectNotFound) {
 		return findErr
 	}
@@ -966,7 +967,7 @@ func runInitProject(args []string) error {
 
 	fmt.Printf("created project %q (%s)\n", project.Title, project.Prefix)
 	fmt.Printf("registered repository %s\n", repo)
-	return nil
+	return reviewRepositorySkill()
 }
 
 // repoNameFromURL extracts a human-readable name from a git remote URL.
