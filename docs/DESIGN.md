@@ -346,6 +346,14 @@ Typical history events:
 
 The product must support local initialization of a SQLite database from the CLI.
 
+`tk init` registers the current git origin as a project. On later runs it
+reports the existing project and reviews `.claude/skills/tk/SKILL.md` at the
+repository root. A missing or older direct installation can be installed or
+updated interactively. Noninteractive use prints the `tk skill install` action.
+The installed skill's frontmatter version is compared with the binary's
+embedded skill version; newer, modified, linked, or unversioned copies are
+preserved for manual review.
+
 The bootstrap command is `tk initdb`.
 
 `tk initdb` must:

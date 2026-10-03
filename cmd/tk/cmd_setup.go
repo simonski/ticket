@@ -44,21 +44,33 @@ func runOnboard(args []string) error {
 }
 
 func runSkill(args []string) error {
-	if len(args) != 0 {
-		return errors.New("usage: tk skill")
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(skillUsage)
+		return nil
 	}
-	if outputJSON {
-		return printJSON(map[string]string{"status": "ok", "content": tkSkillContent})
+	if len(args) != 1 {
+		return errors.New("usage: tk skill <print|install|uninstall>")
 	}
-	fmt.Print(tkSkillContent)
-	if !strings.HasSuffix(tkSkillContent, "\n") {
-		fmt.Println()
+	switch args[0] {
+	case "print":
+		if outputJSON {
+			return printJSON(map[string]string{"status": "ok", "content": tkSkillContent})
+		}
+		fmt.Print(tkSkillContent)
+		if !strings.HasSuffix(tkSkillContent, "\n") {
+			fmt.Println()
+		}
+		return nil
+	case "install":
+		return installRepositorySkill()
+	case "uninstall":
+		return uninstallRepositorySkill()
+	default:
+		return fmt.Errorf("unknown skill command %q; see: tk skill help", args[0])
 	}
-	return nil
 }
 
-// tkSkillContent is installed into ~/.claude/skills/tk/SKILL.md so that
-// Claude Code automatically knows about the tk CLI while working in any project.
+// tkSkillContent is installed into a repository's .claude/skills/tk/SKILL.md.
 //
 //go:embed SKILL.md
 var tkSkillContent string

@@ -190,7 +190,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 	}
 
 	// Verify SYSTEM section ordering
-	systemOrder := []string{"  status", "  summary", "  whoami", "  export", "  import", "  server", "  login", "  logout", "  register", "  initdb", "  version", "  upgrade", "  skill", "  docker-compose"}
+	systemOrder := []string{"  status", "  summary", "  whoami", "  export", "  import", "  server", "  login", "  logout", "  register", "  initdb", "  init ", "  version", "  upgrade", "  skill", "  docker-compose"}
 	last = -1
 	for _, item := range systemOrder {
 		idx := strings.LastIndex(usage, item) // use LastIndex to match SYSTEM section not NAMESPACES
@@ -587,10 +587,10 @@ func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
 	}
 }
 
-func TestRenderCommandHelpNoLongerIncludesInit(t *testing.T) {
+func TestRenderCommandHelpIncludesInitReview(t *testing.T) {
 	help := renderCommandHelp("init")
-	if strings.Contains(help, "requires the current working directory to be inside a git repository") {
-		t.Fatalf("init help should be removed:\n%s", help)
+	if !strings.Contains(help, "tk init") || !strings.Contains(help, "skill") {
+		t.Fatalf("init help should describe repository setup review:\n%s", help)
 	}
 }
 
@@ -616,7 +616,7 @@ func TestRunSkillPrintsEmbeddedSkillTemplateToStdout(t *testing.T) {
 	setTestWorkingDir(t, tempDir)
 
 	output := captureStdout(t, func() {
-		if err := runSkill(nil); err != nil {
+		if err := runSkill([]string{"print"}); err != nil {
 			t.Fatalf("runSkill() error = %v", err)
 		}
 	})
@@ -643,7 +643,7 @@ func TestRunSkillDoesNotRequireTicketInit(t *testing.T) {
 	})
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"skill"}); err != nil {
+		if err := run([]string{"skill", "print"}); err != nil {
 			t.Fatalf("run(skill) error = %v", err)
 		}
 	})
@@ -7500,9 +7500,9 @@ func TestRunInitProjectCreatesProjectForGitRepo(t *testing.T) {
 	}
 }
 
-// TestRunInitProjectFailsWhenRepoAlreadyRegistered verifies that tk init
-// fails with an informative error when the git repository is already assigned.
-func TestRunInitProjectFailsWhenRepoAlreadyRegistered(t *testing.T) {
+// TestRunInitProjectReviewsWhenRepoAlreadyRegistered verifies that a repeat
+// init reports the project and inspects the repository skill.
+func TestRunInitProjectReviewsWhenRepoAlreadyRegistered(t *testing.T) {
 	setupLocalCLI(t)
 
 	repoDir, err := os.Getwd()
@@ -7519,13 +7519,13 @@ func TestRunInitProjectFailsWhenRepoAlreadyRegistered(t *testing.T) {
 		t.Fatalf("first runInitProject() error = %v", err)
 	}
 
-	// Second init must fail with an explanation.
-	err = runInitProject([]string{"-name", "Second Project", "-prefix", "SND"})
-	if err == nil {
-		t.Fatal("second runInitProject() want error for already-registered repo, got nil")
-	}
-	if !strings.Contains(err.Error(), "already assigned") {
-		t.Fatalf("second runInitProject() error = %q, want it to mention 'already assigned'", err.Error())
+	output := captureStdout(t, func() {
+		if err := runInitProject([]string{"-name", "Second Project", "-prefix", "SND"}); err != nil {
+			t.Fatalf("second runInitProject() error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "already assigned") || !strings.Contains(output, "tk skill install") {
+		t.Fatalf("second runInitProject() should review setup:\n%s", output)
 	}
 }
 

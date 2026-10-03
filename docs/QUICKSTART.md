@@ -95,7 +95,7 @@ Register a git repository to a project:
 
 ```bash
 # from inside the git repo
-tk init                  # creates a new project and registers this repo's origin remote
+tk init                  # registers this repo's origin remote and reviews its tk skill
 # or register an existing project
 tk project repo add github.com/acme/widget.git -project_id CUS
 ```
@@ -147,12 +147,16 @@ Hands-on end-to-end workflow: [TUTORIAL.md](./TUTORIAL.md).
 
 ## Using with Claude Code
 
-Write the bundled skill into your project:
+Install the bundled skill into your repository:
 
 ```bash
-mkdir -p .claude/skills/tk
-tk skill > .claude/skills/tk/SKILL.md
+tk skill install
 ```
+
+`tk skill print` prints the bundled skill to stdout. `tk skill uninstall` removes
+the repository copy. Repeating `tk init` reports the existing project and
+offers to install or update an absent or older skill. `tk skill install` also
+checks the installed version before updating it.
 
 Claude will then query and update tickets automatically during coding sessions:
 reading live ticket state, logging time, creating bugs, and recording decisions.

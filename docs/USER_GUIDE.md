@@ -11,6 +11,16 @@ and shows `U` in `tk get` and `tk ls`; board and list views show `pU`. Set a
 numeric priority when creating a ticket with `tk new -p <number> <title>`, or
 change it later from the ticket view.
 
+## Repository setup from the CLI
+
+Run `tk init` inside a git repository to register its origin as a Ticket
+project. Repeating it reports the existing project and checks whether the tk
+skill is installed directly at `.claude/skills/tk/SKILL.md`. If the file is
+missing or older than the version embedded in `tk`, an interactive terminal
+offers to install or update it. For scripts, run `tk skill install` explicitly.
+Use `tk skill print` to view the embedded skill, `tk skill uninstall` to remove
+the repository copy, and `tk skill help` to list the subcommands.
+
 ## Driving the app by keyboard
 
 The web UI is keyboard-driveable through a **command palette**.

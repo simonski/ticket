@@ -20,9 +20,9 @@ var helpIndex = map[string]commandHelp{
 		example: "tk onboard > TICKET.md",
 	},
 	"skill": {
-		usage:   "tk skill",
-		details: []string{"Prints the embedded tk SKILL.md template to stdout.", "Usage: tk skill > SKILL.md"},
-		example: "tk skill > SKILL.md",
+		usage:   "tk skill <print|install|uninstall>",
+		details: []string{"Print the embedded skill, install or update it in the current repository, or uninstall it.", "Run `tk skill help` for the full verb list."},
+		example: "tk skill install",
 	},
 	"docker-compose": {
 		usage:   "tk docker-compose",
@@ -33,6 +33,11 @@ var helpIndex = map[string]commandHelp{
 		usage:   "tk initdb [<path>] [-f <db-path>] [--force] [-password <password>] [-populate]",
 		details: []string{"Creates or ensures a SQLite database backend and bootstraps the fixed `admin` account (default `admin/password`).", "Default location is `~/.config/ticket/ticket.db`; use `-f` to choose a different file.", "If `--force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
 		example: "tk initdb . --force -password secret -populate",
+	},
+	"init": {
+		usage:   "tk init [-name <project-name>] [-prefix <prefix>]",
+		details: []string{"Registers the current git repository as a project if needed, then reviews its tk skill installation.", "An existing project is reported without creating a duplicate. An absent or outdated skill can be installed interactively, or with `tk skill install`."},
+		example: "tk init",
 	},
 	"export": {
 		usage:   "tk export [-id] <ticket-id> [-o <file>]",
@@ -561,9 +566,10 @@ func renderRootUsage() string {
 		{"logout", "Clear the local session"},
 		{"register", "Create a user account on the server"},
 		{"initdb", "Initialize the database"},
+		{"init", "Register this repository and review its tk skill"},
 		{"version", "Print the current version"},
 		{"upgrade", "Check for a newer version"},
-		{"skill", "Print the embedded SKILL.md template"},
+		{"skill", "Manage the repository tk skill"},
 		{"docker-compose", "Print the Docker Compose deployment template"},
 	}
 	b.WriteString("\n" + h + "SYSTEM" + r + "\n")
