@@ -3439,6 +3439,54 @@ func TestRunTicketCreateSupportsProjectSelectionAliases(t *testing.T) {
 	}
 }
 
+func TestRunTicketCreateDefaultsToUnspecifiedPriority(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	defaultID := createLocalTask(t, []string{"new", "-printid", "Unprioritized task"})
+	defaultTicket, err := svc.GetTicket(context.Background(), defaultID)
+	if err != nil {
+		t.Fatalf("GetTicket(default) error = %v", err)
+	}
+	if defaultTicket.Priority != 0 {
+		t.Fatalf("default priority = %d, want 0 (U)", defaultTicket.Priority)
+	}
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"get", defaultID, "-v"}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	if !hasDetailField(getOutput, "Priority", "U") {
+		t.Fatalf("get should show unspecified priority as U:\n%s", getOutput)
+	}
+	listOutput := captureStdout(t, func() {
+		if err := run([]string{"ls", "-a", "-plain"}); err != nil {
+			t.Fatalf("ls error = %v", err)
+		}
+	})
+	if !strings.Contains(listOutput, defaultID) || !strings.Contains(listOutput, " U\n") {
+		t.Fatalf("list should show unspecified priority as U:\n%s", listOutput)
+	}
+
+	explicitID := createLocalTask(t, []string{"new", "-p", "3", "-printid", "Prioritized task"})
+	explicitTicket, err := svc.GetTicket(context.Background(), explicitID)
+	if err != nil {
+		t.Fatalf("GetTicket(explicit) error = %v", err)
+	}
+	if explicitTicket.Priority != 3 {
+		t.Fatalf("explicit priority = %d, want 3", explicitTicket.Priority)
+	}
+	filePath := filepath.Join(t.TempDir(), "ticket.md")
+	if err := os.WriteFile(filePath, []byte("title: File task\n\nFile body.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fileID := createLocalTask(t, []string{"new", "@" + filePath})
+	fileTicket, err := svc.GetTicket(context.Background(), fileID)
+	if err != nil || fileTicket.Priority != 0 {
+		t.Fatalf("file ticket priority = %d, err = %v; want U", fileTicket.Priority, err)
+	}
+}
+
 func TestRunPromptBuildsPlaintextSections(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)

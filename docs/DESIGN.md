@@ -247,7 +247,7 @@ CLI creation defaults:
 - `tk add`, `tk create`, and `tk new` are the same command
 - `tk list` and `tk ls` are the same command
 - if `-type` / `-t` is omitted, the type defaults to `task`
-- if `-priority` / `-p` is omitted, the priority defaults to `1`
+- if `-priority` / `-p` is omitted, the priority is `U` (stored as `0`)
 - if `-assignee` / `-a` is omitted, the assignee is blank
 - if `-description` / `-d` is omitted, the description is blank
 - if `-ac` is omitted, the acceptance criteria is blank
@@ -577,7 +577,7 @@ Behavior notes:
 - `tk add`, `tk create`, and `tk new` are aliases
 - `tk list` and `tk ls` are aliases
 - `tk list -n <limit>` applies a server-side limit, with `0` meaning no limit
-- task creation defaults are `type=task`, `priority=1`, blank assignee, blank description, blank parent, and current project
+- task creation defaults are `type=task`, `priority=U` (stored as `0`), blank assignee, blank description, blank parent, and current project
 - `-ac` stores acceptance criteria on the task
 - each item records project, creator, timestamps, status, and revision history
 

@@ -4643,7 +4643,7 @@
                     "<td>" + escapeHTML(t.title || "(untitled)") + (refinementBadgeHTML(t) ? " " + refinementBadgeHTML(t) : "") + "</td>" +
                     "<td>" + escapeHTML(t.stage || "") + "</td>" +
                     "<td><span class=\"chip chip-state-" + escapeHTML(t.state || "idle") + "\">" + escapeHTML(t.state || "idle") + "</span></td>" +
-                    "<td><span class=\"editable-cell\" data-edit-field=\"priority\" title=\"Click to change priority\">p" + escapeHTML(String(t.priority || 0)) + "</span></td>" +
+                    "<td><span class=\"editable-cell\" data-edit-field=\"priority\" title=\"Click to change priority\">p" + escapeHTML(ticketPriorityLabel(t.priority)) + "</span></td>" +
                     "<td><span class=\"editable-cell\" data-edit-field=\"type\" title=\"Click to change type\">" + escapeHTML(t.type || "") + "</span></td>" +
                     "<td>" + escapeHTML(t.assignee || "—") + "</td>" +
                     "</tr>").join("") +
@@ -4965,7 +4965,7 @@
             dismissBoardContextMenu();
             const opts = field === "type"
                 ? TICKET_TYPES.map((v) => ({ value: v, label: v }))
-                : [0, 1, 2, 3, 4, 5].map((v) => ({ value: v, label: "p" + v }));
+                : [0, 1, 2, 3, 4, 5].map((v) => ({ value: v, label: "p" + ticketPriorityLabel(v) }));
             const current = field === "type" ? String(ticket.type || "task") : String(Number(ticket.priority || 0));
             const menu = document.createElement("div");
             menu.className = "context-menu value-popup";
@@ -5290,6 +5290,10 @@
             return "<span class=\"ticket-agent-dot " + (isWorking ? "working" : "idle") + "\" title=\"" + escapeHTML(a.username) + " (" + a.status + ")\">🤖</span>";
         }
 
+        function ticketPriorityLabel(priority) {
+            return Number(priority || 0) === 0 ? "U" : String(priority);
+        }
+
         function renderTicketCard(ticket) {
             const agentDot = ticketAgentDot(ticket);
             // The accent outline marks a story the refiner is ACTIVELY working right
@@ -5302,7 +5306,7 @@
                 "<div class=\"panel-head panel-head-tight\">" + agentDot + "<h4>" + escapeHTML(ticket.key || ticket.id || "New") + "</h4><span class=\"chip\">" + escapeHTML(ticket.type || "task") + "</span></div>" +
                 "<p>" + escapeHTML(ticket.title || "(untitled)") + "</p>" +
                 "<div class=\"tag-row\">" +
-                "<span class=\"chip\">p" + escapeHTML(ticket.priority || 0) + "</span>" +
+                "<span class=\"chip\">p" + escapeHTML(ticketPriorityLabel(ticket.priority)) + "</span>" +
                 refinementBadgeHTML(ticket) +
                 "</div>" +
                 "</div>";

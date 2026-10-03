@@ -239,6 +239,9 @@ function installSite2Mock(page, seed = {}) {
         : [],
       nextPasskeyIndex: Number(mockSeed.nextPasskeyIndex || 2),
     };
+    if (Array.isArray(mockSeed.extraTickets)) {
+      db.tickets.push(...mockSeed.extraTickets);
+    }
 
     window.__site2Requests = [];
 
@@ -1489,6 +1492,27 @@ test.beforeEach(async ({ page }) => {
   await page.locator("#login-password").fill("secret");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+});
+
+test("new tickets show unspecified priority as U in board and list views", async ({ page }) => {
+  await page.locator("#new-menu-button").click();
+  await page.locator('[data-new-action="ticket"]').click();
+  await page.locator("#ticket-title").fill("Unprioritized work");
+  await page.getByRole("button", { name: "Save ticket" }).click();
+
+  const card = page.locator('#ticket-board [data-ticket-id="OPS-999"]');
+  await expect(card).toContainText("Unprioritized work");
+  await expect(card.locator(".tag-row .chip").first()).toHaveText("pU");
+
+  await installSite2Mock(page, { extraTickets: [
+    { ticket_id: "OPS-301", project_id: 1, type: "feature", title: "Feature", priority: 0, release_id: null },
+    { ticket_id: "OPS-302", project_id: 1, parent_id: "OPS-301", type: "epic", title: "Epic", priority: 0 },
+    { ticket_id: "OPS-303", project_id: 1, parent_id: "OPS-302", type: "story", title: "Unprioritized story", priority: 0 },
+  ] });
+  await page.reload();
+  await page.locator('[data-perspective="list"]').click();
+  const row = page.locator('#ticket-list-view [data-ticket-id="OPS-303"]');
+  await expect(row.locator('[data-edit-field="priority"]')).toHaveText("pU");
 });
 
 test("creates a project and persists default draft settings through the existing API", async ({ page }) => {

@@ -4,6 +4,13 @@ How to use `ticket` day to day. New here? Start with
 [QUICKSTART](./QUICKSTART.md) and the [TUTORIAL](./TUTORIAL.md); this guide covers
 the web app's everyday features.
 
+## Ticket priority
+
+New tickets start with priority **U** (unspecified). The CLI stores this as `0`
+and shows `U` in `tk get` and `tk ls`; board and list views show `pU`. Set a
+numeric priority when creating a ticket with `tk new -p <number> <title>`, or
+change it later from the ticket view.
+
 ## Driving the app by keyboard
 
 The web UI is keyboard-driveable through a **command palette**.
