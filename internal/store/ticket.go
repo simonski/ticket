@@ -204,10 +204,6 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	if acceptanceCriteria == "" && acMap != nil {
 		acceptanceCriteria = acMap[DefaultGuidanceStageKey]
 	}
-	priority := params.Priority
-	if priority == 0 {
-		priority = 1
-	}
 	order := params.Order
 
 	tx, err := db.BeginTx(ctx, nil)
@@ -292,7 +288,7 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, workflow_id, workflow_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, assignee, draft, created_by, attrs)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, nullableInt64(ticketWorkflowID), nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.Assignee), 1, nullableUserID(params.CreatedBy), attrsJSON)
+	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, nullableInt64(ticketWorkflowID), nullableInt64(workflowStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, order, params.EstimateEffort, strings.TrimSpace(params.Assignee), 1, nullableUserID(params.CreatedBy), attrsJSON)
 	if err != nil {
 		return Ticket{}, err
 	}

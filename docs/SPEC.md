@@ -200,7 +200,7 @@ The primary work artifact.
 | stage | TEXT | Default `design` |
 | state | TEXT | Default `idle` |
 | status | TEXT | Default `open` |
-| priority | INTEGER | Default 3 |
+| priority | INTEGER | Default 0 (`U`, unspecified); explicit numeric priorities are preserved |
 | sort_order | INTEGER | Default 0 |
 | estimate_effort | INTEGER | Default 0 |
 | estimate_complete | TEXT | Default empty. **(attrs)** |

@@ -417,7 +417,7 @@ Targets:
 		fmt.Printf("Status:   %s\n", ticket.Status)
 		fmt.Printf("Assignee: %s\n", orDash(ticket.Assignee))
 		fmt.Printf("Draft:    %t\n", ticket.Draft)
-		fmt.Printf("Priority: %d\n", ticket.Priority)
+		fmt.Printf("Priority: %s\n", ticketPriorityLabel(ticket.Priority))
 
 		// Context — open DB directly for enrichment
 		var ctx store.TicketContext

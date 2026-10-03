@@ -59,6 +59,13 @@ func ticketTypeColor(ticketType string) string {
 	return ""
 }
 
+func ticketPriorityLabel(priority int) string {
+	if priority == 0 {
+		return "U"
+	}
+	return strconv.Itoa(priority)
+}
+
 func printProject(project store.Project) {
 	if outputJSON {
 		if err := printJSON(project); err != nil {
@@ -514,7 +521,7 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 		ticketField{label: "Complete", value: ticketCompleteLabel(ticket)},
 		ticketField{label: "Archived", value: fmt.Sprintf("%t", ticket.Archived)},
 		ticketField{label: "Deleted", value: fmt.Sprintf("%t", ticket.Deleted)},
-		ticketField{label: "Priority", value: fmt.Sprintf("%d", ticket.Priority)},
+		ticketField{label: "Priority", value: ticketPriorityLabel(ticket.Priority)},
 		ticketField{label: "Created", value: ticket.CreatedAt},
 		ticketField{label: "LastModified", value: ticket.UpdatedAt},
 		ticketField{label: "Acceptance Criteria", value: ticket.AcceptanceCriteria},
@@ -942,7 +949,7 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 			}
 			row += "\t" + pr
 		}
-		row += fmt.Sprintf("\t%d", t.Priority)
+		row += "\t" + ticketPriorityLabel(t.Priority)
 		return row
 	}
 
